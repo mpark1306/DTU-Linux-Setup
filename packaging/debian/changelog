@@ -1,0 +1,10 @@
+dtu-sustain-setup (1.0.0-1) noble; urgency=medium
+
+  * Initial release.
+  * Modules: Domain Join, Q-Drive, Brother P950NW, Defender, PolicyKit,
+    FollowMe printers, OneDrive for Business.
+  * PyQt6 GUI with live log output.
+  * Auto-distro-detection (Ubuntu 24.04 / openSUSE Tumbleweed).
+  * Polkit policy for privilege escalation.
+
+ -- DTU Sustain IT <support@sustain.dtu.dk>  Wed, 18 Mar 2026 12:00:00 +0100

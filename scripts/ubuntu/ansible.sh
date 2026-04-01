@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+###############################################################################
+# DTU Sustain – Ubuntu 24.04 – Module: Ansible Onboarding
+# Creates the sus-root service account, deploys the SSH public key,
+# configures passwordless sudo, and hides the account from the login screen.
+# Run AFTER domain-join.
+###############################################################################
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../common.sh"
+need_root
+
+banner "Ansible Onboarding"
+
+USERNAME="sus-root"
+HOSTNAME_SHORT="$(hostname -s)"
+HOSTNAME_FQDN="$(echo "$HOSTNAME_SHORT" | tr '[:upper:]' '[:lower:]').sus.clients.local"
+
+# ── Step 1: Install required packages ────────────────────────────────────────
+echo "[1/6] Installing required packages..."
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y openssh-server python3
+systemctl enable --now ssh
+ok "openssh-server + python3 installed."
+
+# ── Step 2: Create / verify user ────────────────────────────────────────────
+echo "[2/6] Creating / verifying user '$USERNAME'..."
+if ! id "$USERNAME" &>/dev/null; then
+    useradd -r -m -s /bin/bash "$USERNAME"
+    ok "Created user $USERNAME (system account)"
+else
+    ok "User $USERNAME already exists"
+fi
+
+# ── Step 3: Hide from login screen ──────────────────────────────────────────
+echo "[3/6] Hiding '$USERNAME' from display manager..."
+mkdir -p /var/lib/AccountsService/users
+cat > "/var/lib/AccountsService/users/$USERNAME" <<EOF
+[User]
+SystemAccount=true
+EOF
+ok "AccountsService: SystemAccount=true"
+
+# ── Step 4: Set password ────────────────────────────────────────────────────
+echo "[4/6] Setting password for '$USERNAME'..."
+
+ANSIBLE_PASS="${DTU_ANSIBLE_PASSWORD:-}"
+if [[ -z "$ANSIBLE_PASS" ]]; then
+    # Interactive fallback
+    read -rsp "  Enter password for $USERNAME: " ANSIBLE_PASS
+    echo
+fi
+
+echo "$USERNAME:$ANSIBLE_PASS" | chpasswd
+ok "Password set."
+
+# Add to sudo group
+usermod -aG sudo "$USERNAME"
+ok "Added $USERNAME to sudo group."
+
+# ── Step 5: Deploy SSH public key ───────────────────────────────────────────
+echo "[5/6] Deploying SSH public key..."
+ANSIBLE_HOME="$(eval echo "~$USERNAME")"
+mkdir -p "$ANSIBLE_HOME/.ssh"
+chmod 700 "$ANSIBLE_HOME/.ssh"
+
+PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFR8JkuYI5FyEXdgXvOdHN1BStpg+gf4WqiDPgHj3tDr ansible@dtu-sustain"
+AUTH_KEYS="$ANSIBLE_HOME/.ssh/authorized_keys"
+if ! grep -qF "$PUBKEY" "$AUTH_KEYS" 2>/dev/null; then
+    echo "$PUBKEY" >> "$AUTH_KEYS"
+    ok "Key added to $AUTH_KEYS"
+else
+    ok "Key already present"
+fi
+chmod 600 "$AUTH_KEYS"
+chown -R "$USERNAME:$USERNAME" "$ANSIBLE_HOME/.ssh"
+
+# ── Step 6: Passwordless sudo ───────────────────────────────────────────────
+echo "[6/6] Configuring passwordless sudo..."
+echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/ansible-$USERNAME"
+chmod 440 "/etc/sudoers.d/ansible-$USERNAME"
+ok "Passwordless sudo configured."
+
+echo ""
+ok "Ansible onboarding complete for $HOSTNAME_SHORT ($HOSTNAME_FQDN)."
+echo "    User '$USERNAME' has SSH key + sudo access."
+echo "    You can now run playbooks against this host from the GUI."

@@ -1,0 +1,10 @@
+[Unit]
+Description=Sync home directories to network drive
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/sync-homedir.sh
+
+[Install]
+WantedBy=default.target

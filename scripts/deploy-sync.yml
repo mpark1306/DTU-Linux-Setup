@@ -1,0 +1,100 @@
+---
+# deploy-sync.yml — Deploy sync-homedir to Ubuntu 24.04 workstations
+#
+# Usage:
+#   ansible-playbook deploy-sync.yml -i inventory --become
+#
+- name: Deploy sync-homedir
+  hosts: all
+  become: true
+  vars:
+    sync_script: /usr/local/bin/sync-homedir.sh
+    skel_systemd: /etc/skel/.config/systemd/user
+    profile_script: /etc/profile.d/sync-homedir-login.sh
+
+  tasks:
+    # ── Dependencies ───────────────────────────────────────────────
+    - name: Ensure rsync is installed
+      ansible.builtin.apt:
+        name: rsync
+        state: present
+
+    # ── Sync script ────────────────────────────────────────────────
+    - name: Deploy sync-homedir.sh
+      ansible.builtin.copy:
+        src: scripts/sync-homedir.sh
+        dest: "{{ sync_script }}"
+        owner: root
+        group: root
+        mode: "0755"
+
+    # ── Skeleton for new users ─────────────────────────────────────
+    - name: Create skel systemd user directory
+      ansible.builtin.file:
+        path: "{{ skel_systemd }}"
+        state: directory
+        mode: "0755"
+
+    - name: Deploy service to skel
+      ansible.builtin.copy:
+        src: scripts/systemd/sync-homedir.service
+        dest: "{{ skel_systemd }}/sync-homedir.service"
+        mode: "0644"
+
+    - name: Deploy timer to skel
+      ansible.builtin.copy:
+        src: scripts/systemd/sync-homedir.timer
+        dest: "{{ skel_systemd }}/sync-homedir.timer"
+        mode: "0644"
+
+    # ── Login trigger ──────────────────────────────────────────────
+    - name: Deploy profile.d login script
+      ansible.builtin.copy:
+        src: scripts/sync-homedir-login.sh
+        dest: "{{ profile_script }}"
+        owner: root
+        group: root
+        mode: "0755"
+
+    # ── Existing AD users ──────────────────────────────────────────
+    - name: Find existing AD users with home in /home/
+      ansible.builtin.shell: |
+        getent passwd | awk -F: '$6 ~ /^\/home\// && $3 >= 1000 { print $1 }'
+      register: ad_users
+      changed_when: false
+
+    - name: Create systemd user dir for existing users
+      ansible.builtin.file:
+        path: "/home/{{ item }}/.config/systemd/user"
+        state: directory
+        owner: "{{ item }}"
+        group: "{{ item }}"
+        mode: "0755"
+      loop: "{{ ad_users.stdout_lines }}"
+
+    - name: Deploy service to existing users
+      ansible.builtin.copy:
+        src: scripts/systemd/sync-homedir.service
+        dest: "/home/{{ item }}/.config/systemd/user/sync-homedir.service"
+        owner: "{{ item }}"
+        group: "{{ item }}"
+        mode: "0644"
+      loop: "{{ ad_users.stdout_lines }}"
+
+    - name: Deploy timer to existing users
+      ansible.builtin.copy:
+        src: scripts/systemd/sync-homedir.timer
+        dest: "/home/{{ item }}/.config/systemd/user/sync-homedir.timer"
+        owner: "{{ item }}"
+        group: "{{ item }}"
+        mode: "0644"
+      loop: "{{ ad_users.stdout_lines }}"
+
+    - name: Enable timer for existing users
+      ansible.builtin.shell: |
+        sudo -u {{ item }} XDG_RUNTIME_DIR=/run/user/$(id -u {{ item }}) \
+          systemctl --user daemon-reload && \
+        sudo -u {{ item }} XDG_RUNTIME_DIR=/run/user/$(id -u {{ item }}) \
+          systemctl --user enable --now sync-homedir.timer
+      loop: "{{ ad_users.stdout_lines }}"
+      changed_when: true

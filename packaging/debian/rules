@@ -1,0 +1,33 @@
+#!/usr/bin/make -f
+%:
+	dh $@
+
+override_dh_auto_install:
+	# Install application to /opt/dtu-sustain-setup
+	install -d $(DESTDIR)/opt/dtu-sustain-setup
+	cp -r src/dtu_sustain_setup $(DESTDIR)/opt/dtu-sustain-setup/
+	cp -r scripts $(DESTDIR)/opt/dtu-sustain-setup/
+	cp -r data $(DESTDIR)/opt/dtu-sustain-setup/
+
+	# Launcher script
+	install -d $(DESTDIR)/opt/dtu-sustain-setup/bin
+	install -m 755 bin/dtu-sustain-setup $(DESTDIR)/opt/dtu-sustain-setup/bin/
+
+	# Symlink to /usr/bin
+	install -d $(DESTDIR)/usr/bin
+	ln -sf /opt/dtu-sustain-setup/bin/dtu-sustain-setup $(DESTDIR)/usr/bin/dtu-sustain-setup
+
+	# Desktop file → visible to ALL users
+	install -d $(DESTDIR)/usr/share/applications
+	install -m 644 data/dtu-sustain-setup.desktop $(DESTDIR)/usr/share/applications/
+
+	# Icon
+	install -d $(DESTDIR)/usr/share/icons/hicolor/scalable/apps
+	install -m 644 data/dtu-sustain-setup.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/
+
+	# Polkit policy
+	install -d $(DESTDIR)/usr/share/polkit-1/actions
+	install -m 644 data/dk.dtu.sustain.setup.policy $(DESTDIR)/usr/share/polkit-1/actions/
+
+override_dh_auto_build:
+	@echo "No build step required."
