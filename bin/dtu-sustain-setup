@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# DTU Sustain Setup – launcher script
+# Installed to /opt/dtu-sustain-setup/bin/dtu-sustain-setup
+
+INSTALL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+export PYTHONPATH="${INSTALL_DIR}:${PYTHONPATH:-}"
+exec python3 -m dtu_sustain_setup "$@"

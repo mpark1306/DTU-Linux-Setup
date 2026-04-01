@@ -1,0 +1,9 @@
+[Unit]
+Description=Periodisk sync af home-mapper til netværksdrev
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+
+[Install]
+WantedBy=timers.target

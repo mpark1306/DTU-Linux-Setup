@@ -1,0 +1,37 @@
+Source: dtu-sustain-setup
+Section: admin
+Priority: optional
+Maintainer: DTU Sustain IT <support@sustain.dtu.dk>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/DTU-Sustain/DTU-Umbrella
+
+Package: dtu-sustain-setup
+Architecture: all
+Depends:
+ python3 (>= 3.10),
+ python3-pyqt6,
+ bash,
+ policykit-1,
+ ${misc:Depends}
+Recommends:
+ realmd,
+ sssd,
+ sssd-ad,
+ adcli,
+ krb5-user,
+ cifs-utils,
+ cups,
+ samba-common-bin,
+ xrdp,
+ xorgxrdp
+Description: DTU Sustain Linux workstation setup tool
+ A graphical setup utility for DTU Sustain Linux workstations.
+ Provides modules for domain join (WIN.DTU.DK), Q-Drive mapping,
+ printer setup (Brother P950NW, FollowMe), Microsoft Defender,
+ PolicyKit configuration, OneDrive for Business, and RDP
+ (xrdp + KDE Plasma remote desktop).
+ .
+ The application appears in the system application menu for all
+ users (including domain users). Admin modules use polkit for
+ privilege escalation.

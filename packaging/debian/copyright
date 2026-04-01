@@ -1,0 +1,7 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: dtu-sustain-setup
+Source: https://github.com/DTU-Sustain/DTU-Umbrella
+
+Files: *
+Copyright: 2024-2026 DTU Sustain
+License: MIT
