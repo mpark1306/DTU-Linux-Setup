@@ -14,6 +14,7 @@ PRINTER_IP="10.61.1.9"
 PPD_MODEL="ptouch:0/ppd/ptouch-driver/Brother-PT-P950NW-ptouch-pt.ppd"
 
 echo "[1/5] Installing packages..."
+apt_wait
 apt-get update -qq
 apt-get install -y cups printer-driver-ptouch
 

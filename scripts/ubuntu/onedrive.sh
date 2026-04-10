@@ -53,6 +53,7 @@ add-apt-repository --remove ppa:yann1ck/onedrive 2>/dev/null || true
 
 # ── Step 2: Add OBS repository + install ───────────────────────────────────
 echo "[2/7] Adding OpenSuSE Build Service repository..."
+apt_wait
 apt-get update -qq
 apt-get install -y curl gnupg apt-transport-https >/dev/null
 

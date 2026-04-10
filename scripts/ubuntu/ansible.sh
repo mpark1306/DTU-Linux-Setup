@@ -19,6 +19,7 @@ HOSTNAME_FQDN="$(echo "$HOSTNAME_SHORT" | tr '[:upper:]' '[:lower:]').sus.client
 # ── Step 1: Install required packages ────────────────────────────────────────
 echo "[1/6] Installing required packages..."
 export DEBIAN_FRONTEND=noninteractive
+apt_wait
 apt-get update -qq
 apt-get install -y openssh-server python3
 systemctl enable --now ssh

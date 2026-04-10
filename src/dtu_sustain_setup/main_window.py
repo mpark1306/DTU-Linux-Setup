@@ -38,6 +38,7 @@ class ModuleDef:
     input_type: str  # "none", "credentials", "username", "domain_join"
     icon_name: str
     enabled: bool = True
+    common_script: bool = False
 
 
 MODULES: list[ModuleDef] = [
@@ -122,6 +123,16 @@ MODULES: list[ModuleDef] = [
         needs_root=True,
         input_type="none",
         icon_name="drive-removable-media",
+    ),
+    ModuleDef(
+        id="sync-homedir",
+        title="Sync Home Dirs",
+        description="Backup Desktop, Documents\n& Pictures to Q-Drive",
+        script_name="setup-sync-homedir.sh",
+        needs_root=False,
+        input_type="none",
+        icon_name="folder-download",
+        common_script=True,
     ),
     ModuleDef(
         id="rdp",
@@ -327,7 +338,10 @@ class MainWindow(QMainWindow):
             )
             return
 
-        script = self._scripts_dir / mod.script_name
+        if mod.common_script:
+            script = self._scripts_dir.parent / mod.script_name
+        else:
+            script = self._scripts_dir / mod.script_name
         if not script.exists():
             QMessageBox.critical(
                 self, "Script Missing",
@@ -453,7 +467,10 @@ class MainWindow(QMainWindow):
             return
 
         mod = self._queued_modules.pop(0)
-        script = self._scripts_dir / mod.script_name
+        if mod.common_script:
+            script = self._scripts_dir.parent / mod.script_name
+        else:
+            script = self._scripts_dir / mod.script_name
         if not script.exists():
             self._append_log(f"⚠ Skipping {mod.title}: script not found\n")
             self._run_next_queued()

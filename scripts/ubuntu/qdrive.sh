@@ -48,11 +48,7 @@ fi
 echo "Using UID=$UID_NUM GID=$GID_NUM"
 
 echo "[1/8] Installing cifs-utils..."
-# Wait for any existing apt lock (previous module may have just finished)
-while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-  echo "  Waiting for dpkg lock..."
-  sleep 2
-done
+apt_wait
 apt-get update -qq 2>/dev/null || true
 apt-get install -y cifs-utils >/dev/null
 

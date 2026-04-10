@@ -22,6 +22,7 @@ rm -f /etc/apt/trusted.gpg.d/microsoft.gpg || true
 rm -f /usr/local/bin/mdatp || true
 
 echo "[1/6] Installing prerequisites..."
+apt_wait
 apt-get update -y
 apt-get install -y curl ca-certificates gnupg apt-transport-https
 

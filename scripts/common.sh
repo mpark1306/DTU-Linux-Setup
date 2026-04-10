@@ -49,6 +49,25 @@ get_admin_password() {
   fi
 }
 
+# ─── APT lock helper ────────────────────────────────────────────────────────
+# Wait for dpkg / apt locks to be released before running apt-get.
+# Call: apt_wait  (before the first apt-get in a module)
+apt_wait() {
+  local max_wait=120   # seconds
+  local waited=0
+  while fuser /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock &>/dev/null 2>&1; do
+    if (( waited == 0 )); then
+      warn "Waiting for apt/dpkg lock to be released..."
+    fi
+    sleep 2
+    waited=$((waited + 2))
+    if (( waited >= max_wait )); then
+      fail "Timed out waiting for apt lock after ${max_wait}s"
+      return 1
+    fi
+  done
+}
+
 # ─── Resolve SCRIPT_DIR ─────────────────────────────────────────────────────
 # Each module script should call: SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Then source common.sh: source "${SCRIPT_DIR}/../common.sh"
