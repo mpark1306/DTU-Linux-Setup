@@ -30,6 +30,7 @@ fi
 
 echo "[2/8] Installing required packages..."
 export DEBIAN_FRONTEND=noninteractive
+apt_wait
 apt-get update -qq
 apt-get install -y \
   realmd \

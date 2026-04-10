@@ -20,6 +20,7 @@ U="$DTU_USERNAME"
 P="$DTU_PASSWORD"
 
 echo "[1/8] Installing packages..."
+apt_wait
 apt-get update -qq
 apt-get install -y cups smbclient openprinting-ppds samba-common-bin
 

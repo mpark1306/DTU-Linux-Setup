@@ -13,10 +13,7 @@ need_root
 banner "RDP – Remote Desktop (xrdp + KDE Plasma)"
 
 echo "[1/7] Installing xrdp and xorgxrdp..."
-while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-  echo "  Waiting for dpkg lock..."
-  sleep 2
-done
+apt_wait
 apt-get update -qq 2>/dev/null || true
 apt-get install -y xrdp xorgxrdp >/dev/null
 

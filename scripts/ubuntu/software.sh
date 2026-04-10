@@ -56,6 +56,7 @@ STEP=0
 # ─── Step: Flatpak setup ────────────────────────────────────────────────────
 STEP=$((STEP + 1))
 echo "[${STEP}/${TOTAL_STEPS}] Setting up Flatpak + Flathub..."
+apt_wait
 apt-get update -y
 apt-get install -y flatpak xdg-desktop-portal xdg-desktop-portal-gtk
 
