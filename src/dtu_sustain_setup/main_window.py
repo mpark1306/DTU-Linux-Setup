@@ -68,6 +68,7 @@ MODULES: list[ModuleDef] = [
         needs_root=True,
         input_type="none",
         icon_name="printer",
+        enabled=False,
     ),
     ModuleDef(
         id="defender",
@@ -129,7 +130,7 @@ MODULES: list[ModuleDef] = [
         title="Sync Home Dirs",
         description="Backup Desktop, Documents\n& Pictures to Q-Drive",
         script_name="setup-sync-homedir.sh",
-        needs_root=False,
+        needs_root=True,
         input_type="none",
         icon_name="folder-download",
         common_script=True,
@@ -151,6 +152,26 @@ MODULES: list[ModuleDef] = [
         needs_root=True,
         input_type="password",
         icon_name="utilities-terminal",
+    ),
+    ModuleDef(
+        id="first-login-deploy",
+        title="First-Login Setup",
+        description="Deploy welcome dialog\nfor new domain users",
+        script_name="first-login-deploy.sh",
+        needs_root=True,
+        input_type="none",
+        icon_name="user-new",
+    ),
+    ModuleDef(
+        id="reset-test-user",
+        title="Reset Test User",
+        description="Remove domain user state\n& home dir for re-testing",
+        script_name="reset-test-user.sh",
+        needs_root=True,
+        input_type="username",
+        icon_name="edit-delete",
+        enabled=False,
+        common_script=True,
     ),
 ]
 
@@ -411,27 +432,21 @@ class MainWindow(QMainWindow):
         )
 
     def _run_all_admin(self) -> None:
-        """Queue all admin modules (runs them sequentially)."""
+        """Queue all admin modules (runs them sequentially).
+
+        User-credential modules (Q-Drive, FollowMe) are skipped — those
+        are handled by the first-login welcome dialog when the domain
+        user logs in for the first time.
+        """
         if self._runner.is_running():
             QMessageBox.warning(self, "Busy", "A module is already running.")
             return
 
-        # Collect domain user credentials (for Q-Drive, FollowMe, OneDrive)
-        dlg = CredentialDialog(
-            self,
-            title="Run All – Domain User Credentials",
-            message=(
-                "Enter your regular domain credentials.\n"
-                "Used for Q-Drive, FollowMe printers, and OneDrive."
-            ),
-        )
-        result = dlg.get_credentials()
-        if result is None:
-            return
-        user_username = result[0]
-        user_password = result[1]
+        # Modules that require the end-user's domain credentials are
+        # deferred to first login — skip them in the admin run.
+        DEFERRED_MODULES = {"qdrive", "followme", "onedrive"}
 
-        # Collect admin password (for Domain Join only)
+        # Collect admin info for Domain Join
         admin_dlg = DomainJoinDialog(self)
         admin_result = admin_dlg.get_domain_join_info()
         if admin_result is None:
@@ -448,14 +463,24 @@ class MainWindow(QMainWindow):
         if ansible_password is None:
             return
 
-        self._queued_modules = [m for m in MODULES if m.enabled]
+        self._queued_modules = [
+            m for m in MODULES if m.enabled and m.id not in DEFERRED_MODULES
+        ]
         self._shared_env = {
-            "DTU_USERNAME": user_username,
-            "DTU_PASSWORD": user_password,
             "DTU_HOSTNAME": admin_result[0],
             "DTU_ADMIN_USERNAME": admin_result[1],
             "DTU_ANSIBLE_PASSWORD": ansible_password,
         }
+
+        info_msg = (
+            "The following modules will be skipped and run automatically\n"
+            "when the domain user logs in for the first time:\n\n"
+            "  • Q-Drive & P-Drive\n"
+            "  • FollowMe Printers\n\n"
+            "Make sure 'First-Login Setup' is included in the run."
+        )
+        QMessageBox.information(self, "Admin Run – Deferred Modules", info_msg)
+
         self._run_next_queued()
 
     def _run_next_queued(self) -> None:

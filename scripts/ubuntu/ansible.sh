@@ -13,6 +13,8 @@ need_root
 banner "Ansible Onboarding"
 
 USERNAME="sus-root"
+TARGET_UID=0
+TARGET_GID=0
 HOSTNAME_SHORT="$(hostname -s)"
 HOSTNAME_FQDN="$(echo "$HOSTNAME_SHORT" | tr '[:upper:]' '[:lower:]').sus.clients.local"
 
@@ -26,12 +28,22 @@ systemctl enable --now ssh
 ok "openssh-server + python3 installed."
 
 # ── Step 2: Create / verify user ────────────────────────────────────────────
-echo "[2/6] Creating / verifying user '$USERNAME'..."
+echo "[2/6] Creating / verifying user '$USERNAME' (UID=0, GID=0)..."
 if ! id "$USERNAME" &>/dev/null; then
-    useradd -r -m -s /bin/bash "$USERNAME"
-    ok "Created user $USERNAME (system account)"
+    useradd -o -u $TARGET_UID -g $TARGET_GID -d /root -s /bin/bash "$USERNAME"
+    ok "Created user $USERNAME (uid=0, gid=0, home=/root)"
 else
-    ok "User $USERNAME already exists"
+    # Ensure existing user has uid/gid 0 and home /root
+    CURRENT_UID=$(id -u "$USERNAME")
+    if [[ "$CURRENT_UID" -ne 0 ]]; then
+        echo "  Migrating $USERNAME to UID=0, GID=0, home=/root..."
+        usermod -o -u $TARGET_UID -g $TARGET_GID -d /root -s /bin/bash "$USERNAME"
+        # Remove old home if it was separate
+        [[ -d /home/$USERNAME ]] && rm -rf /home/$USERNAME
+        ok "Migrated $USERNAME to root (uid=0, gid=0)"
+    else
+        ok "User $USERNAME already exists (uid=0)"
+    fi
 fi
 
 # ── Step 3: Hide from login screen ──────────────────────────────────────────
@@ -62,7 +74,7 @@ ok "Added $USERNAME to sudo group."
 
 # ── Step 5: Deploy SSH public key ───────────────────────────────────────────
 echo "[5/6] Deploying SSH public key..."
-ANSIBLE_HOME="$(eval echo "~$USERNAME")"
+ANSIBLE_HOME="/root"
 mkdir -p "$ANSIBLE_HOME/.ssh"
 chmod 700 "$ANSIBLE_HOME/.ssh"
 
@@ -75,7 +87,7 @@ else
     ok "Key already present"
 fi
 chmod 600 "$AUTH_KEYS"
-chown -R "$USERNAME:$USERNAME" "$ANSIBLE_HOME/.ssh"
+chown -R root:root "$ANSIBLE_HOME/.ssh"
 
 # ── Step 6: Passwordless sudo ───────────────────────────────────────────────
 echo "[6/6] Configuring passwordless sudo..."
@@ -85,5 +97,6 @@ ok "Passwordless sudo configured."
 
 echo ""
 ok "Ansible onboarding complete for $HOSTNAME_SHORT ($HOSTNAME_FQDN)."
-echo "    User '$USERNAME' has SSH key + sudo access."
-echo "    You can now run playbooks against this host from the GUI."
+echo "    User '$USERNAME' is a root alias (UID=0, GID=0, home=/root)."
+echo "    Full unrestricted root access — no sudo restrictions."
+echo "    You can now run playbooks against this host."
