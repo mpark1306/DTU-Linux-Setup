@@ -118,6 +118,14 @@ deb:
 	install -d $(DEB_ROOT)/usr/share/polkit-1/actions
 	install -m 644 data/dk.dtu.sustain.setup.policy $(DEB_ROOT)/usr/share/polkit-1/actions/
 
+	# Site-config examples (for IT admins to install as /etc/dtu-setup/site.conf)
+	install -d $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/examples
+	install -m 644 examples/dtu-sustain.env       $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/examples/
+	install -m 644 examples/dtu-ait.env           $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/examples/
+	install -m 644 data/site.conf.example         $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/examples/
+	install -m 644 README.md                       $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/
+	install -m 644 LICENSE                         $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/
+
 	# DEBIAN control files
 	install -d $(DEB_ROOT)/DEBIAN
 	@echo "Package: dtu-sustain-setup"             >  $(DEB_ROOT)/DEBIAN/control
@@ -135,8 +143,21 @@ deb:
 
 	# Post-install script
 	@echo '#!/bin/sh'                                          >  $(DEB_ROOT)/DEBIAN/postinst
+	@echo 'set -e'                                             >> $(DEB_ROOT)/DEBIAN/postinst
 	@echo 'gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true' >> $(DEB_ROOT)/DEBIAN/postinst
 	@echo 'update-desktop-database /usr/share/applications 2>/dev/null || true'      >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo 'install -d /etc/dtu-setup'                          >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo 'if [ ! -f /etc/dtu-setup/site.conf ]; then'         >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '  echo ""'                                          >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '  echo "*** No /etc/dtu-setup/site.conf found ***"' >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '  echo "Pick one of the supplied site profiles:"'   >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '  echo "  sudo install -m 0644 /usr/share/doc/dtu-sustain-setup/examples/dtu-sustain.env /etc/dtu-setup/site.conf"' >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '  echo "  sudo install -m 0644 /usr/share/doc/dtu-sustain-setup/examples/dtu-ait.env     /etc/dtu-setup/site.conf"' >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '  echo "Then set department:"'                      >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '  echo "  echo ait     | sudo tee /etc/dtu-setup/department"' >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '  echo "  echo sustain | sudo tee /etc/dtu-setup/department"' >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '  echo ""'                                          >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo 'fi'                                                 >> $(DEB_ROOT)/DEBIAN/postinst
 	chmod 755 $(DEB_ROOT)/DEBIAN/postinst
 
 	# Build .deb (use xz compression for Ubuntu compatibility)
