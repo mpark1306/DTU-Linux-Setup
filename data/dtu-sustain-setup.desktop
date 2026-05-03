@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=DTU Sustain Setup
+Name=DTU Linux Setup
 Comment=Setup tool for DTU Sustain Linux workstations
 GenericName=System Setup
 Exec=/opt/dtu-sustain-setup/bin/dtu-sustain-setup

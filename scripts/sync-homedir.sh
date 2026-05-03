@@ -9,8 +9,20 @@
 ###############################################################################
 set -euo pipefail
 
-MOUNT_POINT="/mnt/Qdrev"
-REMOTE_BASE="${MOUNT_POINT}/Personal/${USER}"
+# Read department config written by qdrive.sh during admin setup.
+# Fall back to env var (for manual/test runs) and then to "sustain".
+DRIVES_CONF="/etc/dtu-setup/drives.conf"
+if [[ -f "$DRIVES_CONF" ]]; then
+  # Source only the MOUNT_POINT and REMOTE_BASE lines (safe subset)
+  MOUNT_POINT=$(grep -E "^MOUNT_POINT=" "$DRIVES_CONF" | cut -d= -f2-)
+  REMOTE_BASE=$(grep -E "^REMOTE_BASE=" "$DRIVES_CONF" | cut -d= -f2- | sed "s|\${USER}|${USER}|g; s|\$USER|${USER}|g")
+elif [[ "${DTU_DEPARTMENT:-sustain}" == "ait" ]]; then
+  MOUNT_POINT="/mnt/Mdrev"
+  REMOTE_BASE="/mnt/Mdrev"
+else
+  MOUNT_POINT="/mnt/Qdrev"
+  REMOTE_BASE="/mnt/Qdrev/Personal/${USER}"
+fi
 LOG="${HOME}/.local/share/sync-homedir.log"
 DIRS=(Desktop Documents Pictures)
 

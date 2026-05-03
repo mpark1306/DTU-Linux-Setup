@@ -1,1 +1,1 @@
-"""DTU Sustain Setup – Single-icon setup tool for DTU Sustain Linux machines."""
+"""DTU Linux Setup – Single-icon setup tool for DTU Linux machines (Sustain & AIT)."""

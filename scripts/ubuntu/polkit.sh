@@ -40,30 +40,23 @@ polkit.addRule(function(action, subject) {
 });
 EOF
 
-tee /etc/polkit-1/rules.d/49-allow-username-input.rules > /dev/null <<'EOF'
-polkit.addRule(function(action, subject) {
-    if (action.id.indexOf("org.freedesktop.") === 0 ||
-        action.id.indexOf("org.kde.") === 0) {
-        return polkit.Result.AUTH_ADMIN_KEEP;
-    }
-});
-EOF
+# NOTE: 49-allow-username-input.rules is intentionally NOT written here.
+# That file was a catch-all (AUTH_ADMIN_KEEP for all org.freedesktop.* / org.kde.*)
+# which caused domain users to be asked for admin passwords constantly.
+# Remove it if it exists from a previous deployment.
+rm -f /etc/polkit-1/rules.d/49-allow-username-input.rules
 
 # ── Step 3: Domain user daily-use rights ──────────────────────────────────
-echo "[4/6] Creating domain-user rights (48-domain-users.rules)..."
-# Must be 48- so it is evaluated BEFORE 49-allow-username-input.rules,
-# otherwise AUTH_ADMIN_KEEP from that catch-all would override our YES.
+echo "[4/5] Creating domain-user rights (48-domain-users.rules)..."
 rm -f /etc/polkit-1/rules.d/50-domain-users.rules   # clean up old name
 tee /etc/polkit-1/rules.d/48-domain-users.rules > /dev/null <<'EOF'
 // Domain Users – daily-use rights without admin password prompt.
 // IT admins (SUS-ITAdm-Client-Admins) are already handled by
 // 49-domain-admins.rules and get YES for everything.
-//
-// Installed by dtu-setup-ubuntu.sh Module 4.
 
 polkit.addRule(function(action, subject) {
 
-    // Only apply to active, local sessions (not SSH without a seat)
+    // Only apply to active, local sessions
     if (!subject.local || !subject.active)
         return polkit.Result.NOT_HANDLED;
 
@@ -71,92 +64,86 @@ polkit.addRule(function(action, subject) {
     if (!subject.isInGroup("Domain Users"))
         return polkit.Result.NOT_HANDLED;
 
-    var dominated = action.id;
+    var id = action.id;
 
-    // ── ALLOW without prompt ────────────────────────────────────────
-
-    // PackageKit: refresh repos, install updates, accept EULAs
-    if (dominated === "org.freedesktop.packagekit.system-sources-refresh" ||
-        dominated === "org.freedesktop.packagekit.system-update"          ||
-        dominated === "org.freedesktop.packagekit.trigger-offline-update" ||
-        dominated === "org.freedesktop.packagekit.package-eula-accept") {
+    // ── USB / removable storage ──────────────────────────────────────────
+    if (id.indexOf("org.freedesktop.udisks2.filesystem-mount")  === 0 ||
+        id.indexOf("org.freedesktop.udisks2.power-off-drive")   === 0 ||
+        id.indexOf("org.freedesktop.udisks2.eject-media")       === 0 ||
+        id.indexOf("org.freedesktop.udisks2.encrypted-unlock")  === 0 ||
+        id.indexOf("org.freedesktop.udisks2.loop-setup")        === 0 ||
+        id.indexOf("org.freedesktop.udisks2.ata-smart")         === 0) {
         return polkit.Result.YES;
     }
 
-    // UDisks2: mount/unmount removable media, power-off drives, eject
-    if (dominated.indexOf("org.freedesktop.udisks2.filesystem-mount")  === 0 ||
-        dominated.indexOf("org.freedesktop.udisks2.power-off-drive")   === 0 ||
-        dominated.indexOf("org.freedesktop.udisks2.eject-media")       === 0) {
+    // ── NetworkManager (WiFi, VPN, wired) ───────────────────────────────
+    if (id.indexOf("org.freedesktop.NetworkManager.") === 0) {
         return polkit.Result.YES;
     }
 
-    // UDisks2: read SMART reports (prevents password prompt on login/unlock)
-    if (dominated === "org.freedesktop.udisks2.ata-smart-update"   ||
-        dominated === "org.freedesktop.udisks2.ata-smart-selftest" ||
-        dominated === "org.freedesktop.udisks2.ata-smart-simulate") {
+    // ── Power / session ──────────────────────────────────────────────────
+    if (id.indexOf("org.freedesktop.login1.power-off")  === 0 ||
+        id.indexOf("org.freedesktop.login1.reboot")     === 0 ||
+        id.indexOf("org.freedesktop.login1.suspend")    === 0 ||
+        id.indexOf("org.freedesktop.login1.hibernate")  === 0) {
         return polkit.Result.YES;
     }
 
-    // NetworkManager: WiFi, VPN, wired – everything
-    if (dominated.indexOf("org.freedesktop.NetworkManager.") === 0) {
+    // ── PackageKit: refresh, update, install, remove ─────────────────────
+    // Domain users can install/remove software without an admin prompt.
+    if (id.indexOf("org.freedesktop.packagekit.") === 0) {
         return polkit.Result.YES;
     }
 
-    // Login1: power-off, reboot, suspend, hibernate
-    if (dominated.indexOf("org.freedesktop.login1.power-off")  === 0 ||
-        dominated.indexOf("org.freedesktop.login1.reboot")     === 0 ||
-        dominated.indexOf("org.freedesktop.login1.suspend")    === 0 ||
-        dominated.indexOf("org.freedesktop.login1.hibernate")  === 0) {
+    // ── Flatpak ──────────────────────────────────────────────────────────
+    if (id.indexOf("org.freedesktop.Flatpak.") === 0) {
         return polkit.Result.YES;
     }
 
-    // Bluetooth (bluez)
-    if (dominated.indexOf("org.bluez.") === 0) {
+    // ── Firmware updates (fwupd) ─────────────────────────────────────────
+    if (id.indexOf("org.freedesktop.fwupd.") === 0) {
         return polkit.Result.YES;
     }
 
-    // CUPS: manage own print jobs (cancel, hold, release)
-    if (dominated === "org.opensuse.cupspkhelper.mechanism.job-cancel" ||
-        dominated === "org.opensuse.cupspkhelper.mechanism.job-edit") {
+    // ── Bluetooth ────────────────────────────────────────────────────────
+    if (id.indexOf("org.bluez.") === 0) {
         return polkit.Result.YES;
     }
 
-    // ── REQUIRE ADMIN AUTH (explicit) ───────────────────────────────
-
-    // PackageKit: install / remove software, configure repos
-    if (dominated === "org.freedesktop.packagekit.package-install"          ||
-        dominated === "org.freedesktop.packagekit.package-remove"           ||
-        dominated === "org.freedesktop.packagekit.system-sources-configure") {
-        return polkit.Result.AUTH_ADMIN;
+    // ── Date / time / locale ─────────────────────────────────────────────
+    if (id.indexOf("org.freedesktop.timedate1.") === 0 ||
+        id.indexOf("org.freedesktop.locale1.")   === 0) {
+        return polkit.Result.YES;
     }
 
-    // CUPS: add/remove printers (admin action)
-    if (dominated.indexOf("org.opensuse.cupspkhelper.mechanism.printer-") === 0 ||
-        dominated.indexOf("org.opensuse.cupspkhelper.mechanism.server-")  === 0) {
-        return polkit.Result.AUTH_ADMIN;
+    // ── Colour management ────────────────────────────────────────────────
+    if (id.indexOf("org.freedesktop.color-manager.") === 0) {
+        return polkit.Result.YES;
     }
 
-    // Everything else – fall through to default (AUTH_ADMIN)
+    // ── CUPS: own print jobs ─────────────────────────────────────────────
+    if (id === "org.opensuse.cupspkhelper.mechanism.job-cancel" ||
+        id === "org.opensuse.cupspkhelper.mechanism.job-edit") {
+        return polkit.Result.YES;
+    }
+
+    // ── KDE / Plasma actions ─────────────────────────────────────────────
+    if (id.indexOf("org.kde.kcontrol.") === 0 ||
+        id.indexOf("org.kde.plasma.")   === 0 ||
+        id.indexOf("org.kde.kinfocenter") === 0) {
+        return polkit.Result.YES;
+    }
+
     return polkit.Result.NOT_HANDLED;
 });
 EOF
 
-# ── Step 4: PackageKit no-auth rule ─────────────────────────────────────────
-echo "[5/6] Creating PackageKit no-auth rule (49-packagekit-noauth.rules)..."
-tee /etc/polkit-1/rules.d/49-packagekit-noauth.rules > /dev/null <<'EOF'
-polkit.addRule(function(action, subject) {
-    if (action.id.indexOf("org.freedesktop.packagekit.") === 0 &&
-        action.id !== "org.freedesktop.packagekit.package-install") {
-        return polkit.Result.YES;
-    }
-});
-EOF
-
-echo "[6/6] Restarting polkit..."
+echo "[5/5] Restarting polkit..."
+# Also remove the legacy PackageKit noauth rule – now merged into 48 above.
+rm -f /etc/polkit-1/rules.d/49-packagekit-noauth.rules
 systemctl restart polkit
-sleep 1  # wait for polkit to be fully ready
+sleep 1
 
 ok "PolicyKit configured for SUS-ITAdm-Client-Admins + Domain Users."
-echo "    KDE auth dialog will now show a username field."
-echo "    Domain users can update packages, mount USB, manage WiFi, etc."
+echo "    Domain users can install packages, mount USB, manage WiFi, etc. without password prompts."
 echo "    Log out and back in for full effect."
