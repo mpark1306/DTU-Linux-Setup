@@ -135,6 +135,30 @@ sudo zypper remove dtu-sustain-setup # openSUSE
 
 ---
 
+## Site-konfiguration (`/etc/dtu-setup/site.conf`)
+
+Alle DTU-specifikke værdier (AD-domæne, fileservere, AD-admin-grupper, printserver, Defender-onboarding-URL osv.) læses fra `/etc/dtu-setup/site.conf` — de er **ikke** hardkodet i scripts og **ikke** committet til dette repo.
+
+`data/site.conf.example` i repo'et viser alle understøttede `SITE_*` variabler med generiske placeholders. Du kan kopiere den og udfylde værdierne for din egen organisation:
+
+```bash
+sudo install -d /etc/dtu-setup
+sudo install -m 0644 data/site.conf.example /etc/dtu-setup/site.conf
+sudo $EDITOR /etc/dtu-setup/site.conf
+```
+
+### DTU-interne profiler
+
+Færdige profiler til **DTU Sustain** og **DTU AIT** med de korrekte interne værdier (`dtu-sustain.env` / `dtu-ait.env`) distribueres ikke offentligt. DTU-medarbejdere kan **anmode om dem hos [@mpark1306](https://github.com/mpark1306)** (Mathias Park, AIT). Når du har modtaget den rette `.env`-fil:
+
+```bash
+sudo install -d /etc/dtu-setup
+sudo install -m 0644 dtu-ait.env /etc/dtu-setup/site.conf   # eller dtu-sustain.env
+echo "ait" | sudo tee /etc/dtu-setup/department             # eller "sustain"
+```
+
+---
+
 ## Brug
 
 ### Start programmet

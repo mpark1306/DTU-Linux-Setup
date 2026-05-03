@@ -30,7 +30,8 @@ TODO.local
 /etc/dtu-setup/
 site.conf
 *.env
-!examples/*.env
+# Site profiles with real DTU values are distributed out-of-band — never commit
+examples/
 
 # Cisco redistributables (proprietary — never commit)
 cisco-secure-client*
