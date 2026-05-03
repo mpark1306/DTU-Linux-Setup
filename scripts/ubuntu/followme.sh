@@ -21,7 +21,7 @@ DEPARTMENT="${DTU_DEPARTMENT:-sustain}"
 if [[ "$DEPARTMENT" == "ait" ]]; then
   banner "DTU AIT WebPrint webapp"
 
-  WEBPRINT_URL="https://webprint.dtu.dk"
+  WEBPRINT_URL="${SITE_WEBPRINT_URL}"
   ICON_NAME="dtu-webprint"
   ICON_DST="/usr/share/pixmaps/${ICON_NAME}.png"
   WRAPPER="/usr/local/bin/dtu-webprint"
@@ -133,7 +133,7 @@ fi
 U="$DTU_USERNAME"
 P="$DTU_PASSWORD"
 
-PRINT_SERVER="konfigureret via site.conf"
+PRINT_SERVER="${SITE_PRINT_SERVER}"
 CREDS_FILE="/etc/cups/print-sustain.creds"
 
 echo "[1/8] Installing packages..."

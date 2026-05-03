@@ -28,10 +28,10 @@ if [[ "$DEPARTMENT" == "ait" ]]; then
   banner "O-Drive & M-Drive – AIT CIFS mount (openSUSE)"
 
   DOMAIN="WIN"
-  SERVER="<fileserver>"
+  SERVER="${SITE_FILE_SERVER}"
   O_SHARE="Department/Institut"
   O_MOUNTPOINT="/mnt/Odrev"
-  M_SERVER="<fileserver>"
+  M_SERVER="${SITE_FILE_SERVER}"
   USERS_BASE="Users"
   M_MOUNTPOINT="/mnt/Mdrev"
   CREDS_FILE="/home/$USERNAME/.smbcred-<fileserver>"
@@ -159,7 +159,7 @@ fi
 # Sustain profile (default)
 # ─────────────────────────────────────────────────────────────────────────────
 DOMAIN="WIN"
-SERVER="<qumulo-server>"
+SERVER="${SITE_FILE_SERVER_QUMULO}"
 SHARE="sus-q\$"
 MOUNTPOINT="/mnt/Qdrev"
 CREDS_FILE="/home/$USERNAME/.smbcred-<fileserver>"

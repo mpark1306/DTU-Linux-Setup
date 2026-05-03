@@ -21,7 +21,7 @@ fi
 
 SSID="DTUSecure"
 CON_NAME="DTUSecure"
-IDENTITY="${DTU_USERNAME}@win.dtu.dk"
+IDENTITY="${DTU_USERNAME}${SITE_WIFI_IDENTITY_SUFFIX}"
 PASSWORD="$DTU_PASSWORD"
 
 echo "[1/4] Ensuring NetworkManager + wpa_supplicant are installed..."
@@ -40,7 +40,7 @@ nmcli connection add \
   802-1x.phase2-auth mschapv2 \
   802-1x.identity "$IDENTITY" \
   802-1x.password "$PASSWORD" \
-  802-1x.anonymous-identity "anonymous@win.dtu.dk" \
+  802-1x.anonymous-identity "${SITE_WIFI_ANON_IDENTITY}" \
   connection.autoconnect yes \
   connection.autoconnect-priority 10
 

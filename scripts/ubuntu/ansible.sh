@@ -12,7 +12,7 @@ need_root
 
 banner "Ansible Onboarding"
 
-USERNAME="sus-root"
+USERNAME="${SITE_ANSIBLE_USER:-sus-root}"
 TARGET_UID=0
 TARGET_GID=0
 HOSTNAME_SHORT="$(hostname -s)"

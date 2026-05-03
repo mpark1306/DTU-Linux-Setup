@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Editor/OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Project artefacts
+*.deb
+*.rpm
+*.tar.gz
+*.tgz
+
+# Local notes / scratch
+note
+notes/
+TODO.local
+
+# Site-specific config (must NOT be committed — contains internal hostnames)
+/etc/dtu-setup/
+site.conf
+*.env
+!examples/*.env
+
+# Cisco redistributables (proprietary — never commit)
+cisco-secure-client*

@@ -1,0 +1,55 @@
+# =============================================================================
+# DTU Linux Setup – Site configuration template
+# =============================================================================
+# Install location: /etc/dtu-setup/site.conf
+#
+# This file MUST NOT be committed with real values. Two ready-to-use
+# configurations are provided in:
+#   examples/dtu-sustain.env
+#   examples/dtu-ait.env
+#
+# To activate one:
+#   sudo install -d /etc/dtu-setup
+#   sudo install -m 0644 examples/dtu-ait.env /etc/dtu-setup/site.conf
+#
+# All values are simple shell variables (KEY="value"). Module scripts source
+# this file via load_site_conf() in scripts/common.sh and use the values with
+# safe defaults (`${VAR:-default}`), so any value left commented falls back to
+# the DTU production default.
+# =============================================================================
+
+# ─── Active Directory / Kerberos ─────────────────────────────────────────────
+SITE_AD_DOMAIN="WIN.DTU.DK"          # uppercase realm
+SITE_AD_REALM="win.dtu.dk"           # lowercase, used as UPN suffix
+SITE_AD_ADMIN_GROUP="SUS-ITAdm-Client-Admins"   # group with full sudo + polkit
+
+# ─── File servers ────────────────────────────────────────────────────────────
+SITE_FILE_SERVER="<fileserver>"                              # primary CIFS host
+SITE_FILE_SERVER_QUMULO="<qumulo-server>"         # openSUSE DFS bypass
+SITE_USERS_BASE="Users"                                  # AIT: Users0..Users9 lookup
+
+# Sustain shares (used when DTU_DEPARTMENT=sustain)
+SITE_SUSTAIN_Q_SHARE="Qdrev/SUS"
+SITE_SUSTAIN_P_SUBPATH="Qdrev/SUS/Personal"      # + /<username>
+
+# AIT share defaults (override per department in /etc/dtu-setup/drives.conf)
+SITE_AIT_O_SHARE=""                              # set per department
+
+# ─── Printing ────────────────────────────────────────────────────────────────
+SITE_PRINT_SERVER="konfigureret via site.conf"         # CUPS/SMB FollowMe (Sustain)
+SITE_WEBPRINT_URL="https://webprint.dtu.dk"      # WebPrint webapp (AIT)
+
+# ─── WiFi (DTUSecure / WPA2-Enterprise) ──────────────────────────────────────
+SITE_WIFI_SSID="DTUSecure"
+SITE_WIFI_ANON_IDENTITY="anonymous@win.dtu.dk"
+SITE_WIFI_IDENTITY_SUFFIX="@win.dtu.dk"          # appended to DTU_USERNAME
+
+# ─── Microsoft Defender for Endpoint ─────────────────────────────────────────
+SITE_DEFENDER_ONBOARDING_URL="konfigureret via site.conf/download/MicrosoftDefenderATPOnboardingLinuxServer.py"
+
+# ─── Ansible service account ─────────────────────────────────────────────────
+SITE_ANSIBLE_USER="sus-root"
+
+# ─── First-login welcome (optional) ──────────────────────────────────────────
+SITE_HELPDESK_URL="https://helpdesk.dtu.dk"
+SITE_HELPDESK_EMAIL="ait@dtu.dk"

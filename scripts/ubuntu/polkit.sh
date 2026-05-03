@@ -9,32 +9,39 @@ need_root
 
 banner "PolicyKit / KDE IT Admin Backdoor + Domain User Rights"
 
+# Admin group from site.conf (default: SUS-ITAdm-Client-Admins).
+ADMIN_GROUP="${SITE_AD_ADMIN_GROUP}"
+ADMIN_GROUP_LC="$(echo "$ADMIN_GROUP" | tr '[:upper:]' '[:lower:]')"
+ADMIN_GROUP_LC_NODASH="$(echo "$ADMIN_GROUP_LC" | tr -d -)"
+REALM_LC="${SITE_AD_REALM}"
+REALM_UC="${SITE_AD_DOMAIN}"
+
 echo "[1/6] Configuring admin identities..."
-tee /etc/polkit-1/localauthority.conf.d/50-localauthority.conf > /dev/null <<'EOF'
+tee /etc/polkit-1/localauthority.conf.d/50-localauthority.conf > /dev/null <<EOF
 [Configuration]
-AdminIdentities=unix-user:0;unix-group:sudo;unix-group:wheel;unix-group:SUS-ITAdm-Client-Admins;unix-group:sus-itadm-clientadmins
+AdminIdentities=unix-user:0;unix-group:sudo;unix-group:wheel;unix-group:${ADMIN_GROUP};unix-group:${ADMIN_GROUP_LC_NODASH}
 EOF
 
-echo "[2/6] Adding SUS-ITAdm-Client-Admins to sudoers..."
-cat > /etc/sudoers.d/dtu-it-admins <<'SUDOERS'
-# DTU Sustain IT admins – covers SSSD group name variants
-%SUS-ITAdm-Client-Admins ALL=(ALL) ALL
-%sus-itadm-client-admins ALL=(ALL) ALL
-%sus-itadm-clientadmins ALL=(ALL) ALL
-%SUS-ITAdm-Client-Admins@WIN.DTU.DK ALL=(ALL) ALL
-%sus-itadm-client-admins@win.dtu.dk ALL=(ALL) ALL
-%sus-itadm-clientadmins@win.dtu.dk ALL=(ALL) ALL
-SUDOERS
+echo "[2/6] Adding ${ADMIN_GROUP} to sudoers..."
+cat > /etc/sudoers.d/dtu-it-admins <<EOF
+# DTU IT admins – covers SSSD group name variants
+%${ADMIN_GROUP} ALL=(ALL) ALL
+%${ADMIN_GROUP_LC} ALL=(ALL) ALL
+%${ADMIN_GROUP_LC_NODASH} ALL=(ALL) ALL
+%${ADMIN_GROUP}@${REALM_UC} ALL=(ALL) ALL
+%${ADMIN_GROUP_LC}@${REALM_LC} ALL=(ALL) ALL
+%${ADMIN_GROUP_LC_NODASH}@${REALM_LC} ALL=(ALL) ALL
+EOF
 chmod 440 /etc/sudoers.d/dtu-it-admins
 visudo -cf /etc/sudoers.d/dtu-it-admins || { fail "sudoers syntax error"; rm -f /etc/sudoers.d/dtu-it-admins; }
 
 echo "[3/6] Creating PolKit admin rules..."
 mkdir -p /etc/polkit-1/rules.d/
 
-tee /etc/polkit-1/rules.d/49-domain-admins.rules > /dev/null <<'EOF'
+tee /etc/polkit-1/rules.d/49-domain-admins.rules > /dev/null <<EOF
 polkit.addRule(function(action, subject) {
-    if (subject.isInGroup("SUS-ITAdm-Client-Admins") ||
-        subject.isInGroup("sus-itadm-clientadmins")) {
+    if (subject.isInGroup("${ADMIN_GROUP}") ||
+        subject.isInGroup("${ADMIN_GROUP_LC_NODASH}")) {
         return polkit.Result.YES;
     }
 });
@@ -51,8 +58,7 @@ echo "[4/5] Creating domain-user rights (48-domain-users.rules)..."
 rm -f /etc/polkit-1/rules.d/50-domain-users.rules   # clean up old name
 tee /etc/polkit-1/rules.d/48-domain-users.rules > /dev/null <<'EOF'
 // Domain Users – daily-use rights without admin password prompt.
-// IT admins (SUS-ITAdm-Client-Admins) are already handled by
-// 49-domain-admins.rules and get YES for everything.
+// IT admins are already handled by 49-domain-admins.rules and get YES for everything.
 
 polkit.addRule(function(action, subject) {
 
@@ -65,8 +71,6 @@ polkit.addRule(function(action, subject) {
         return polkit.Result.NOT_HANDLED;
 
     var id = action.id;
-
-    // ── USB / removable storage ──────────────────────────────────────────
     if (id.indexOf("org.freedesktop.udisks2.filesystem-mount")  === 0 ||
         id.indexOf("org.freedesktop.udisks2.power-off-drive")   === 0 ||
         id.indexOf("org.freedesktop.udisks2.eject-media")       === 0 ||
@@ -144,6 +148,6 @@ rm -f /etc/polkit-1/rules.d/49-packagekit-noauth.rules
 systemctl restart polkit
 sleep 1
 
-ok "PolicyKit configured for SUS-ITAdm-Client-Admins + Domain Users."
+ok "PolicyKit configured for ${ADMIN_GROUP} + Domain Users."
 echo "    Domain users can install packages, mount USB, manage WiFi, etc. without password prompts."
 echo "    Log out and back in for full effect."

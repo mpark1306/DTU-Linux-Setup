@@ -19,6 +19,61 @@ need_root() {
   fi
 }
 
+# ─── Site configuration ─────────────────────────────────────────────────────
+# Sources /etc/dtu-setup/site.conf if present, then defines safe defaults so
+# scripts can reference $SITE_* variables without repeating fallback logic.
+# Defaults match the DTU production environment for backward compatibility.
+load_site_conf() {
+  local conf="${SITE_CONF:-/etc/dtu-setup/site.conf}"
+  if [[ -r "$conf" ]]; then
+    # shellcheck disable=SC1090
+    source "$conf"
+  fi
+
+  # Active Directory / Kerberos
+  : "${SITE_AD_DOMAIN:=WIN.DTU.DK}"
+  : "${SITE_AD_REALM:=win.dtu.dk}"
+  : "${SITE_AD_ADMIN_GROUP:=SUS-ITAdm-Client-Admins}"
+
+  # File servers
+  : "${SITE_FILE_SERVER:=<fileserver>}"
+  : "${SITE_FILE_SERVER_QUMULO:=<qumulo-server>}"
+  : "${SITE_USERS_BASE:=Users}"
+  : "${SITE_SUSTAIN_Q_SHARE:=Qdrev/SUS}"
+  : "${SITE_SUSTAIN_P_SUBPATH:=Qdrev/SUS/Personal}"
+  : "${SITE_AIT_O_SHARE:=}"
+
+  # Printing
+  : "${SITE_PRINT_SERVER:=konfigureret via site.conf}"
+  : "${SITE_WEBPRINT_URL:=https://webprint.dtu.dk}"
+
+  # WiFi
+  : "${SITE_WIFI_SSID:=DTUSecure}"
+  : "${SITE_WIFI_ANON_IDENTITY:=anonymous@win.dtu.dk}"
+  : "${SITE_WIFI_IDENTITY_SUFFIX:=@win.dtu.dk}"
+
+  # Defender
+  : "${SITE_DEFENDER_ONBOARDING_URL:=konfigureret via site.conf/download/MicrosoftDefenderATPOnboardingLinuxServer.py}"
+
+  # Ansible
+  : "${SITE_ANSIBLE_USER:=sus-root}"
+
+  # Helpdesk
+  : "${SITE_HELPDESK_URL:=https://helpdesk.dtu.dk}"
+  : "${SITE_HELPDESK_EMAIL:=ait@dtu.dk}"
+
+  export SITE_AD_DOMAIN SITE_AD_REALM SITE_AD_ADMIN_GROUP
+  export SITE_FILE_SERVER SITE_FILE_SERVER_QUMULO SITE_USERS_BASE
+  export SITE_SUSTAIN_Q_SHARE SITE_SUSTAIN_P_SUBPATH SITE_AIT_O_SHARE
+  export SITE_PRINT_SERVER SITE_WEBPRINT_URL
+  export SITE_WIFI_SSID SITE_WIFI_ANON_IDENTITY SITE_WIFI_IDENTITY_SUFFIX
+  export SITE_DEFENDER_ONBOARDING_URL SITE_ANSIBLE_USER
+  export SITE_HELPDESK_URL SITE_HELPDESK_EMAIL
+}
+
+# Auto-load on source so every module script sees $SITE_* variables.
+load_site_conf
+
 # ─── Credential helpers ─────────────────────────────────────────────────────
 # Scripts receive credentials via environment variables set by the GUI.
 # If not set, fall back to interactive prompts (for CLI usage).

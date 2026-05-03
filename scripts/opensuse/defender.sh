@@ -48,7 +48,7 @@ systemctl daemon-reload
 systemctl enable --now mdatp
 
 curl -fsSL -o /tmp/MicrosoftDefenderATPOnboardingLinuxServer.py \
-  konfigureret via site.conf/download/MicrosoftDefenderATPOnboardingLinuxServer.py
+  "${SITE_DEFENDER_ONBOARDING_URL}"
 python3 /tmp/MicrosoftDefenderATPOnboardingLinuxServer.py || true
 
 mdatp config passive-mode --value disabled || true

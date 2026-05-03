@@ -9,41 +9,47 @@ need_root
 
 banner "PolicyKit / KDE IT Admin Backdoor + Domain User Rights"
 
+ADMIN_GROUP="${SITE_AD_ADMIN_GROUP}"
+ADMIN_GROUP_LC="$(echo "$ADMIN_GROUP" | tr '[:upper:]' '[:lower:]')"
+ADMIN_GROUP_LC_NODASH="$(echo "$ADMIN_GROUP_LC" | tr -d -)"
+REALM_LC="${SITE_AD_REALM}"
+REALM_UC="${SITE_AD_DOMAIN}"
+
 echo "[1/6] Creating PolKit admin rules..."
 mkdir -p /etc/polkit-1/rules.d/
 
-echo "[2/6] Adding SUS-ITAdm-Client-Admins to sudoers..."
-cat > /etc/sudoers.d/dtu-it-admins <<'SUDOERS'
-# DTU Sustain IT admins – covers SSSD group name variants
-%SUS-ITAdm-Client-Admins ALL=(ALL) ALL
-%sus-itadm-client-admins ALL=(ALL) ALL
-%sus-itadm-clientadmins ALL=(ALL) ALL
-%SUS-ITAdm-Client-Admins@WIN.DTU.DK ALL=(ALL) ALL
-%sus-itadm-client-admins@win.dtu.dk ALL=(ALL) ALL
-%sus-itadm-clientadmins@win.dtu.dk ALL=(ALL) ALL
-SUDOERS
+echo "[2/6] Adding ${ADMIN_GROUP} to sudoers..."
+cat > /etc/sudoers.d/dtu-it-admins <<EOF
+# DTU IT admins – covers SSSD group name variants
+%${ADMIN_GROUP} ALL=(ALL) ALL
+%${ADMIN_GROUP_LC} ALL=(ALL) ALL
+%${ADMIN_GROUP_LC_NODASH} ALL=(ALL) ALL
+%${ADMIN_GROUP}@${REALM_UC} ALL=(ALL) ALL
+%${ADMIN_GROUP_LC}@${REALM_LC} ALL=(ALL) ALL
+%${ADMIN_GROUP_LC_NODASH}@${REALM_LC} ALL=(ALL) ALL
+EOF
 chmod 440 /etc/sudoers.d/dtu-it-admins
 visudo -cf /etc/sudoers.d/dtu-it-admins || { fail "sudoers syntax error"; rm -f /etc/sudoers.d/dtu-it-admins; }
 
-tee /etc/polkit-1/rules.d/49-domain-admins.rules > /dev/null <<'EOF'
-// Grant full admin access to SUS-ITAdm-Client-Admins
+tee /etc/polkit-1/rules.d/49-domain-admins.rules > /dev/null <<EOF
+// Grant full admin access to ${ADMIN_GROUP}
 polkit.addRule(function(action, subject) {
-    if (subject.isInGroup("SUS-ITAdm-Client-Admins") ||
-        subject.isInGroup("sus-itadm-clientadmins")) {
+    if (subject.isInGroup("${ADMIN_GROUP}") ||
+        subject.isInGroup("${ADMIN_GROUP_LC_NODASH}")) {
         return polkit.Result.YES;
     }
 });
 EOF
 
-tee /etc/polkit-1/rules.d/40-admin-identities.rules > /dev/null <<'EOF'
+tee /etc/polkit-1/rules.d/40-admin-identities.rules > /dev/null <<EOF
 // Define who counts as an administrator
 polkit.addAdminRule(function(action, subject) {
     return [
         "unix-user:0",
         "unix-group:wheel",
         "unix-group:sudo",
-        "unix-group:SUS-ITAdm-Client-Admins",
-        "unix-group:sus-itadm-clientadmins"
+        "unix-group:${ADMIN_GROUP}",
+        "unix-group:${ADMIN_GROUP_LC_NODASH}"
     ];
 });
 EOF
@@ -186,7 +192,7 @@ echo "[6/6] Restarting polkit..."
 systemctl restart polkit
 sleep 1  # wait for polkit to be fully ready
 
-ok "PolicyKit configured for SUS-ITAdm-Client-Admins + Domain Users."
+ok "PolicyKit configured for ${ADMIN_GROUP} + Domain Users."
 echo "    KDE auth dialog will now show a username field."
 echo "    Admin identities set via 40-admin-identities.rules."
 echo "    Domain users can update packages, mount USB, manage WiFi, etc."

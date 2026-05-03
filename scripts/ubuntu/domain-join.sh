@@ -15,9 +15,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../common.sh"
 need_root
 
-banner "Domain Join – WIN.DTU.DK (realmd + SSSD)"
+banner "Domain Join – ${SITE_AD_DOMAIN} (realmd + SSSD)"
 
-DOMAIN="WIN.DTU.DK"
+DOMAIN="${SITE_AD_DOMAIN}"
 ADMIN_USER="${DTU_ADMIN_USERNAME:-$(get_username)}"
 
 echo "[1/8] Setting hostname..."

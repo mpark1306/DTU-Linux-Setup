@@ -27,10 +27,10 @@ if [[ "$DEPARTMENT" == "ait" ]]; then
   banner "O-Drive & M-Drive – AIT CIFS mount"
 
   DOMAIN="WIN"
-  SERVER="<fileserver>"
+  SERVER="${SITE_FILE_SERVER}"
   O_SHARE="Department/Institut"
   O_MOUNTPOINT="/mnt/Odrev"
-  M_SERVER="<fileserver>"
+  M_SERVER="${SITE_FILE_SERVER}"
   USERS_BASE="Users"
   M_MOUNTPOINT="/mnt/Mdrev"
   CREDS_FILE="/home/$USERNAME/.smbcred-<fileserver>"
@@ -168,10 +168,10 @@ fi
 # Sustain profile (default)
 # ─────────────────────────────────────────────────────────────────────────────
 DOMAIN="WIN"
-SERVER="<fileserver>"
-SHARE_PATH="Qdrev/SUS"
+SERVER="${SITE_FILE_SERVER}"
+SHARE_PATH="${SITE_SUSTAIN_Q_SHARE}"
 MOUNTPOINT="/mnt/Qdrev"
-P_SHARE_PATH="Qdrev/SUS/Personal/${USERNAME}"
+P_SHARE_PATH="${SITE_SUSTAIN_P_SUBPATH}/${USERNAME}"
 P_MOUNTPOINT="/mnt/Personal"
 CREDS_FILE="/home/$USERNAME/.smbcred-<fileserver>"
 FSTAB_FILE="/etc/fstab"
