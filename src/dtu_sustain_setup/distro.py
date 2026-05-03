@@ -1,4 +1,4 @@
-"""Distro detection for DTU Sustain Setup."""
+"""Distro detection for DTU Linux Setup."""
 
 from __future__ import annotations
 

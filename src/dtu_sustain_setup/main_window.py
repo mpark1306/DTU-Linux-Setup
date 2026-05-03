@@ -1,4 +1,4 @@
-"""Main window for DTU Sustain Setup."""
+"""Main window for DTU Linux Setup."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from typing import Callable
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QIcon, QPixmap
 from PyQt6.QtWidgets import (
+    QComboBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -22,6 +23,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .distro import Distro, detect_distro, distro_display_name, get_scripts_dir
+from .error_dialog import ErrorDialog
 from .input_dialog import CredentialDialog, DomainJoinDialog, PasswordDialog, SoftwareDialog, UsernameDialog
 from .module_runner import ModuleRunner
 
@@ -53,22 +55,12 @@ MODULES: list[ModuleDef] = [
     ),
     ModuleDef(
         id="qdrive",
-        title="Q-Drive",
-        description="Map \\\\<fileserver>\\Qdrev\\SUS\nas CIFS mount",
+        title="Network Drives",
+        description="Map department network drives\n(Q+P or O+M via CIFS)",
         script_name="qdrive.sh",
         needs_root=True,
         input_type="credentials",
         icon_name="folder-remote",
-    ),
-    ModuleDef(
-        id="brother",
-        title="Brother P950NW",
-        description="Label printer\n(CUPS + ptouch driver)",
-        script_name="brother.sh",
-        needs_root=True,
-        input_type="none",
-        icon_name="printer",
-        enabled=False,
     ),
     ModuleDef(
         id="defender",
@@ -82,7 +74,7 @@ MODULES: list[ModuleDef] = [
     ModuleDef(
         id="polkit",
         title="PolicyKit",
-        description="IT admin backdoor\n(SUS-ITAdm group)",
+        description="Domain-user rights\n(USB, WiFi, packages)",
         script_name="polkit.sh",
         needs_root=True,
         input_type="none",
@@ -90,22 +82,21 @@ MODULES: list[ModuleDef] = [
     ),
     ModuleDef(
         id="followme",
-        title="FollowMe Printers",
-        description="MFP-PCL + Plot-PS\n(CUPS + SMB auth)",
+        title="Printers",
+        description="FollowMe (Sustain) /\nWebPrint app (AIT)",
         script_name="followme.sh",
         needs_root=True,
         input_type="credentials",
         icon_name="printer",
     ),
     ModuleDef(
-        id="onedrive",
-        title="OneDrive",
-        description="Disabled – use Q-Drive\nOneDrive sync (no folder mapping)",
-        script_name="onedrive.sh",
+        id="wifi",
+        title="DTUSecure WiFi",
+        description="WPA2-Enterprise\n(PEAP/MSCHAPv2 auto-connect)",
+        script_name="wifi.sh",
         needs_root=True,
-        input_type="username",
-        icon_name="folder-cloud",
-        enabled=False,
+        input_type="credentials",
+        icon_name="network-wireless",
     ),
     ModuleDef(
         id="software",
@@ -118,8 +109,8 @@ MODULES: list[ModuleDef] = [
     ),
     ModuleDef(
         id="automount",
-        title="Auto-mount / Pdrev",
-        description="Pdrev symlink + desktop\npolkit (USB, WiFi, etc.)",
+        title="Auto-mount",
+        description="USB automount + udev rules\n(no symlinks)",
         script_name="automount.sh",
         needs_root=True,
         input_type="none",
@@ -128,7 +119,7 @@ MODULES: list[ModuleDef] = [
     ModuleDef(
         id="sync-homedir",
         title="Sync Home Dirs",
-        description="Backup Desktop, Documents\n& Pictures to Q-Drive",
+        description="Backup Desktop, Documents\n& Pictures to network drive",
         script_name="setup-sync-homedir.sh",
         needs_root=True,
         input_type="none",
@@ -195,9 +186,10 @@ class MainWindow(QMainWindow):
         self._runner = ModuleRunner(self)
         self._runner.output_received.connect(self._append_log)
         self._runner.finished.connect(self._on_module_finished)
+        self._runner.failed.connect(self._on_module_failed)
         self._module_buttons: dict[str, QPushButton] = {}
 
-        self.setWindowTitle("DTU Sustain Setup")
+        self.setWindowTitle("DTU Linux Setup")
         self.setMinimumSize(800, 700)
 
         # Try to set window icon
@@ -225,7 +217,7 @@ class MainWindow(QMainWindow):
         header.addWidget(logo_label)
 
         title_block = QVBoxLayout()
-        title_label = QLabel("DTU Sustain Setup")
+        title_label = QLabel("DTU Linux Setup")
         title_font = QFont()
         title_font.setPointSize(22)
         title_font.setBold(True)
@@ -237,6 +229,19 @@ class MainWindow(QMainWindow):
         distro_label.setStyleSheet("color: #666; font-size: 12px;")
         title_block.addWidget(distro_label)
         header.addLayout(title_block)
+
+        # Department selector
+        self._dept_combo = QComboBox()
+        self._dept_combo.addItem("DTU Sustain", "sustain")
+        self._dept_combo.addItem("DTU AIT", "ait")
+        self._dept_combo.setMinimumWidth(160)
+        self._dept_combo.setStyleSheet(
+            "QComboBox { font-size: 13px; padding: 5px 10px; border: 2px solid #ddd; "
+            "border-radius: 6px; background: white; } "
+            f"QComboBox:focus {{ border-color: {DTU_RED}; }}"
+        )
+        header.addSpacing(20)
+        header.addWidget(self._dept_combo)
         header.addStretch()
 
         main_layout.addLayout(header)
@@ -425,6 +430,7 @@ class MainWindow(QMainWindow):
             if cisco_tarball:
                 env_vars["DTU_CISCO_TARBALL"] = cisco_tarball
 
+        env_vars["DTU_DEPARTMENT"] = self._dept_combo.currentData()
         self._set_running(True)
         self.statusBar().showMessage(f"Running: {mod.title}...")
         self._runner.run(
@@ -444,7 +450,7 @@ class MainWindow(QMainWindow):
 
         # Modules that require the end-user's domain credentials are
         # deferred to first login — skip them in the admin run.
-        DEFERRED_MODULES = {"qdrive", "followme", "onedrive"}
+        DEFERRED_MODULES = {"qdrive", "followme", "onedrive", "wifi"}
 
         # Collect admin info for Domain Join
         admin_dlg = DomainJoinDialog(self)
@@ -470,13 +476,15 @@ class MainWindow(QMainWindow):
             "DTU_HOSTNAME": admin_result[0],
             "DTU_ADMIN_USERNAME": admin_result[1],
             "DTU_ANSIBLE_PASSWORD": ansible_password,
+            "DTU_DEPARTMENT": self._dept_combo.currentData(),
         }
 
         info_msg = (
             "The following modules will be skipped and run automatically\n"
             "when the domain user logs in for the first time:\n\n"
-            "  • Q-Drive & P-Drive\n"
-            "  • FollowMe Printers\n\n"
+            "  \u2022 Q-Drive / O-Drive\n"
+            "  \u2022 FollowMe Printers\n"
+            "  \u2022 DTUSecure WiFi\n\n"
             "Make sure 'First-Login Setup' is included in the run."
         )
         QMessageBox.information(self, "Admin Run – Deferred Modules", info_msg)
@@ -527,6 +535,21 @@ class MainWindow(QMainWindow):
             self._set_running(False)
             status = "completed" if success else "failed"
             self.statusBar().showMessage(f"Module '{module_id}' {status}.")
+
+    def _on_module_failed(self, module_id: str, exit_code: int, output: str) -> None:
+        """Show an ErrorDialog with diagnosis and copy-to-clipboard support."""
+        mod = next((m for m in MODULES if m.id == module_id), None)
+        title = mod.title if mod else module_id
+        script_name = mod.script_name if mod else ""
+        dlg = ErrorDialog(
+            self,
+            module_title=title,
+            module_id=module_id,
+            script_name=script_name,
+            exit_code=exit_code,
+            output=output,
+        )
+        dlg.exec()
 
     def _cancel_running(self) -> None:
         """Cancel the running module."""

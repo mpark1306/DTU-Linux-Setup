@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 ###############################################################################
-# DTU Sustain Setup – Shared helpers for all module scripts
+# DTU Linux Setup – Shared helpers for all module scripts
 ###############################################################################
 
 # ─── Colours / helpers ───────────────────────────────────────────────────────

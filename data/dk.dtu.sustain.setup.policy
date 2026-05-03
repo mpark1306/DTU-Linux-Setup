@@ -3,7 +3,7 @@
   "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
   "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 <!--
-  PolicyKit policy for DTU Sustain Setup.
+  PolicyKit policy for DTU Linux Setup.
   Allows admin-level modules to run via pkexec.
 -->
 <policyconfig>
@@ -11,8 +11,8 @@
   <vendor_url>https://sustain.dtu.dk</vendor_url>
 
   <action id="dk.dtu.sustain.setup.run-module">
-    <description>Run DTU Sustain Setup module as root</description>
-    <message>Authentication is required to run DTU Sustain Setup modules</message>
+    <description>Run DTU Linux Setup module as root</description>
+    <message>Authentication is required to run DTU Linux Setup modules</message>
     <icon_name>dtu-sustain-setup</icon_name>
     <defaults>
       <allow_any>auth_admin</allow_any>

@@ -1,4 +1,4 @@
-# DTU Sustain Setup – Brugerguide
+# DTU Linux Setup – Brugerguide
 
 > **Målgruppe:** IT-teknikere der opsætter DTU Sustain Linux-arbejdsstationer.
 
@@ -6,12 +6,12 @@
 
 ## Oversigt
 
-DTU Sustain Setup er et grafisk værktøj der automatiserer opsætning af Linux-arbejdsstationer på DTU Sustain. Programmet samler alle nødvendige konfigurationsskridt i ét interface — fra domæne-join til printeropsætning.
+DTU Linux Setup er et grafisk værktøj der automatiserer opsætning af Linux-arbejdsstationer på DTU (Sustain & AIT). Programmet samler alle nødvendige konfigurationsskridt i ét interface — fra domæne-join til printeropsætning.
 
 ```
 ┌───────────────────────────────────────────────────────┐
 │                                                       │
-│   DTU Sustain Setup                                   │
+│   DTU Linux Setup                                     │
 │                                                       │
 │   ┌─────────┐  ┌─────────┐  ┌─────────┐              │
 │   │ Domain  │  │ Q-Drive │  │ Brother │              │
@@ -40,7 +40,7 @@ DTU Sustain Setup er et grafisk værktøj der automatiserer opsætning af Linux-
 
 ## Hurtigstart: Fuld opsætning af en ny maskine
 
-### Trin 1: Installer DTU Sustain Setup
+### Trin 1: Installer DTU Linux Setup
 
 **Ubuntu 24.04:**
 ```bash
@@ -75,7 +75,7 @@ Inden du starter, sørg for at have:
 dtu-sustain-setup
 ```
 
-Eller find **DTU Sustain Setup** i applikationsmenuen under **Indstillinger**.
+Eller find **DTU Linux Setup** i applikationsmenuen under **Indstillinger**.
 
 ### Trin 4: Kør alle moduler
 

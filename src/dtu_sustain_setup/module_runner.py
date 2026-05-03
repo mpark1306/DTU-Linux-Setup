@@ -16,11 +16,14 @@ class ModuleRunner(QObject):
 
     output_received = pyqtSignal(str)
     finished = pyqtSignal(bool, str)  # (success, module_id)
+    failed = pyqtSignal(str, int, str)  # (module_id, exit_code, full_output)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._process: QProcess | None = None
         self._wrapper_file: str | None = None
+        self._output_buffer: list[str] = []
+        self._last_script_name: str = ""
 
     def run(
         self,
@@ -36,6 +39,8 @@ class ModuleRunner(QObject):
             return
 
         self._module_id = module_id
+        self._output_buffer = []
+        self._last_script_name = script_path.name
 
         self._process = QProcess(self)
         self._process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
@@ -108,6 +113,7 @@ class ModuleRunner(QObject):
         data = self._process.readAllStandardOutput()
         if data:
             text = bytes(data).decode("utf-8", errors="replace")
+            self._output_buffer.append(text)
             self.output_received.emit(text)
 
     def _on_finished(self, exit_code: int, exit_status: QProcess.ExitStatus) -> None:
@@ -119,4 +125,18 @@ class ModuleRunner(QObject):
         success = exit_code == 0 and exit_status == QProcess.ExitStatus.NormalExit
         status_text = "✅ Completed successfully" if success else f"❌ Failed (exit code {exit_code})"
         self.output_received.emit(f"\n{status_text}\n{'─' * 60}\n")
+        if not success:
+            self.failed.emit(
+                self._module_id,
+                exit_code,
+                "".join(self._output_buffer),
+            )
         self.finished.emit(success, self._module_id)
+
+    @property
+    def last_output(self) -> str:
+        return "".join(self._output_buffer)
+
+    @property
+    def last_script_name(self) -> str:
+        return self._last_script_name

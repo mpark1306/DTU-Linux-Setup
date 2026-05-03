@@ -132,18 +132,28 @@ apt-get install -y rsync > /dev/null
 echo "[2/6] Deploying $SYNC_SCRIPT..."
 cat > "$SYNC_SCRIPT" << 'EOF'
 #!/usr/bin/env bash
-# sync-homedir.sh — rsync selected home dirs → Q-drev
+# sync-homedir.sh — rsync selected home dirs to network drive
+# Drive paths read from /etc/dtu-setup/drives.conf (written by qdrive.sh).
+# Skips silently when the drive is not mounted — runs again on next timer tick.
 set -euo pipefail
 
-MOUNT_POINT="/mnt/Qdrev"
-REMOTE_BASE="$MOUNT_POINT/Personal/$USER"
+DRIVES_CONF="/etc/dtu-setup/drives.conf"
+if [[ -f "$DRIVES_CONF" ]]; then
+  MOUNT_POINT=$(grep -E "^MOUNT_POINT=" "$DRIVES_CONF" | cut -d= -f2-)
+  REMOTE_BASE=$(grep -E "^REMOTE_BASE=" "$DRIVES_CONF" | cut -d= -f2- | sed "s|\${USER}|${USER}|g; s|\$USER|${USER}|g")
+else
+  # Default fallback (Sustain)
+  MOUNT_POINT="/mnt/Qdrev"
+  REMOTE_BASE="$MOUNT_POINT/Personal/$USER"
+fi
+
 LOG="$HOME/.local/share/sync-homedir.log"
 DIRS=("Desktop" "Documents" "Pictures")
 
 mkdir -p "$(dirname "$LOG")"
 
 if ! mountpoint -q "$MOUNT_POINT"; then
-  echo "$(date '+%F %T') Drev ikke tilgængeligt, springer over." >> "$LOG"
+  echo "$(date '+%F %T') Drev ikke tilgængeligt ($MOUNT_POINT), springer over." >> "$LOG"
   exit 0
 fi
 
@@ -152,10 +162,10 @@ for DIR in "${DIRS[@]}"; do
 done
 
 for DIR in "${DIRS[@]}"; do
-  rsync -av --update \
-    "$HOME/$DIR/" \
-    "$REMOTE_BASE/$DIR/" \
-    >> "$LOG" 2>&1
+  SRC="$HOME/$DIR/"
+  DST="$REMOTE_BASE/$DIR/"
+  [[ -d "$SRC" ]] || continue
+  rsync -a --update "$SRC" "$DST" >> "$LOG" 2>&1
 done
 
 echo "$(date '+%F %T') Sync gennemført for $USER." >> "$LOG"

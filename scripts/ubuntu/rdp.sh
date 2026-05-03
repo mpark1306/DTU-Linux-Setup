@@ -72,7 +72,7 @@ echo "[5/7] Configuring polkit for RDP sessions..."
 tee /etc/polkit-1/rules.d/45-xrdp.rules > /dev/null <<'POLKIT'
 // Allow xrdp sessions to create colour profiles and manage sessions.
 // Without this, KDE Plasma shows auth dialogs on every RDP login.
-// Installed by DTU Sustain Setup – rdp.sh
+// Installed by DTU Linux Setup – rdp.sh
 
 polkit.addRule(function(action, subject) {
     if ((action.id === "org.freedesktop.color-manager.create-device" ||

@@ -1,5 +1,5 @@
 ###############################################################################
-# DTU Sustain Setup – Makefile
+# DTU Linux Setup – Makefile
 ###############################################################################
 
 PREFIX      ?= /opt/dtu-sustain-setup
@@ -14,7 +14,7 @@ VERSION     := 1.0.0
 .PHONY: help install uninstall deb rpm clean
 
 help:
-	@echo "DTU Sustain Setup – Build targets"
+	@echo "DTU Linux Setup – Build targets"
 	@echo ""
 	@echo "  make install    Install to $(PREFIX) (run as root)"
 	@echo "  make uninstall  Remove installation"
@@ -26,7 +26,7 @@ help:
 # ─── Install / uninstall ────────────────────────────────────────────────────
 
 install:
-	@echo "Installing DTU Sustain Setup to $(DESTDIR)$(PREFIX)..."
+	@echo "Installing DTU Linux Setup to $(DESTDIR)$(PREFIX)..."
 
 	# Application files
 	install -d $(DESTDIR)$(PREFIX)
@@ -66,7 +66,7 @@ install:
 	@echo "   Launcher: $(BINDIR)/dtu-sustain-setup"
 
 uninstall:
-	@echo "Removing DTU Sustain Setup..."
+	@echo "Removing DTU Linux Setup..."
 	rm -rf $(DESTDIR)$(PREFIX)
 	rm -f  $(DESTDIR)$(BINDIR)/dtu-sustain-setup
 	rm -f  $(DESTDIR)$(APPDIR)/dtu-sustain-setup.desktop

@@ -251,7 +251,7 @@ def _parse_software_conf(path: Path) -> dict[str, list[str]]:
 def _write_software_conf(path: Path, sections: dict[str, list[str]]) -> None:
     """Write sections back to software.conf."""
     lines = [
-        "# DTU Sustain Setup – Software Configuration",
+        "# DTU Linux Setup – Software Configuration",
         "# Lines starting with # are comments. Empty lines are ignored.",
         "#",
         "# Format:",
