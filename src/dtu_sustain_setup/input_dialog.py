@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import socket
 from pathlib import Path
 
@@ -229,6 +230,23 @@ def _find_software_conf() -> Path:
     return candidates[0]
 
 
+def _user_writable_conf() -> Path:
+    """User-writable location used when the system conf is read-only."""
+    base = Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
+    return base / "dtu-sustain-setup" / "software.conf"
+
+
+def _is_writable(path: Path) -> bool:
+    """Return True if path (or its parent, when missing) is writable."""
+    try:
+        if path.exists():
+            return os.access(path, os.W_OK)
+        parent = path.parent
+        return parent.exists() and os.access(parent, os.W_OK)
+    except OSError:
+        return False
+
+
 def _parse_software_conf(path: Path) -> dict[str, list[str]]:
     """Parse software.conf and return {section: [packages]}."""
     sections: dict[str, list[str]] = {"flatpak": [], "snap": [], "cisco": []}
@@ -412,15 +430,47 @@ class SoftwareDialog(QDialog):
             result[section_key] = pkgs
         return result
 
-    def _save(self) -> None:
+    def _persist(self) -> bool:
+        """Write the current selection to disk, falling back to a user-writable
+        location when the system-wide conf is read-only.
+
+        Returns True on success, False if the user should be prevented from
+        proceeding (e.g. nothing could be written).
+        """
         self._sections = self._collect_sections()
-        _write_software_conf(self._conf_path, self._sections)
-        QMessageBox.information(self, "Saved", f"Configuration saved to:\n{self._conf_path}")
+        target = self._conf_path
+        if not _is_writable(target):
+            target = _user_writable_conf()
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                QMessageBox.critical(
+                    self,
+                    "Save failed",
+                    f"Cannot create config directory:\n{target.parent}\n\n{exc}",
+                )
+                return False
+        try:
+            _write_software_conf(target, self._sections)
+        except OSError as exc:
+            QMessageBox.critical(
+                self,
+                "Save failed",
+                f"Could not write configuration to:\n{target}\n\n{exc}",
+            )
+            return False
+        self._conf_path = target
+        return True
+
+    def _save(self) -> None:
+        if self._persist():
+            QMessageBox.information(
+                self, "Saved", f"Configuration saved to:\n{self._conf_path}"
+            )
 
     def _save_and_install(self) -> None:
-        self._sections = self._collect_sections()
-        _write_software_conf(self._conf_path, self._sections)
-        self.accept()
+        if self._persist():
+            self.accept()
 
     def get_software_config(self) -> tuple[Path, str] | None:
         """Show dialog. Returns (config_path, cisco_tarball_path) if user clicked Install, None if cancelled."""

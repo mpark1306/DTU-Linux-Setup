@@ -22,7 +22,7 @@ HOSTNAME_FQDN="$(echo "$HOSTNAME_SHORT" | tr '[:upper:]' '[:lower:]').sus.client
 echo "[1/6] Installing required packages..."
 export DEBIAN_FRONTEND=noninteractive
 apt_wait
-apt-get update -qq
+apt-get update -qq || warn "apt-get update reported errors (likely a broken third-party repository); continuing."
 apt-get install -y openssh-server python3
 systemctl enable --now ssh
 ok "openssh-server + python3 installed."

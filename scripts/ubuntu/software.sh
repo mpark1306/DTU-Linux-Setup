@@ -57,7 +57,7 @@ STEP=0
 STEP=$((STEP + 1))
 echo "[${STEP}/${TOTAL_STEPS}] Setting up Flatpak + Flathub..."
 apt_wait
-apt-get update -y
+apt-get update -y || warn "apt-get update reported errors (likely a broken third-party repository); continuing."
 apt-get install -y flatpak xdg-desktop-portal xdg-desktop-portal-gtk
 
 # Add Flathub if not already present
@@ -88,6 +88,15 @@ fi
 if (( ${#SNAP_APPS[@]} > 0 )); then
     STEP=$((STEP + 1))
     echo "[${STEP}/${TOTAL_STEPS}] Installing Snap packages..."
+    if ! command -v snap &>/dev/null; then
+        echo "    snapd not present – installing..."
+        apt_wait
+        apt-get install -y snapd || warn "Failed to install snapd"
+        systemctl enable --now snapd.socket 2>/dev/null || true
+        systemctl enable --now snapd 2>/dev/null || true
+        # snapd needs a moment after first start before `snap` works
+        sleep 5
+    fi
     if command -v snap &>/dev/null; then
         for app in "${SNAP_APPS[@]}"; do
             echo "  → ${app}..."
@@ -166,8 +175,10 @@ if $CISCO_ENABLED; then
             for script in "${ORDERED_SCRIPTS[@]}"; do
                 MODULE=$(basename "$(dirname "$script")")
                 echo "    --- Installing: ${MODULE} ---"
-                SCRIPT_OUTPUT=$( cd "$(dirname "$script")" && yes | bash "$(basename "$script")" 2>&1 ) || true
+                set +e
+                SCRIPT_OUTPUT=$( cd "$(dirname "$script")" && yes | bash "$(basename "$script")" 2>&1 )
                 EXIT_CODE=$?
+                set -e
                 echo "$SCRIPT_OUTPUT"
                 if echo "$SCRIPT_OUTPUT" | grep -qiE "already installed|installed successfully|is installed"; then
                     echo "    [OK] ${MODULE}"

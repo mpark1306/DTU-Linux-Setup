@@ -138,7 +138,7 @@ CREDS_FILE="/etc/cups/print-sustain.creds"
 
 echo "[1/8] Installing packages..."
 apt_wait
-apt-get update -qq
+apt-get update -qq || warn "apt-get update reported errors (likely a broken third-party repository); continuing."
 apt-get install -y cups smbclient openprinting-ppds samba-common-bin
 
 echo "[2/8] Enabling CUPS..."

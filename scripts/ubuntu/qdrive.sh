@@ -166,12 +166,30 @@ fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sustain profile (default)
+#
+# We mount directly against the Qumulo backend (SITE_FILE_SERVER_QUMULO)
+# instead of the DFS root konfigureret via site.conf, because DFS referral
+# resolution in the Linux kernel CIFS client is unreliable — particularly
+# over VPN (split tunnel) and on kernels 6.19+. Symptom: Q-drive mounts but
+# /mnt/Personal fails with "mount.cifs: permission denied" because the
+# Personal/<user> path is a DFS junction to Qumulo.
 # ─────────────────────────────────────────────────────────────────────────────
 DOMAIN="WIN"
-SERVER="${SITE_FILE_SERVER}"
-SHARE_PATH="${SITE_SUSTAIN_Q_SHARE}"
+# Prefer the direct Qumulo target; fall back to the DFS root only if Qumulo
+# is not configured in site.conf.
+if [[ -n "${SITE_FILE_SERVER_QUMULO:-}" ]]; then
+  SERVER="${SITE_FILE_SERVER_QUMULO}"
+  Q_SHARE_PATH='sus-q$'
+  P_SHARE_PATH='sus-q$/Personal/'"${USERNAME}"
+  CIFS_OPTS="vers=3.0,sec=ntlmssp,nosharesock,nodfs"
+else
+  SERVER="${SITE_FILE_SERVER}"
+  Q_SHARE_PATH="${SITE_SUSTAIN_Q_SHARE}"
+  P_SHARE_PATH="${SITE_SUSTAIN_P_SUBPATH}/${USERNAME}"
+  CIFS_OPTS="serverino"
+fi
+SHARE_PATH="$Q_SHARE_PATH"
 MOUNTPOINT="/mnt/Qdrev"
-P_SHARE_PATH="${SITE_SUSTAIN_P_SUBPATH}/${USERNAME}"
 P_MOUNTPOINT="/mnt/Personal"
 CREDS_FILE="/home/$USERNAME/.smbcred-<fileserver>"
 FSTAB_FILE="/etc/fstab"
@@ -198,7 +216,7 @@ echo "Using UID=$UID_NUM GID=$GID_NUM"
 echo "[1/8] Installing cifs-utils..."
 apt_wait
 apt-get update -qq 2>/dev/null || true
-apt-get install -y cifs-utils >/dev/null
+apt-get install -y cifs-utils smbclient >/dev/null
 
 echo "[2/8] Creating mountpoints..."
 mkdir -p "$MOUNTPOINT"
@@ -219,12 +237,11 @@ chown "$USERNAME":"$GID_NUM" "$CREDS_FILE"
 chmod 600 "$CREDS_FILE"
 
 echo "[4/8] Ensuring /etc/fstab entry for Q-Drive..."
-FSTAB_LINE="//${SERVER}/${SHARE_PATH}  ${MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,serverino,_netdev,x-systemd.automount  0  0"
+FSTAB_LINE="//${SERVER}/${SHARE_PATH}  ${MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,${CIFS_OPTS},_netdev,x-systemd.automount  0  0"
 
-if grep -qE "^[[:space:]]*//${SERVER}/${SHARE_PATH}[[:space:]]" "$FSTAB_FILE"; then
-  echo "fstab entry already exists — updating..."
-  sed -i "\|^[[:space:]]*//${SERVER}/${SHARE_PATH}[[:space:]]|d" "$FSTAB_FILE"
-fi
+# Remove any prior entry for this mountpoint or for the legacy DFS path.
+sed -i "\|[[:space:]]${MOUNTPOINT}[[:space:]].*cifs|d" "$FSTAB_FILE" 2>/dev/null || true
+sed -i "\|//${SITE_FILE_SERVER}/${SITE_SUSTAIN_Q_SHARE}[[:space:]]|d" "$FSTAB_FILE" 2>/dev/null || true
 echo "$FSTAB_LINE" >> "$FSTAB_FILE"
 
 if mount | grep -qE "[[:space:]]${MOUNTPOINT}[[:space:]]"; then
@@ -233,12 +250,10 @@ if mount | grep -qE "[[:space:]]${MOUNTPOINT}[[:space:]]"; then
 fi
 
 echo "[5/8] Ensuring /etc/fstab entry for P-Drive..."
-P_FSTAB_LINE="//${SERVER}/${P_SHARE_PATH}  ${P_MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,serverino,_netdev,x-systemd.automount  0  0"
+P_FSTAB_LINE="//${SERVER}/${P_SHARE_PATH}  ${P_MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,${CIFS_OPTS},_netdev,x-systemd.automount  0  0"
 
-if grep -qE "^[[:space:]]*//${SERVER}/${P_SHARE_PATH}[[:space:]]" "$FSTAB_FILE"; then
-  echo "fstab entry already exists — updating..."
-  sed -i "\|^[[:space:]]*//${SERVER}/${P_SHARE_PATH}[[:space:]]|d" "$FSTAB_FILE"
-fi
+sed -i "\|[[:space:]]${P_MOUNTPOINT}[[:space:]].*cifs|d" "$FSTAB_FILE" 2>/dev/null || true
+sed -i "\|//${SITE_FILE_SERVER}/${SITE_SUSTAIN_P_SUBPATH}/|d" "$FSTAB_FILE" 2>/dev/null || true
 echo "$P_FSTAB_LINE" >> "$FSTAB_FILE"
 
 if mount | grep -qE "[[:space:]]${P_MOUNTPOINT}[[:space:]]"; then
@@ -246,10 +261,80 @@ if mount | grep -qE "[[:space:]]${P_MOUNTPOINT}[[:space:]]"; then
   umount "$P_MOUNTPOINT" || true
 fi
 
+# ─── M-Drive (personal home share on <fileserver> Users/Users0-9) ───────────────
+# Mounted for Sustain users on request, but NOT used by sync-homedir
+# (sync continues to target the P-Drive on Qumulo).
+M_SERVER="${SITE_FILE_SERVER}"
+M_USERS_BASE="${SITE_USERS_BASE:-Users}"
+M_MOUNTPOINT="/mnt/Mdrev"
+
+echo "[5b/8] Searching for M-Drive in ${M_USERS_BASE}/Users0-Users9 on //${M_SERVER}..."
+M_USERS_CACHE_DIR="${HOME_DIR}/.config/dtu-setup"
+M_USERS_CACHE="${M_USERS_CACHE_DIR}/sustain-mdrive-subdir"
+M_USERS_SUBDIR=""
+
+if [[ -f "$M_USERS_CACHE" ]]; then
+  CACHED=$(cat "$M_USERS_CACHE")
+  echo "  Checking cached subdir: $CACHED"
+  if ! smbclient "//${M_SERVER}/${M_USERS_BASE}" -A "$CREDS_FILE" \
+      -c "ls ${CACHED}/${USERNAME}" 2>&1 | grep -q "NT_STATUS_"; then
+    M_USERS_SUBDIR="$CACHED"
+    echo "  Cache valid: $M_USERS_SUBDIR"
+if [[ -n "${M_USERS_SUBDIR:-}" ]]; then
+  echo "    M-Drive: //${M_SERVER}/${M_SHARE_PATH} → ${M_MOUNTPOINT} (no sync)"
+fi
+  else
+    warn "Cached subdir stale, re-searching..."
+  fi
+fi
+
+if [[ -z "$M_USERS_SUBDIR" ]]; then
+  for i in 0 1 2 3 4 5 6 7 8 9; do
+    echo -n "  Trying Users${i}/${USERNAME}... "
+    if ! smbclient "//${M_SERVER}/${M_USERS_BASE}" -A "$CREDS_FILE" \
+        -c "ls Users${i}/${USERNAME}" 2>&1 | grep -q "NT_STATUS_"; then
+      M_USERS_SUBDIR="Users${i}"
+      echo "found!"
+      break
+    fi
+    echo "not found"
+  done
+fi
+
+if [[ -z "$M_USERS_SUBDIR" ]]; then
+  warn "Could not find M-Drive folder for '$USERNAME' in Users0-Users9 on //${M_SERVER}/${M_USERS_BASE}. Skipping M-Drive."
+else
+  mkdir -p "$M_USERS_CACHE_DIR"
+  echo "$M_USERS_SUBDIR" > "$M_USERS_CACHE"
+  chown -R "$UID_NUM":"$GID_NUM" "$M_USERS_CACHE_DIR"
+  ok "M-Drive subdir cached: ${M_USERS_SUBDIR} → ${M_USERS_CACHE}"
+
+  M_SHARE_PATH="${M_USERS_BASE}/${M_USERS_SUBDIR}/${USERNAME}"
+
+  echo "[5c/8] Creating M-Drive mountpoint..."
+  mkdir -p "$M_MOUNTPOINT"
+  chown "$UID_NUM":"$GID_NUM" "$M_MOUNTPOINT"
+  chmod 0770 "$M_MOUNTPOINT"
+
+  echo "[5d/8] Ensuring /etc/fstab entry for M-Drive..."
+  M_FSTAB_LINE="//${M_SERVER}/${M_SHARE_PATH}  ${M_MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,serverino,_netdev,x-systemd.automount  0  0"
+  sed -i "\|[[:space:]]${M_MOUNTPOINT}[[:space:]].*cifs|d" "$FSTAB_FILE" 2>/dev/null || true
+  sed -i "\|//${M_SERVER}/${M_USERS_BASE}/|d" "$FSTAB_FILE" 2>/dev/null || true
+  echo "$M_FSTAB_LINE" >> "$FSTAB_FILE"
+
+  if mount | grep -qE "[[:space:]]${M_MOUNTPOINT}[[:space:]]"; then
+    echo "Already mounted — unmounting for clean state..."
+    umount "$M_MOUNTPOINT" || true
+  fi
+fi
+
 echo "[6/8] Reloading systemd and starting automount units..."
 systemctl daemon-reload
 systemctl restart mnt-Qdrev.automount 2>/dev/null || systemctl start mnt-Qdrev.automount || true
 systemctl restart mnt-Personal.automount 2>/dev/null || systemctl start mnt-Personal.automount || true
+if [[ -n "${M_USERS_SUBDIR:-}" ]]; then
+  systemctl restart mnt-Mdrev.automount 2>/dev/null || systemctl start mnt-Mdrev.automount || true
+fi
 
 echo "[7/7] Saving department config..."
 DTU_SETUP_DIR="/etc/dtu-setup"

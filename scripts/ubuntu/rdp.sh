@@ -55,6 +55,14 @@ echo "[4/7] Tuning xrdp.ini (performance + security)..."
 XRDP_INI="/etc/xrdp/xrdp.ini"
 cp -n "$XRDP_INI" "${XRDP_INI}.orig" 2>/dev/null || true
 
+# Force single-stack IPv4 bind. Default `port=3389` makes xrdp try IPv6
+# *and* IPv4 separately; the IPv6 bind succeeds as dual-stack on Ubuntu
+# 24.04 and the IPv4 bind then fails with EINVAL ("g_tcp_bind ... errno=22"),
+# crashing the daemon. tcp://0.0.0.0:3389 forces a single IPv4 socket.
+sed -i 's|^port=.*|port=tcp://0.0.0.0:3389|' "$XRDP_INI"
+# Disable vsock listener (not used; can also clash on some systems)
+sed -i 's/^use_vsock=.*/use_vsock=false/' "$XRDP_INI"
+
 # Max colour depth 24-bit (good balance of quality and bandwidth)
 sed -i 's/^max_bpp=.*/max_bpp=24/' "$XRDP_INI"
 # Default colour depth
@@ -88,7 +96,17 @@ polkit.addRule(function(action, subject) {
 POLKIT
 
 echo "[6/7] Enabling and starting xrdp..."
+# Stop any prior instance and kill stragglers that might still hold port 3389.
+systemctl stop xrdp xrdp-sesman 2>/dev/null || true
+pkill -x xrdp 2>/dev/null || true
+pkill -x xrdp-sesman 2>/dev/null || true
+sleep 1
+if ss -ltn 'sport = :3389' 2>/dev/null | grep -q ':3389'; then
+  warn "Something else is listening on :3389 — xrdp may still fail to bind."
+  ss -ltnp 'sport = :3389' || true
+fi
 systemctl enable xrdp
+systemctl restart xrdp-sesman 2>/dev/null || systemctl start xrdp-sesman 2>/dev/null || true
 systemctl restart xrdp
 
 # Open firewall port if ufw is active

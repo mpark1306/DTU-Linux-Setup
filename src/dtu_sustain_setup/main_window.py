@@ -136,15 +136,6 @@ MODULES: list[ModuleDef] = [
         icon_name="preferences-desktop-remote-desktop",
     ),
     ModuleDef(
-        id="ansible",
-        title="Ansible Onboarding",
-        description="sus-root account\n+ SSH key + sudo",
-        script_name="ansible.sh",
-        needs_root=True,
-        input_type="password",
-        icon_name="utilities-terminal",
-    ),
-    ModuleDef(
         id="first-login-deploy",
         title="First-Login Setup",
         description="Deploy welcome dialog\nfor new domain users",
@@ -458,24 +449,12 @@ class MainWindow(QMainWindow):
         if admin_result is None:
             return
 
-        # Collect sus-root password (for Ansible onboarding)
-        ansible_dlg = PasswordDialog(
-            self,
-            title="Run All – Ansible Onboarding",
-            message="Enter the password for the sus-root service account:",
-            password_label="sus-root password:",
-        )
-        ansible_password = ansible_dlg.get_password()
-        if ansible_password is None:
-            return
-
         self._queued_modules = [
             m for m in MODULES if m.enabled and m.id not in DEFERRED_MODULES
         ]
         self._shared_env = {
             "DTU_HOSTNAME": admin_result[0],
             "DTU_ADMIN_USERNAME": admin_result[1],
-            "DTU_ANSIBLE_PASSWORD": ansible_password,
             "DTU_DEPARTMENT": self._dept_combo.currentData(),
         }
 

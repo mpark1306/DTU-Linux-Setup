@@ -54,7 +54,7 @@ add-apt-repository --remove ppa:yann1ck/onedrive 2>/dev/null || true
 # ── Step 2: Add OBS repository + install ───────────────────────────────────
 echo "[2/7] Adding OpenSuSE Build Service repository..."
 apt_wait
-apt-get update -qq
+apt-get update -qq || warn "apt-get update reported errors (likely a broken third-party repository); continuing."
 apt-get install -y curl gnupg apt-transport-https >/dev/null
 
 . /etc/os-release
@@ -67,7 +67,7 @@ wget -qO - "${OBS_URL}/Release.key" \
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/obs-onedrive.gpg] ${OBS_URL}/ ./" \
   | tee /etc/apt/sources.list.d/onedrive.list >/dev/null
 
-apt-get update -qq
+apt-get update -qq || warn "apt-get update reported errors (likely a broken third-party repository); continuing."
 apt-get install -y --no-install-recommends --no-install-suggests onedrive
 
 ok "OneDrive client installed: $(onedrive --version 2>&1 | head -n1 || echo 'unknown')"

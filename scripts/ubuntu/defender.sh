@@ -23,14 +23,14 @@ rm -f /usr/local/bin/mdatp || true
 
 echo "[1/6] Installing prerequisites..."
 apt_wait
-apt-get update -y
+apt-get update -y || warn "apt-get update reported errors (likely a broken third-party repository); continuing."
 apt-get install -y curl ca-certificates gnupg apt-transport-https
 
 echo "[2/6] Installing Microsoft keyring..."
 curl -fsSL "https://packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb" \
   -o /tmp/packages-microsoft-prod.deb
 dpkg -i /tmp/packages-microsoft-prod.deb
-apt-get update -y
+apt-get update -y || warn "apt-get update reported errors (likely a broken third-party repository); continuing."
 
 echo "[3/6] Installing mdatp..."
 apt-get install -y mdatp

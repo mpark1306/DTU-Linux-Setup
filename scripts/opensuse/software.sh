@@ -165,8 +165,10 @@ if $CISCO_ENABLED; then
             for script in "${ORDERED_SCRIPTS[@]}"; do
                 MODULE=$(basename "$(dirname "$script")")
                 echo "    --- Installing: ${MODULE} ---"
-                SCRIPT_OUTPUT=$( cd "$(dirname "$script")" && yes | bash "$(basename "$script")" 2>&1 ) || true
+                set +e
+                SCRIPT_OUTPUT=$( cd "$(dirname "$script")" && yes | bash "$(basename "$script")" 2>&1 )
                 EXIT_CODE=$?
+                set -e
                 echo "$SCRIPT_OUTPUT"
                 if echo "$SCRIPT_OUTPUT" | grep -qiE "already installed|installed successfully|is installed"; then
                     echo "    [OK] ${MODULE}"

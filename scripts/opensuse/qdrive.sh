@@ -185,7 +185,7 @@ fi
 echo "Using UID=$UID_NUM GID=$GID_NUM"
 
 echo "[1/6] Installing cifs-utils..."
-zypper --non-interactive install cifs-utils
+zypper --non-interactive install cifs-utils samba-client
 
 echo "[2/6] Creating mountpoint..."
 umount "$MOUNTPOINT" 2>/dev/null || true
@@ -212,8 +212,72 @@ sed -i "/ait-pqumulo.*sus-q/d" "$FSTAB_FILE" 2>/dev/null || true
 FSTAB_LINE="//${SERVER}/${SHARE}  ${MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,vers=3.0,sec=ntlmssp,nosharesock,nodfs,_netdev,x-systemd.automount  0  0"
 echo "$FSTAB_LINE" >> "$FSTAB_FILE"
 
+# ─── M-Drive (personal home share on <fileserver> Users/Users0-9) ───────────────
+# Mounted for Sustain users on request, but NOT used by sync-homedir
+# (sync continues to target the Q-Drive Personal subfolder).
+M_SERVER="${SITE_FILE_SERVER}"
+M_USERS_BASE="${SITE_USERS_BASE:-Users}"
+M_MOUNTPOINT="/mnt/Mdrev"
+
+echo "[4b/6] Searching for M-Drive in ${M_USERS_BASE}/Users0-Users9 on //${M_SERVER}..."
+M_USERS_CACHE_DIR="${HOME_DIR}/.config/dtu-setup"
+M_USERS_CACHE="${M_USERS_CACHE_DIR}/sustain-mdrive-subdir"
+M_USERS_SUBDIR=""
+
+if [[ -f "$M_USERS_CACHE" ]]; then
+  CACHED=$(cat "$M_USERS_CACHE")
+  echo "  Checking cached subdir: $CACHED"
+  if ! smbclient "//${M_SERVER}/${M_USERS_BASE}" -A "$CREDS_FILE" \
+if [[ -n "${M_USERS_SUBDIR:-}" ]]; then
+  echo "    M-Drive: //${M_SERVER}/${M_SHARE_PATH} → ${M_MOUNTPOINT} (no sync)"
+fi
+      -c "ls ${CACHED}/${USERNAME}" 2>&1 | grep -q "NT_STATUS_"; then
+    M_USERS_SUBDIR="$CACHED"
+    echo "  Cache valid: $M_USERS_SUBDIR"
+  else
+    warn "Cached subdir stale, re-searching..."
+  fi
+fi
+
+if [[ -z "$M_USERS_SUBDIR" ]]; then
+  for i in 0 1 2 3 4 5 6 7 8 9; do
+    echo -n "  Trying Users${i}/${USERNAME}... "
+    if ! smbclient "//${M_SERVER}/${M_USERS_BASE}" -A "$CREDS_FILE" \
+        -c "ls Users${i}/${USERNAME}" 2>&1 | grep -q "NT_STATUS_"; then
+      M_USERS_SUBDIR="Users${i}"
+      echo "found!"
+      break
+    fi
+    echo "not found"
+  done
+fi
+
+if [[ -z "$M_USERS_SUBDIR" ]]; then
+  warn "Could not find M-Drive folder for '$USERNAME' in Users0-Users9 on //${M_SERVER}/${M_USERS_BASE}. Skipping M-Drive."
+else
+  mkdir -p "$M_USERS_CACHE_DIR"
+  echo "$M_USERS_SUBDIR" > "$M_USERS_CACHE"
+  chown -R "$UID_NUM":"$GID_NUM" "$M_USERS_CACHE_DIR"
+  ok "M-Drive subdir cached: ${M_USERS_SUBDIR} → ${M_USERS_CACHE}"
+
+  M_SHARE_PATH="${M_USERS_BASE}/${M_USERS_SUBDIR}/${USERNAME}"
+
+  umount "$M_MOUNTPOINT" 2>/dev/null || true
+  mkdir -p "$M_MOUNTPOINT"
+  chown "$UID_NUM":"$GID_NUM" "$M_MOUNTPOINT"
+  chmod 0770 "$M_MOUNTPOINT"
+
+  sed -i "\|[[:space:]]${M_MOUNTPOINT}[[:space:]].*cifs|d" "$FSTAB_FILE" 2>/dev/null || true
+  sed -i "\|//${M_SERVER}/${M_USERS_BASE}/|d" "$FSTAB_FILE" 2>/dev/null || true
+  M_FSTAB_LINE="//${M_SERVER}/${M_SHARE_PATH}  ${M_MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,vers=3.0,sec=ntlmssp,nosharesock,_netdev,x-systemd.automount  0  0"
+  echo "$M_FSTAB_LINE" >> "$FSTAB_FILE"
+fi
+
 echo "[5/5] Reloading systemd..."
 systemctl daemon-reload
+if [[ -n "${M_USERS_SUBDIR:-}" ]]; then
+  systemctl restart mnt-Mdrev.automount 2>/dev/null || systemctl start mnt-Mdrev.automount || true
+fi
 
 echo "[6/6] Saving department config..."
 DTU_SETUP_DIR="/etc/dtu-setup"
