@@ -31,7 +31,8 @@ TODO.local
 site.conf
 *.env
 # Site profiles with real DTU values are distributed out-of-band — never commit
-examples/
+# examples/ is tracked intentionally (see examples/*.env, examples/*.example)
+
 
 # Cisco redistributables (proprietary — never commit)
 cisco-secure-client*

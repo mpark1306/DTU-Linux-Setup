@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # DTU Linux Setup – launcher script
 # Installed to /opt/dtu-sustain-setup/bin/dtu-sustain-setup
+# Symlinked from /usr/bin/dtu-sustain-setup — must resolve through the
+# symlink to find the install dir, otherwise PYTHONPATH ends up as "/usr".
 
-INSTALL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SELF="$(readlink -f "$0")"
+INSTALL_DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
 export PYTHONPATH="${INSTALL_DIR}:${PYTHONPATH:-}"
 exec python3 -m dtu_sustain_setup "$@"

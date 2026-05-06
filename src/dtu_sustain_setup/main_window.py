@@ -10,6 +10,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QComboBox,
+    QFileDialog,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -23,6 +24,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .distro import Distro, detect_distro, distro_display_name, get_scripts_dir
+from .env_loader import KNOWN_VARS, SECRET_VARS, EnvLoadResult, parse_env_file
 from .error_dialog import ErrorDialog
 from .input_dialog import CredentialDialog, DomainJoinDialog, PasswordDialog, SoftwareDialog, UsernameDialog
 from .module_runner import ModuleRunner
@@ -179,6 +181,9 @@ class MainWindow(QMainWindow):
         self._runner.finished.connect(self._on_module_finished)
         self._runner.failed.connect(self._on_module_failed)
         self._module_buttons: dict[str, QPushButton] = {}
+        # Pre-loaded answers from an env file (see _load_env_file).
+        self._env_overrides: dict[str, str] = {}
+        self._env_source: Path | None = None
 
         self.setWindowTitle("DTU Linux Setup")
         self.setMinimumSize(800, 700)
@@ -279,6 +284,19 @@ class MainWindow(QMainWindow):
         self._run_all_btn = run_all_btn
         action_bar.addWidget(run_all_btn)
 
+        load_env_btn = QPushButton("☰  Load env file…")
+        load_env_btn.setToolTip(
+            "Pre-fill prompts from a KEY=VALUE file (DTU_HOSTNAME, DTU_USERNAME, …).\n"
+            "Modules with all required variables already set will not show input dialogs."
+        )
+        load_env_btn.setStyleSheet(
+            "QPushButton { padding: 10px 16px; border-radius: 6px; font-size: 13px; "
+            "background: #f0f0f0; color: #222; border: 1px solid #bbb; }"
+            "QPushButton:hover { background: #e0e0e0; }"
+        )
+        load_env_btn.clicked.connect(self._load_env_file)
+        action_bar.addWidget(load_env_btn)
+
         action_bar.addStretch()
 
         cancel_btn = QPushButton("Cancel")
@@ -369,35 +387,57 @@ class MainWindow(QMainWindow):
         env_vars: dict[str, str] = {}
 
         if mod.input_type == "credentials":
-            dlg = CredentialDialog(
-                self,
-                title=f"{mod.title} – Credentials",
-                message=f"Enter your WIN domain credentials for {mod.title}:",
-            )
-            result = dlg.get_credentials()
-            if result is None:
-                return
-            env_vars["DTU_USERNAME"] = result[0]
-            env_vars["DTU_PASSWORD"] = result[1]
+            user = self._env_overrides.get("DTU_USERNAME", "")
+            pw = self._env_overrides.get("DTU_PASSWORD", "")
+            if user and pw:
+                env_vars["DTU_USERNAME"] = user
+                env_vars["DTU_PASSWORD"] = pw
+            else:
+                dlg = CredentialDialog(
+                    self,
+                    title=f"{mod.title} – Credentials",
+                    message=f"Enter your WIN domain credentials for {mod.title}:",
+                )
+                if user:
+                    dlg.username_edit.setText(user)
+                result = dlg.get_credentials()
+                if result is None:
+                    return
+                env_vars["DTU_USERNAME"] = result[0]
+                env_vars["DTU_PASSWORD"] = result[1]
 
         elif mod.input_type == "domain_join":
-            dlg = DomainJoinDialog(self)
-            result = dlg.get_domain_join_info()
-            if result is None:
-                return
-            env_vars["DTU_HOSTNAME"] = result[0]
-            env_vars["DTU_ADMIN_USERNAME"] = result[1]
+            host = self._env_overrides.get("DTU_HOSTNAME", "")
+            admin = self._env_overrides.get("DTU_ADMIN_USERNAME", "")
+            if host and admin:
+                env_vars["DTU_HOSTNAME"] = host
+                env_vars["DTU_ADMIN_USERNAME"] = admin
+            else:
+                dlg = DomainJoinDialog(self)
+                if host:
+                    dlg.hostname_edit.setText(host)
+                if admin:
+                    dlg.username_edit.setText(admin)
+                result = dlg.get_domain_join_info()
+                if result is None:
+                    return
+                env_vars["DTU_HOSTNAME"] = result[0]
+                env_vars["DTU_ADMIN_USERNAME"] = result[1]
 
         elif mod.input_type == "username":
-            dlg = UsernameDialog(
-                self,
-                title=f"{mod.title} – Username",
-                message=f"Enter the target username for {mod.title}:",
-            )
-            username = dlg.get_username()
-            if username is None:
-                return
-            env_vars["DTU_USERNAME"] = username
+            user = self._env_overrides.get("DTU_USERNAME", "")
+            if user:
+                env_vars["DTU_USERNAME"] = user
+            else:
+                dlg = UsernameDialog(
+                    self,
+                    title=f"{mod.title} – Username",
+                    message=f"Enter the target username for {mod.title}:",
+                )
+                username = dlg.get_username()
+                if username is None:
+                    return
+                env_vars["DTU_USERNAME"] = username
 
         elif mod.input_type == "password":
             dlg = PasswordDialog(
@@ -413,11 +453,16 @@ class MainWindow(QMainWindow):
 
         elif mod.input_type == "software":
             dlg = SoftwareDialog(self)
+            cisco_pre = self._env_overrides.get("DTU_CISCO_TARBALL", "")
+            if cisco_pre:
+                dlg._cisco_path_edit.setText(cisco_pre)
             result = dlg.get_software_config()
             if result is None:
                 return
             conf_path, cisco_tarball = result
-            env_vars["DTU_SOFTWARE_CONF"] = str(conf_path)
+            env_vars["DTU_SOFTWARE_CONF"] = self._env_overrides.get(
+                "DTU_SOFTWARE_CONF", str(conf_path)
+            )
             if cisco_tarball:
                 env_vars["DTU_CISCO_TARBALL"] = cisco_tarball
 
@@ -444,10 +489,19 @@ class MainWindow(QMainWindow):
         DEFERRED_MODULES = {"qdrive", "followme", "onedrive", "wifi"}
 
         # Collect admin info for Domain Join
-        admin_dlg = DomainJoinDialog(self)
-        admin_result = admin_dlg.get_domain_join_info()
-        if admin_result is None:
-            return
+        host = self._env_overrides.get("DTU_HOSTNAME", "")
+        admin_user = self._env_overrides.get("DTU_ADMIN_USERNAME", "")
+        if host and admin_user:
+            admin_result = (host, admin_user)
+        else:
+            admin_dlg = DomainJoinDialog(self)
+            if host:
+                admin_dlg.hostname_edit.setText(host)
+            if admin_user:
+                admin_dlg.username_edit.setText(admin_user)
+            admin_result = admin_dlg.get_domain_join_info()
+            if admin_result is None:
+                return
 
         self._queued_modules = [
             m for m in MODULES if m.enabled and m.id not in DEFERRED_MODULES
@@ -548,6 +602,73 @@ class MainWindow(QMainWindow):
                 btn.setEnabled(False)
             else:
                 btn.setEnabled(not running)
+
+    def _load_env_file(self) -> None:
+        """Open a file picker, parse a KEY=VALUE env file and pre-fill prompts."""
+        if self._runner.is_running():
+            QMessageBox.warning(
+                self, "Busy", "A module is running. Wait for it to finish first."
+            )
+            return
+
+        # Build a guided 'what is this' message before the file picker.
+        known_list = "\n".join(
+            f"  • {k}" + ("  (sensitive)" if k in SECRET_VARS else "")
+            for k in KNOWN_VARS
+        )
+        proceed = QMessageBox.question(
+            self,
+            "Load env file",
+            "Pick a plain-text env file with KEY=VALUE lines (shell-style).\n"
+            "Lines starting with # are ignored. The 'export ' prefix is allowed.\n\n"
+            "Recognised variables:\n"
+            f"{known_list}\n\n"
+            "Modules with all required variables already set will run without prompts.\n"
+            "Continue?",
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+        )
+        if proceed != QMessageBox.StandardButton.Ok:
+            return
+
+        path_str, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select env file",
+            "",
+            "Env files (*.env *.conf *.cfg);;All files (*)",
+        )
+        if not path_str:
+            return
+
+        result: EnvLoadResult = parse_env_file(Path(path_str))
+        if result.errors and not result.values:
+            QMessageBox.critical(self, "Env file – parse failed", result.summary())
+            return
+
+        # Sync the department dropdown if the file specifies one.
+        dept = result.values.get("DTU_DEPARTMENT", "").lower()
+        if dept in {"sustain", "ait"}:
+            idx = self._dept_combo.findData(dept)
+            if idx >= 0:
+                self._dept_combo.setCurrentIndex(idx)
+
+        # Strip DTU_DEPARTMENT from overrides because it comes from the dropdown.
+        result.values.pop("DTU_DEPARTMENT", None)
+        self._env_overrides = result.values
+        self._env_source = result.path
+
+        QMessageBox.information(
+            self,
+            "Env file loaded",
+            result.summary()
+            + "\n\nThese values will be used to skip input dialogs.\n"
+            "Click 'Load env file…' again to load a different file.",
+        )
+        self.statusBar().showMessage(
+            f"Env loaded: {result.path.name} ({len(result.values)} vars)"
+        )
+        self._append_log(
+            f"\n[env] Loaded {len(result.values)} variable(s) from {result.path}\n"
+        )
 
     def _append_log(self, text: str) -> None:
         """Append text to the log widget."""
