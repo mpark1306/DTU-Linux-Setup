@@ -41,15 +41,12 @@ SITE_WEBPRINT_URL="https://webprint.dtu.dk"      # WebPrint webapp (AIT)
 
 # ─── WiFi (DTUSecure / WPA2-Enterprise) ──────────────────────────────────────
 SITE_WIFI_SSID="DTUSecure"
-SITE_WIFI_ANON_IDENTITY="anonymous@win.dtu.dk"
+
 SITE_WIFI_IDENTITY_SUFFIX="@win.dtu.dk"          # appended to DTU_USERNAME
 
 # ─── Microsoft Defender for Endpoint ─────────────────────────────────────────
 SITE_DEFENDER_ONBOARDING_URL="konfigureret via site.conf/download/MicrosoftDefenderATPOnboardingLinuxServer.py"
 
-# ─── Ansible service account ─────────────────────────────────────────────────
-SITE_ANSIBLE_USER="sus-root"
-
 # ─── First-login welcome (optional) ──────────────────────────────────────────
-SITE_HELPDESK_URL="https://helpdesk.dtu.dk"
+SITE_HELPDESK_URL="https://serviceportal.dtu.dk"
 SITE_HELPDESK_EMAIL="ait@dtu.dk"

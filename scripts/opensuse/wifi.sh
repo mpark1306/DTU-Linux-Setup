@@ -40,7 +40,6 @@ nmcli connection add \
   802-1x.phase2-auth mschapv2 \
   802-1x.identity "$IDENTITY" \
   802-1x.password "$PASSWORD" \
-  802-1x.anonymous-identity "${SITE_WIFI_ANON_IDENTITY}" \
   connection.autoconnect yes \
   connection.autoconnect-priority 10
 

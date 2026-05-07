@@ -49,25 +49,21 @@ load_site_conf() {
 
   # WiFi
   : "${SITE_WIFI_SSID:=DTUSecure}"
-  : "${SITE_WIFI_ANON_IDENTITY:=anonymous@win.dtu.dk}"
   : "${SITE_WIFI_IDENTITY_SUFFIX:=@win.dtu.dk}"
 
   # Defender
   : "${SITE_DEFENDER_ONBOARDING_URL:=konfigureret via site.conf/download/MicrosoftDefenderATPOnboardingLinuxServer.py}"
 
-  # Ansible
-  : "${SITE_ANSIBLE_USER:=sus-root}"
-
   # Helpdesk
-  : "${SITE_HELPDESK_URL:=https://helpdesk.dtu.dk}"
+  : "${SITE_HELPDESK_URL:=https://serviceportal.dtu.dk}"
   : "${SITE_HELPDESK_EMAIL:=ait@dtu.dk}"
 
   export SITE_AD_DOMAIN SITE_AD_REALM SITE_AD_ADMIN_GROUP
   export SITE_FILE_SERVER SITE_FILE_SERVER_QUMULO SITE_USERS_BASE
   export SITE_SUSTAIN_Q_SHARE SITE_SUSTAIN_P_SUBPATH SITE_AIT_O_SHARE
   export SITE_PRINT_SERVER SITE_WEBPRINT_URL
-  export SITE_WIFI_SSID SITE_WIFI_ANON_IDENTITY SITE_WIFI_IDENTITY_SUFFIX
-  export SITE_DEFENDER_ONBOARDING_URL SITE_ANSIBLE_USER
+  export SITE_WIFI_SSID SITE_WIFI_IDENTITY_SUFFIX
+  export SITE_DEFENDER_ONBOARDING_URL
   export SITE_HELPDESK_URL SITE_HELPDESK_EMAIL
 }
 

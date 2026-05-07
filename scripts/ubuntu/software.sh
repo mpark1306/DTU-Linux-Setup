@@ -99,11 +99,15 @@ if (( ${#SNAP_APPS[@]} > 0 )); then
     fi
     if command -v snap &>/dev/null; then
         for app in "${SNAP_APPS[@]}"; do
-            echo "  → ${app}..."
-            if snap list "$app" &>/dev/null 2>&1; then
+            snap_name="${app%% *}"           # first word = package name
+            snap_args="${app#"$snap_name"}"  # remainder = optional flags
+            snap_args="${snap_args# }"        # strip leading space
+            echo "  → ${snap_name}..."
+            if snap list "$snap_name" &>/dev/null 2>&1; then
                 echo "    Already installed, skipping."
             else
-                snap install "$app" || warn "Failed to install ${app} snap"
+                # shellcheck disable=SC2086
+                snap install "$snap_name" $snap_args || warn "Failed to install ${snap_name} snap"
             fi
         done
     else

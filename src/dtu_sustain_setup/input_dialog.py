@@ -172,49 +172,6 @@ class DomainJoinDialog(QDialog):
         return None
 
 
-class PasswordDialog(QDialog):
-    """Dialog that collects only a password."""
-
-    def __init__(
-        self,
-        parent=None,
-        *,
-        title: str = "Password",
-        message: str = "Enter the password:",
-        password_label: str = "Password:",
-    ):
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        self.setMinimumWidth(400)
-
-        layout = QVBoxLayout(self)
-
-        msg_label = QLabel(message)
-        msg_label.setWordWrap(True)
-        layout.addWidget(msg_label)
-
-        form = QFormLayout()
-        self.password_edit = QLineEdit()
-        self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password_edit.setPlaceholderText("Password")
-        form.addRow(password_label, self.password_edit)
-        layout.addLayout(form)
-
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-    def get_password(self) -> str | None:
-        """Show dialog and return password or None if cancelled."""
-        if self.exec() == QDialog.DialogCode.Accepted:
-            password = self.password_edit.text()
-            return password if password else None
-        return None
-
-
 # ─── Software Configuration ─────────────────────────────────────────────────
 
 def _find_software_conf() -> Path:

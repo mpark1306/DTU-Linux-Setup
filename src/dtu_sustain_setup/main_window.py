@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 from .distro import Distro, detect_distro, distro_display_name, get_scripts_dir
 from .env_loader import KNOWN_VARS, SECRET_VARS, EnvLoadResult, parse_env_file
 from .error_dialog import ErrorDialog
-from .input_dialog import CredentialDialog, DomainJoinDialog, PasswordDialog, SoftwareDialog, UsernameDialog
+from .input_dialog import CredentialDialog, DomainJoinDialog, SoftwareDialog, UsernameDialog
 from .module_runner import ModuleRunner
 
 
@@ -439,18 +439,6 @@ class MainWindow(QMainWindow):
                     return
                 env_vars["DTU_USERNAME"] = username
 
-        elif mod.input_type == "password":
-            dlg = PasswordDialog(
-                self,
-                title=f"{mod.title} – Password",
-                message=f"Enter the password for the sus-root service account:",
-                password_label="sus-root password:",
-            )
-            password = dlg.get_password()
-            if password is None:
-                return
-            env_vars["DTU_ANSIBLE_PASSWORD"] = password
-
         elif mod.input_type == "software":
             dlg = SoftwareDialog(self)
             cisco_pre = self._env_overrides.get("DTU_CISCO_TARBALL", "")
@@ -644,6 +632,9 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Env file – parse failed", result.summary())
             return
 
+        # Build summary before modifying result.values so DTU_DEPARTMENT is visible.
+        summary = result.summary()
+
         # Sync the department dropdown if the file specifies one.
         dept = result.values.get("DTU_DEPARTMENT", "").lower()
         if dept in {"sustain", "ait"}:
@@ -659,8 +650,10 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "Env file loaded",
-            result.summary()
-            + "\n\nThese values will be used to skip input dialogs.\n"
+            summary
+            + "\n\nNote: SITE_* variables (site configuration) are read directly "
+            "by scripts from /etc/dtu-setup/site.conf and are not shown here.\n\n"
+            "These values will be used to skip input dialogs.\n"
             "Click 'Load env file…' again to load a different file.",
         )
         self.statusBar().showMessage(

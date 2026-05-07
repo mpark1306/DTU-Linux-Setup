@@ -21,7 +21,6 @@ DTU Linux Setup samler alle de manuelle trin en IT-administrator (eller selvbetj
 - Konfigurere **PolicyKit** så domænebrugere må håndtere USB, WiFi og pakker uden adgangskode
 - Installere **Flatpak**, **Snap** og **Cisco Secure Client VPN** efter en redigerbar pakkeliste
 - Sætte **xrdp** (Remote Desktop) op
-- Onboarde maskinen til Ansible-flåden via en `sus-root` service-konto
 - Sikre at brugerens **Skrivebord, Dokumenter og Billeder** synkroniseres til netværksdrevet — ingen symlinks, kun rsync ved login og hver time
 - Vise en **first-login welcome-dialog** for nye domænebrugere
 - Diagnosticere fejl med en indbygget **error dialog** (heuristisk klassificering + "Copy Error and Fix"-knap)
@@ -63,7 +62,7 @@ Ved første start (eller via dropdown'en i toppen af GUI'en) vælges den institu
 
 ## Moduler
 
-13 moduler i alt. Alle kræver root og kører via `pkexec`.
+12 moduler i alt. Alle kræver root og kører via `pkexec`.
 
 | # | Modul | Hvad det gør | Ubuntu | openSUSE |
 |---|---|---|:-:|:-:|
@@ -77,9 +76,8 @@ Ved første start (eller via dropdown'en i toppen af GUI'en) vælges den institu
 | 8 | **Auto-mount** | USB automount + udev-regler (ingen symlinks) | ✅ | ✅ |
 | 9 | **Sync Home Dirs** | Backup af Desktop/Documents/Pictures til netværksdrev (rsync, login + timer) | ✅ | ✅ |
 | 10 | **RDP (xrdp)** | Remote Desktop med KDE Plasma over xrdp | ✅ | — |
-| 11 | **Ansible Onboarding** | `sus-root` service-konto + SSH-nøgle + sudo | ✅ | ✅ |
-| 12 | **First-Login Setup** | Deploy welcome-dialog der vises ved nye domænebrugeres første login | ✅ | ✅ |
-| 13 | **Reset Test User** | (skjult) Fjern domain-user state + home-dir til gen-test | ✅ | ✅ |
+| 11 | **First-Login Setup** | Deploy welcome-dialog der vises ved nye domænebrugeres første login | ✅ | ✅ |
+| 12 | **Reset Test User** | (skjult) Fjern domain-user state + home-dir til gen-test | ✅ | ✅ |
 
 \* openSUSE Tumbleweed bruger SLES 15-pakker — ikke officielt understøttet af Microsoft.
 
@@ -149,7 +147,7 @@ sudo $EDITOR /etc/dtu-setup/site.conf
 
 ### DTU-interne profiler
 
-Færdige profiler til **DTU Sustain** og **DTU AIT** med de korrekte interne værdier (`dtu-sustain.env` / `dtu-ait.env`) distribueres ikke offentligt. DTU-medarbejdere kan **anmode om dem hos [@mpark1306](https://github.com/mpark1306)** (Mathias Park, AIT). Når du har modtaget den rette `.env`-fil:
+Færdige profiler til **DTU Sustain** og **DTU AIT** med de korrekte interne værdier (`dtu-sustain.env` / `dtu-ait.env`) distribueres ikke offentligt. DTU-medarbejdere kan **anmode om dem hos [@mpark1306](https://github.com/mpark1306)** (Mark Parking, DTU Sustain). Når du har modtaget den rette `.env`-fil:
 
 ```bash
 sudo install -d /etc/dtu-setup
@@ -191,8 +189,8 @@ make run                # Fra kildekode
 │  │ Flatpak/Snap │  │ USB udev     │  │ Dirs         │            │
 │  └──────────────┘  └──────────────┘  └──────────────┘            │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐            │
-│  │ RDP (xrdp)   │  │ Ansible      │  │ First-Login  │            │
-│  │              │  │ Onboarding   │  │ Setup        │            │
+│  │ RDP (xrdp)   │  │ First-Login  │            │
+│  │              │  │ Setup        │            │
 │  └──────────────┘  └──────────────┘  └──────────────┘            │
 │                                                                  │
 │  [ ▶  Run All Admin Modules ]                       [ Cancel ]   │
@@ -218,7 +216,7 @@ make run                # Fra kildekode
 ### Kør alle moduler
 
 1. Klik **▶ Run All Admin Modules**
-2. Indtast credentials i de dialoger der vises (DTU-bruger, hostname, Ansible-kode m.m.)
+2. Indtast credentials i de dialoger der vises (DTU-bruger, hostname m.m.)
 3. Brug **Cancel** for at stoppe køen
 
 ### Fejldialog
@@ -305,7 +303,7 @@ Opretter udev-regler for automatisk USB-mount samt understøttende polkit-regler
 
 ### 🔄 Sync Home Dirs
 
-Erstatter den gamle OneDrive-symlink-løsning. Bruger rsync (offline-first) til at sikre at brugerens nøglemapper er synkroniseret til netværksdrevet.
+Bruger rsync (offline-first) til at sikre at brugerens nøglemapper er synkroniseret til netværksdrevet.
 
 **Komponenter:**
 - `setup-sync-homedir.sh` — installerer service og PAM-hook
@@ -318,12 +316,6 @@ Synkroniserede mapper: `~/Desktop`, `~/Documents`, `~/Pictures`.
 ### 🖥️ RDP (xrdp) — kun Ubuntu
 
 xrdp på port 3389/tcp med KDE Plasma X11-session, TLS-only, clipboard- og drive-redirection.
-
-### ⚙️ Ansible Onboarding
-
-Opretter `sus-root` service-konto (skjult fra loginskærm), deployer ed25519 SSH-nøgle og giver passwordless sudo.
-
-**Input:** sus-root adgangskode (Bitwarden).
 
 ### 👤 First-Login Setup
 
@@ -425,7 +417,6 @@ Installationen kører alle moduler i tarball'en i fast rækkefølge: `vpn → da
 | `DTU_DEPARTMENT` | Alle (sustain\|ait) |
 | `DTU_USERNAME`, `DTU_PASSWORD` | Network Drives, FollowMe, WiFi |
 | `DTU_HOSTNAME`, `DTU_ADMIN_USERNAME` | Domain Join |
-| `DTU_ANSIBLE_PASSWORD` | Ansible Onboarding |
 | `DTU_SOFTWARE_CONF`, `DTU_CISCO_TARBALL` | Software |
 | `DTU_TARGET_USER` | Reset Test User |
 
@@ -463,7 +454,6 @@ DTU-Umbrella/
 │   │   ├── automount.sh
 │   │   ├── software.sh
 │   │   ├── rdp.sh
-│   │   ├── ansible.sh
 │   │   └── first-login-deploy.sh
 │   └── opensuse/                 # openSUSE modul-scripts
 │       ├── domain-join.sh

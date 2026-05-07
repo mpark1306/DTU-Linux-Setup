@@ -4,6 +4,149 @@
 
 ---
 
+## Første gang: Komplet installationsvejledning
+
+Følg disse trin præcis i denne rækkefølge første gang du sætter en ny maskine op.
+
+---
+
+### Trin 1 – Skaf `.env`-konfigurationsfilen
+
+Programmet kræver en intern DTU-konfigurationsfil med serveradresser, domænenavne m.m.  
+Kontakt **[@mpark1306](https://github.com/mpark1306)** (Mark Parking, DTU Sustain) og bed om:
+
+- `dtu-sustain.env` — hvis maskinen tilhører **Sustain**
+- `dtu-ait.env` — hvis maskinen tilhører **AIT**
+
+---
+
+### Trin 2 – Klon repo'etuvz3
+
+```bash
+git clone https://github.com/mpark1306/DTU-Linux-Setup
+cd DTU-Linux-Setup
+```
+
+---
+
+### Trin 3 – Installer afhængigheder og programmet
+
+**Ubuntu 24.04:**
+```bash
+sudo apt update
+sudo apt install kde-standard python3 python3-pyqt6 policykit-1
+make deb
+sudo dpkg -i dtu-sustain-setup_1.0.0_all.deb
+```
+
+**openSUSE Tumbleweed:**
+```bash
+sudo zypper install python3-qt6 polkit
+make rpm
+sudo zypper install ~/rpmbuild/RPMS/noarch/dtu-sustain-setup-1.0.0-1.noarch.rpm
+```
+
+---
+
+### Trin 4 – Placér konfigurationsfilen
+
+Åbn en terminal i den mappe hvor du har gemt `.env`-filen, f.eks.:
+
+```bash
+cd ~/Downloads
+```
+
+Kør derefter (erstat `dtu-sustain.env` med `dtu-ait.env` og `sustain` med `ait` for AIT-maskiner):
+
+```bash
+sudo install -d /etc/dtu-setup
+sudo install -m 0644 dtu-sustain.env /etc/dtu-setup/site.conf
+echo "sustain" | sudo tee /etc/dtu-setup/department
+```
+
+Filerne lander på:
+
+| Fil | Indhold |
+|-----|---------|
+| `/etc/dtu-setup/site.conf` | Serveradresser, domæne, printer m.m. |
+| `/etc/dtu-setup/department` | Enten `sustain` eller `ait` |
+
+---
+
+### Trin 5 – Sørg for at have disse oplysninger klar
+
+| Hvad                       | Eksempel       | Bruges til                         |
+|----------------------------|----------------|------------------------------------|
+| DTU-brugernavn             | `mpark`        | Netværksdrev, printer, WiFi |
+| DTU-adgangskode            | `*****`        | Netværksdrev, printer, WiFi |
+| Admin-brugernavn           | `adm-<username>`    | Domain Join                 |
+| Ønsket hostname            | `DTU-SUS-PC01` | Domain Join                 |
+| Cisco tarball *(valgfrit)* | `cisco-secure-client-linux64-*.tar.gz` | VPN |
+
+---
+
+### Trin 6 – Start programmet
+
+```bash
+dtu-sustain-setup
+```
+
+Eller find **DTU Linux Setup** i applikationsmenuen.
+
+---
+
+### Trin 7 – Kør alle moduler
+
+1. Vælg korrekt **Department** i dropdown'en øverst (Sustain eller AIT)
+2. Klik **▶ Run All Admin Modules**
+3. Udfyld de tre dialoger der vises:
+
+   **Dialog 1 – DTU-bruger (til drev, printer og WiFi):**
+   ```
+   Username: mpark
+   Password: ********
+   ```
+
+   **Dialog 2 – Domain Join:**
+   ```
+   Hostname:       DTU-SUS-PC01
+   Admin Username: adm-<username>
+   ```
+
+4. Godkend PolicyKit-dialogen (din lokale admin-adgangskode)
+5. Følg fremgangen i **Output Log** — hvert modul logger sine trin
+6. Knapper bliver **grønne** ved succes, **røde** ved fejl
+
+---
+
+### Trin 8 – Genstart
+
+```bash
+sudo reboot
+```
+
+Genstart er nødvendig for at domæne-login, Flatpak-apps og systemd-automounts virker korrekt.
+
+---
+
+### Hvad kører "Run All" i hvilken rækkefølge?
+
+```
+ 1. Domain Join        ← Joiner WIN.DTU.DK
+ 2. Network Drives     ← Mounter Q+P (Sustain) / O+M (AIT)
+ 3. Microsoft Defender ← Installer + onboarding
+ 4. PolicyKit          ← Domænebruger-rettigheder
+ 5. Printers           ← FollowMe (Sustain) / WebPrint (AIT)
+ 6. DTUSecure WiFi     ← WPA2-Enterprise auto-connect
+ 7. Software           ← Flatpak, Snap, Cisco VPN
+ 8. Auto-mount         ← USB udev-regler
+ 9. Sync Home Dirs    ← rsync Desktop/Documents/Pictures
+10. RDP (xrdp)        ← Remote Desktop (kun Ubuntu)
+11. First-Login Setup ← Welcome-dialog til nye brugere
+```
+
+---
+
 ## Oversigt
 
 DTU Linux Setup er et grafisk værktøj der automatiserer opsætning af Linux-arbejdsstationer på DTU (Sustain & AIT). Programmet samler alle nødvendige konfigurationsskridt i ét interface — fra domæne-join til printeropsætning.
@@ -13,19 +156,19 @@ DTU Linux Setup er et grafisk værktøj der automatiserer opsætning af Linux-ar
 │                                                       │
 │   DTU Linux Setup                                     │
 │                                                       │
-│   ┌─────────┐  ┌─────────┐  ┌─────────┐              │
-│   │ Domain  │  │ Q-Drive │  │ Brother │              │
-│   │ Join    │  │         │  │ P950NW  │              │
-│   └─────────┘  └─────────┘  └─────────┘              │
+│   ┌─────────┐  ┌─────────┐                            │
+│   │ Domain  │  │ Q-Drive │                            │
+│   │ Join    │  │         │                            │
+│   └─────────┘  └─────────┘                            │
 │   ┌─────────┐  ┌─────────┐  ┌─────────┐              │
 │   │Defender │  │PolicyKit│  │FollowMe │              │
 │   └─────────┘  └─────────┘  └─────────┘              │
-│   ┌─────────┐  ┌─────────┐  ┌─────────┐              │
-│   │OneDrive │  │Software │  │Automount│              │
-│   └─────────┘  └─────────┘  └─────────┘              │
 │   ┌─────────┐  ┌─────────┐                            │
-│   │  RDP    │  │ Ansible │                            │
+│   │Software │  │Automount│                            │
 │   └─────────┘  └─────────┘                            │
+│   ┌─────────┐                                        │
+│   │  RDP    │                                        │
+│   └─────────┘                                        │
 │                                                       │
 │   [ ▶ Run All Admin Modules ]           [ Cancel ]    │
 │                                                       │
@@ -62,11 +205,10 @@ Inden du starter, sørg for at have:
 
 | Hvad | Eksempel | Bruges til |
 |------|----------|-----------|
-| DTU-brugernavn | `mpark` | Q-Drive, FollowMe, OneDrive |
+| DTU-brugernavn | `mpark` | Q-Drive, FollowMe, WiFi |
 | DTU-adgangskode | `*****` | Q-Drive, FollowMe |
 | Admin-brugernavn | `adm-<username>` | Domain Join |
 | Ønsket hostname | `DTU-SUS-PC01` | Domain Join |
-| sus-root adgangskode | `*****` | Ansible Onboarding |
 | Cisco tarball (valgfrit) | `cisco-secure-client-linux64-*.tar.gz` | VPN |
 
 ### Trin 3: Start programmet
@@ -100,17 +242,6 @@ Dialog 2: Domain Join
 │                              │
 │  Hostname:      [ DTU-SUS-01 ]│
 │  Admin Username:[ adm-<username>  ]│
-│                              │
-│        [ OK ]  [ Cancel ]    │
-└──────────────────────────────┘
-
-Dialog 3: Ansible
-┌──────────────────────────────┐
-│  Run All – Ansible           │
-│  Onboarding                  │
-│                              │
-│  sus-root password:          │
-│  [ ************ ]            │
 │                              │
 │        [ OK ]  [ Cancel ]    │
 └──────────────────────────────┘
@@ -280,56 +411,6 @@ printer FollowMe-Plot-PS is idle.
 
 ---
 
-### OneDrive
-
-**Formål:** Opsæt OneDrive for Business med mappesynkronisering.
-
-```
-1. Klik [ OneDrive ]
-2. Indtast målbrugerens brugernavn
-3. Vent på installation
-4. Ved FØRSTE login: Et terminalvindue åbner med login-URL
-5. Kopier URL'en til en browser og log ind med DTU-konto
-```
-
-**Mappestruktur efter opsætning:**
-```
-~/
-├── OneDrive/
-│   ├── Dokumenter/
-│   ├── Skrivebord/
-│   └── Billeder/
-├── Documents → OneDrive/Dokumenter    (symlink)
-├── Desktop   → OneDrive/Skrivebord    (symlink)
-└── Pictures  → OneDrive/Billeder      (symlink)
-```
-
----
-
-### Ansible Onboarding
-
-**Formål:** Opret sus-root service-konto til central administration.
-
-```
-1. Klik [ Ansible Onboarding ]
-2. Indtast sus-root adgangskode
-3. Vent på "Ansible Onboarding complete"
-```
-
-**Verifikation:**
-```bash
-# Tjek at kontoen eksisterer
-id sus-root
-
-# Tjek SSH-nøgle
-ls -la /home/sus-root/.ssh/authorized_keys
-
-# Tjek sudo
-sudo -l -U sus-root
-```
-
----
-
 ## Anbefalet rækkefølge for moduler
 
 Hvis du kører modulerne enkeltvis, anbefales denne rækkefølge:
@@ -339,14 +420,11 @@ Hvis du kører modulerne enkeltvis, anbefales denne rækkefølge:
                          ↓ GENSTART
  2. PolicyKit          ← Giver domænebrugere rettigheder
  3. Q-Drive            ← Kræver domæne-credentials
- 4. Auto-mount / Pdrev ← Kræver Q-Drive
+ 4. Auto-mount         ← Kræver Q-Drive
  5. FollowMe Printers  ← Kræver domæne-credentials
- 6. Brother P950NW     ← Uafhængig
- 7. Microsoft Defender ← Uafhængig
- 8. OneDrive           ← Kræver domæne-brugernavn
- 9. Software           ← Uafhængig
-10. RDP (xrdp)         ← Uafhængig (kun Ubuntu)
-11. Ansible Onboarding ← Bør køres sidst
+ 6. Microsoft Defender ← Uafhængig
+ 7. Software           ← Uafhængig
+ 8. RDP (xrdp)         ← Uafhængig (kun Ubuntu)
 ```
 
 ---
@@ -401,7 +479,7 @@ Følgende netværksadgang er nødvendig under opsætning:
 | Flathub | `dl.flathub.org` | 443 |
 | Snap Store | `api.snapcraft.io` | 443 |
 | Microsoft repos | `packages.microsoft.com` | 443 |
-| OneDrive | `login.microsoftonline.com` | 443 |
+
 
 ---
 
@@ -439,12 +517,6 @@ Følgende netværksadgang er nødvendig under opsætning:
 | NVM fejler | Forventet på nye kerner — Cisco-begrænsning, kan ignoreres |
 | VPN virker ikke | Tjek `libxml2.so.2` er installeret |
 
-### OneDrive
-
-| Problem | Løsning |
-|---------|---------|
-| Sync starter ikke | Kør `systemctl --user status onedrive` som brugeren |
-| Login fejler | Åbn URL manuelt i browser, log ind med DTU-konto |
 
 ---
 

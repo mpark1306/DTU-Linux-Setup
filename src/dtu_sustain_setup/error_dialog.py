@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import platform
 import re
+import shlex
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QGuiApplication
@@ -23,6 +25,35 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QVBoxLayout,
 )
+
+
+# ─── Helpdesk contact info (read from /etc/dtu-setup/site.conf) ────────────
+
+def _read_helpdesk_info() -> tuple[str, str]:
+    """Return (url, email) from site.conf, falling back to DTU defaults."""
+    url = "https://serviceportal.dtu.dk"
+    email = "ait@dtu.dk"
+    try:
+        conf = Path("/etc/dtu-setup/site.conf")
+        if conf.exists():
+            for raw in conf.read_text(encoding="utf-8").splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                key = key.strip()
+                tokens = shlex.split(val, posix=True)
+                parsed = tokens[0] if tokens else ""
+                if key == "SITE_HELPDESK_URL" and parsed:
+                    url = parsed
+                elif key == "SITE_HELPDESK_EMAIL" and parsed:
+                    email = parsed
+    except Exception:
+        pass
+    return url, email
+
+
+_HELPDESK_URL, _HELPDESK_EMAIL = _read_helpdesk_info()
 
 
 # ─── Error pattern → suggested fix mapping ─────────────────────────────
@@ -615,6 +646,15 @@ class ErrorDialog(QDialog):
         )
         layout.addWidget(out_view, stretch=1)
 
+        # Helpdesk contact
+        helpdesk_label = QLabel(
+            f"IT-support: <a href='{_HELPDESK_URL}'>{_HELPDESK_URL}</a>"
+            f" &nbsp;·&nbsp; <a href='mailto:{_HELPDESK_EMAIL}'>{_HELPDESK_EMAIL}</a>"
+        )
+        helpdesk_label.setOpenExternalLinks(True)
+        helpdesk_label.setStyleSheet("font-size: 11px; color: #555; margin-top: 4px;")
+        layout.addWidget(helpdesk_label)
+
         # Buttons
         btn_row = QHBoxLayout()
         copy_btn = QPushButton("📋  Copy Error Message and Fix")
@@ -664,6 +704,11 @@ class ErrorDialog(QDialog):
             f"Fejl-output\n"
             f"-----------\n"
             f"{_tail(self._output, max_lines=80)}\n"
+            f"\n"
+            f"IT-support\n"
+            f"----------\n"
+            f"URL   : {_HELPDESK_URL}\n"
+            f"Email : {_HELPDESK_EMAIL}\n"
         )
 
     def _copy_to_clipboard(self) -> None:
