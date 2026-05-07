@@ -62,6 +62,10 @@ Kør derefter (erstat `dtu-sustain.env` med `dtu-ait.env` og `sustain` med `ait`
 sudo install -d /etc/dtu-setup
 sudo install -m 0644 dtu-sustain.env /etc/dtu-setup/site.conf
 echo "sustain" | sudo tee /etc/dtu-setup/department
+
+eller:
+sudo install -m 0644 dtu-ait.env /etc/dtu-setup/site.conf
+echo "ait" | sudo tee /etc/dtu-setup/department
 ```
 
 Filerne lander på:
@@ -79,9 +83,11 @@ Filerne lander på:
 |----------------------------|----------------|------------------------------------|
 | DTU-brugernavn             | `mpark`        | Netværksdrev, printer, WiFi |
 | DTU-adgangskode            | `*****`        | Netværksdrev, printer, WiFi |
-| Admin-brugernavn           | `adm-<username>`    | Domain Join                 |
-| Ønsket hostname            | `DTU-SUS-PC01` | Domain Join                 |
+| Adm-brugernavn             | `adm-<username>`    | Domain Join                 |
+| Ønsket hostname            | `SUS-EX-PC01`  | Domain Join                 |
 | Cisco tarball *(valgfrit)* | `cisco-secure-client-linux64-*.tar.gz` | VPN |
+
+> Du kan hente den sidste nye Cisco tarball på [software.dtu.dk](https://software.dtu.dk) → søg efter "Cisco Secure Client" → vælg Linux-versionen. Filen hedder typisk `cisco-secure-client-linux64-X.X.X-XXX.tar.gz`.
 
 ---
 
