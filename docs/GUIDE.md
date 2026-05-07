@@ -87,7 +87,7 @@ Filerne lander på:
 | Ønsket hostname            | `SUS-EX-PC01`  | Domain Join                 |
 | Cisco tarball *(valgfrit)* | `cisco-secure-client-linux64-*.tar.gz` | VPN |
 
-> Du kan hente den sidste nye Cisco tarball på [software.dtu.dk](https://software.dtu.dk) → søg efter "Cisco Secure Client" → vælg Linux-versionen. Filen hedder typisk `cisco-secure-client-linux64-X.X.X-XXX.tar.gz`.
+> Du kan hente den sidste nye Cisco tarball på [net.ait.dtu.dk](https://net.ait.dtu.dk/vpn/) → søg efter "Cisco Secure Client" → vælg Linux-versionen. Filen hedder typisk `cisco-secure-client-linux64-X.X.X-XXX.tar.gz`.
 
 ---
 
@@ -132,6 +132,22 @@ sudo reboot
 ```
 
 Genstart er nødvendig for at domæne-login, Flatpak-apps og systemd-automounts virker korrekt.
+
+---
+
+## Opdatering af DTU Linux Setup
+
+Når der er kommet en ny version, opdateres programmet sådan:
+
+```bash
+cd ~/Documents/DTU-Linux-Setup
+git checkout deploy
+git pull
+make deb
+sudo dpkg -i dtu-sustain-setup_1.0.0_all.deb
+```
+
+> Konfigurationsfilen `/etc/dtu-setup/site.conf` og `/etc/dtu-setup/department` røres ikke af en opdatering.
 
 ---
 
