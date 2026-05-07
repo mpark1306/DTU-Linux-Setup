@@ -7,6 +7,9 @@ Værktøjet understøtter to institut-profiler — **Sustain** og **AIT** — og
   <img src="data/dtu-sustain-setup.svg" alt="DTU Linux Setup" width="128">
 </p>
 
+> **Første gang du sætter en maskine op?**
+> Se [docs/GUIDE.md](docs/GUIDE.md) for en komplet trin-for-trin installationsvejledning.
+
 ---
 
 ## Hvad er det?
