@@ -1,6 +1,6 @@
 # DTU Linux Setup – Brugerguide
 
-> **Målgruppe:** IT-teknikere der opsætter DTU Sustain Linux-arbejdsstationer.
+> **Målgruppe:** IT-teknikere der opsætter DTU Sustain/AIT Linux-arbejdsstationer.
 
 ---
 

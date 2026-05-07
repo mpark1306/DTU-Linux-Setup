@@ -120,8 +120,8 @@ deb:
 
 	# Site-config examples (for IT admins to install as /etc/dtu-setup/site.conf)
 	install -d $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/examples
-	install -m 644 examples/dtu-sustain.env       $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/examples/
-	install -m 644 examples/dtu-ait.env           $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/examples/
+	[ -f examples/dtu-sustain.env ] && install -m 644 examples/dtu-sustain.env $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/examples/ || true
+	[ -f examples/dtu-ait.env ]     && install -m 644 examples/dtu-ait.env     $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/examples/ || true
 	install -m 644 data/site.conf.example         $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/examples/
 	install -m 644 README.md                       $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/
 	install -m 644 LICENSE                         $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/
