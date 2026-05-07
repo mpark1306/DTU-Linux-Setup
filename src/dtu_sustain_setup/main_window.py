@@ -233,7 +233,9 @@ class MainWindow(QMainWindow):
         self._dept_combo.setMinimumWidth(160)
         self._dept_combo.setStyleSheet(
             "QComboBox { font-size: 13px; padding: 5px 10px; border: 2px solid #ddd; "
-            "border-radius: 6px; background: white; } "
+            "border-radius: 6px; background: white; color: black; } "
+            "QComboBox QAbstractItemView { background: white; color: black; "
+            "selection-background-color: #e0e0e0; selection-color: black; } "
             f"QComboBox:focus {{ border-color: {DTU_RED}; }}"
         )
         header.addSpacing(20)
