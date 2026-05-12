@@ -182,15 +182,15 @@ DTU Linux Setup er et grafisk værktøj der automatiserer opsætning af Linux-ar
 │   │ Domain  │  │ Q-Drive │                            │
 │   │ Join    │  │         │                            │
 │   └─────────┘  └─────────┘                            │
-│   ┌─────────┐  ┌─────────┐  ┌─────────┐              │
-│   │Defender │  │PolicyKit│  │FollowMe │              │
-│   └─────────┘  └─────────┘  └─────────┘              │
+│   ┌─────────┐  ┌─────────┐  ┌─────────┐               │
+│   │Defender │  │PolicyKit│  │FollowMe │               │
+│   └─────────┘  └─────────┘  └─────────┘               │
 │   ┌─────────┐  ┌─────────┐                            │
 │   │Software │  │Automount│                            │
 │   └─────────┘  └─────────┘                            │
-│   ┌─────────┐                                        │
-│   │  RDP    │                                        │
-│   └─────────┘                                        │
+│   ┌─────────┐                                         │
+│   │  RDP    │                                         │
+│   └─────────┘                                         │
 │                                                       │
 │   [ ▶ Run All Admin Modules ]           [ Cancel ]    │
 │                                                       │
@@ -225,13 +225,13 @@ sudo zypper install ~/rpmbuild/RPMS/noarch/dtu-sustain-setup-1.0.0-1.noarch.rpm
 
 Inden du starter, sørg for at have:
 
-| Hvad | Eksempel | Bruges til |
-|------|----------|-----------|
-| DTU-brugernavn | `mpark` | Q-Drive, FollowMe, WiFi |
-| DTU-adgangskode | `*****` | Q-Drive, FollowMe |
-| Admin-brugernavn | `adm-<username>` | Domain Join |
-| Ønsket hostname | `DTU-SUS-PC01` | Domain Join |
-| Cisco tarball (valgfrit) | `cisco-secure-client-linux64-*.tar.gz` | VPN |
+| Hvad                     | Eksempel                               | Bruges til              |
+|--------------------------|-------------------------------------- -|-------------------------|
+| DTU-brugernavn           | `mpark`                                | Q-Drive, FollowMe, WiFi |
+| DTU-adgangskode          | `*****`                                | Q-Drive, FollowMe       |
+| Admin-brugernavn         | `adm-<username>`                            | Domain Join             |
+| Ønsket hostname          | `DTU-SUS-PC01`                         | Domain Join             |
+| Cisco tarball (valgfrit) | `cisco-secure-client-linux64-*.tar.gz` | VPN                     |
 
 ### Trin 3: Start programmet
 
@@ -374,21 +374,21 @@ ls /mnt/Personal    # kun Ubuntu
 1. Klik [ Software ]
 2. Software-dialogen åbner:
 
-   ┌─────────────────────────────────────────────┐
-   │  ┌──────────┬───────┬──────────┐            │
-   │  │ Flatpak  │ Snap  │  Cisco   │            │
+   ┌──────────────────────────────────────────────┐
+   │  ┌──────────┬───────┬───────────┐            │
+   │  │ Flatpak  │ Snap  │  Cisco    │            │
    │  ├──────────────────────────────┤            │
    │  │ com.microsoft.Edge           │            │
    │  │ com.github.tchx84.Flatseal   │            │
    │  │ org.flameshot.Flameshot      │            │
    │  │ ...                          │            │
    │  └──────────────────────────────┘            │
-   │  [ + Add ] [ ✏ Edit ] [ − Remove ]          │
+   │  [ + Add ] [ ✏ Edit ] [ − Remove ]           │
    │                                              │
    │  Cisco tarball: [ ________________ ] [Browse]│
    │                                              │
    │  [ Save ]              [ Save & Install ]    │
-   └─────────────────────────────────────────────┘
+   └──────────────────────────────────────────────┘
 
 3. Tilpas listen efter behov:
    - Tilføj: Klik [ + Add ] og indtast Flatpak app-ID
@@ -463,7 +463,7 @@ Filen `data/software.conf` styrer hvilken software der installeres:
 com.microsoft.Edge              # Microsoft Edge browser
 com.github.tchx84.Flatseal      # Flatpak permissions manager
 org.flameshot.Flameshot          # Screenshot tool
-org.onlyoffice.desktopeditors    # Office suite
+org.libreoffice.LibreOffice       # Office suite
 com.github.IsmaelMartinez.teams_for_linux  # Microsoft Teams
 org.remmina.Remmina              # Remote Desktop client
 us.zoom.Zoom                     # Zoom meetings
@@ -488,56 +488,39 @@ nano /opt/dtu-sustain-setup/data/software.conf
 
 ---
 
-## Netværkskrav
-
-Følgende netværksadgang er nødvendig under opsætning:
-
-| Tjeneste | Adresse | Port |
-|----------|---------|------|
-| Active Directory | `WIN.DTU.DK` | 389, 636, 88, 464 |
-| Filserver (Q-Drive) | `<fileserver>` / `<qumulo-server>` | 445 |
-| Printserver | `konfigureret via site.conf` | 445 |
-| Defender onboarding | `<defender-server>` | 443 |
-| Flathub | `dl.flathub.org` | 443 |
-| Snap Store | `api.snapcraft.io` | 443 |
-| Microsoft repos | `packages.microsoft.com` | 443 |
-
-
----
-
 ## Fejlsøgning
 
 ### Generelt
 
-| Problem | Løsning |
-|---------|---------|
-| GUI starter ikke | `python3 -c "from PyQt6.QtWidgets import QApplication"` — installer PyQt6 |
-| pkexec fejler | Installer `policykit-1` (Ubuntu) eller `polkit` (openSUSE) |
-| Forkert distro detekteret | Tjek `/etc/os-release` |
-| Script not found | Tjek at scripts er i `/opt/dtu-sustain-setup/scripts/<distro>/` |
+| Problem                   | Løsning                                                        |
+|---------------------------|----------------------------------------------------------------|
+| GUI starter ikke          | `python3 -c "from PyQt6.QtWidgets import QApplication"`        |
+| pkexec fejler             | Installer `policykit-1` (Ubuntu) eller `polkit` (openSUSE)     |
+| Forkert distro detekteret | Tjek `/etc/os-release`                                         |
+| Script not found          | Tjek at scripts er i `/opt/dtu-sustain-setup/scripts/<distro>/`|
 
 ### Domain Join
 
-| Problem | Løsning |
-|---------|---------|
-| "Domain not found" | Tjek DNS: `nslookup WIN.DTU.DK` |
-| "Failed to join" | Tjek admin-bruger har join-rettighed |
-| Domænebruger kan ikke logge ind | Tjek SSSD: `systemctl status sssd` |
+| Problem                         | Løsning                              |
+|---------------------------------|--------------------------------------|
+| "Domain not found"              | Tjek DNS: `nslookup WIN.DTU.DK`      |
+| "Failed to join"                | Tjek admin-bruger har join-rettighed |
+| Domænebruger kan ikke logge ind | Tjek SSSD: `systemctl status sssd`   |
 
 ### Q-Drive
 
-| Problem | Løsning |
-|---------|---------|
-| Mount fejler | Tjek credentials og netværk: `smbclient -L //<fileserver> -U <username>` |
-| "Permission denied" | Tjek `/etc/fstab` entries og credentials-fil |
+| Problem             | Løsning                                                         |
+|---------------------|-----------------------------------------------------------------|
+| Mount fejler        | Tjek credentials og netværk: `smbclient -L //<fileserver> -U <username>` |
+| "Permission denied" | Tjek `/etc/fstab` entries og credentials-fil                    |
 
 ### Cisco VPN
 
-| Problem | Løsning |
-|---------|---------|
-| "Tarball not found" | Placer `cisco-secure-client-linux64-*.tar.gz` i repo-roden eller vælg via Browse |
-| NVM fejler | Forventet på nye kerner — Cisco-begrænsning, kan ignoreres |
-| VPN virker ikke | Tjek `libxml2.so.2` er installeret |
+| Problem             | Løsning                                                       |
+|---------------------|---------------------------------------------------------------|
+| "Tarball not found" | Placer `cisco-secure-client-linux64-*.tar.gz` vælg via Browse |
+| NVM fejler          | Forventet på nye kerner — Cisco-begrænsning, kan ignoreres    |
+| VPN virker ikke     | Tjek `libxml2.so.2` er installeret                            |
 
 
 ---
@@ -545,5 +528,5 @@ Følgende netværksadgang er nødvendig under opsætning:
 ## Kontakt
 
 - **Team:** DTU Sustain IT
-- **E-mail:** support@sustain.dtu.dk
+- **E-mail:** mpark@dtu.dk
 - **Repository:** https://github.com/DTU-Sustain/DTU-Umbrella

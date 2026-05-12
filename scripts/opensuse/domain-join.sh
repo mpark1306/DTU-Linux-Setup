@@ -118,8 +118,23 @@ if [ -f /etc/sssd/sssd.conf ]; then
 fi
 ok "SSSD configured (short usernames, /home/%u)."
 
-echo "[6/8] Enabling mkhomedir (auto-create home on first login)..."
+echo "[6/8] Enabling mkhomedir + setting default KDE X11 session for new users..."
 pam-config --add --mkhomedir
+
+# GDM reads ~/.dmrc to pick the default session for a user who hasn't logged
+# in before. Writing it to /etc/skel ensures every new domain user starts in
+# KDE Plasma on X11 rather than Wayland.
+if [[ -f /usr/share/xsessions/plasmaX11.desktop ]]; then
+    KDE_X11_SESSION="plasmaX11"
+else
+    KDE_X11_SESSION="plasma"  # fallback
+fi
+cat > /etc/skel/.dmrc <<DMRC
+[Desktop]
+Session=${KDE_X11_SESSION}
+DMRC
+chmod 0644 /etc/skel/.dmrc
+ok "Default session set to '${KDE_X11_SESSION}' (X11) for all new users via /etc/skel/.dmrc."
 
 echo "[7/8] Restarting services..."
 systemctl restart sssd

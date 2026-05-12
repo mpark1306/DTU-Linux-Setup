@@ -341,7 +341,7 @@ Software-modulet bruger en redigerbar konfigurationsfil i stedet for hardkodede 
 com.microsoft.Edge
 com.github.tchx84.Flatseal
 org.flameshot.Flameshot
-org.onlyoffice.desktopeditors
+org.libreoffice.LibreOffice
 com.github.IsmaelMartinez.teams_for_linux
 org.remmina.Remmina
 us.zoom.Zoom
