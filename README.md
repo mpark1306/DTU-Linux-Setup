@@ -53,13 +53,13 @@ Ved første start (eller via dropdown'en i toppen af GUI'en) vælges den institu
 
 | Aspekt | **Sustain** | **AIT** |
 |---|---|---|
-| Netværksdrev | `Q-Drev` + `P-Drev` (`konfigureret via site.conf`) | `O-Drev` + `M-Drev` (`konfigureret via site.confUsers<n>/<initialer>`) |
-| Printer | FollowMe via CUPS (`konfigureret via site.conf`) | **WebPrint webapp** — chromium `--app=https://webprint.dtu.dk` |
+| Netværksdrev | `Q-Drev` + `P-Drev` (konfigureret via `site.conf`) | `O-Drev` + `M-Drev` (konfigureret via `site.conf`) |
+| Printer | FollowMe via CUPS (printserver konfigureret via `site.conf`) | **WebPrint webapp** — chromium `--app=https://webprint.dtu.dk` |
 | Drev-konfiguration | Hardkodet i scriptet | Læses fra `/etc/dtu-setup/drives.conf` |
 | Polkit/IT-admin | Domænebrugere får standard-rettigheder | Samme |
 | Resterende moduler | Identiske | Identiske |
 
-**Bemærk om AIT-brugermapper:** Brugere ligger fordelt over 9 mapper på `\\<fileserver>\Users\Users0-9\<initialer>` (f.eks. `\\<fileserver>\Users\Users7\mpark`). Den korrekte sti opdages automatisk under drev-mountet.
+**Bemærk om AIT-brugermapper:** Brugere ligger fordelt over flere mapper på filserveren. Den korrekte sti opdages automatisk under drev-mountet.
 
 ---
 
@@ -202,7 +202,7 @@ make run                # Fra kildekode
 │  ┌──────────────────────────────────────────────────────────────┐│
 │  │ ▶ Running with elevated privileges: domain-join.sh           ││
 │  │ === Domain Join ===                                          ││
-│  │ ✅ Hostname set to DTU-DEPT-PC01                              ││
+│  │ ✅ Hostname set to DTU-DEPT-PC01                             ││
 │  └──────────────────────────────────────────────────────────────┘│
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -252,20 +252,13 @@ CIFS-mount af institut-drev. Profilen styrer hvilke drev der mountes.
 
 **Input:** DTU-brugernavn + adgangskode.
 
-| Profil | Drev | Netværkssti | Lokal sti |
-|---|---|---|---|
-| Sustain | Q | `konfigureret via site.conf` | `/mnt/Qdrev` |
-| Sustain | P | `konfigureret via site.conf<user>` | `/mnt/Personal` |
-| AIT | O | (afdelingsspecifik, fra `drives.conf`) | `/mnt/Odrev` |
-| AIT | M | `konfigureret via site.confUsers<n>/<initialer>` | `/mnt/Mdrev` |
-
-> **openSUSE:** bruger Qumulo-host direkte (`konfigureret via site.conf`) for at omgå en kernel DFS-bug.
+> **openSUSE:** bruger Qumulo-host direkte (konfigureret i `site.conf`) for at omgå en kernel DFS-bug.
 
 Drevene mountes via systemd automount — de aktiveres ved første adgang.
 
 ### 🛡️ Microsoft Defender
 
-Tilføjer Microsofts repository, installerer `mdatp`, kører onboarding fra `konfigureret via site.conf` og aktiverer realtidsbeskyttelse + network protection.
+Tilføjer Microsofts repository, installerer `mdatp`, kører onboarding fra onboarding-URL konfigureret i `site.conf` og aktiverer realtidsbeskyttelse + network protection.
 
 ### 🔑 PolicyKit
 
@@ -280,7 +273,7 @@ Domænebrugere får UDEN adgangskode lov til:
 
 ### 🖨️ Printers
 
-**Sustain (FollowMe):** Tilføjer `FollowMe-MFP-PCL` og `FollowMe-Plot-PS` mod `konfigureret via site.conf` med tilpasset `smbspool-auth` CUPS-backend.
+**Sustain (FollowMe):** Tilføjer `FollowMe-MFP-PCL` og `FollowMe-Plot-PS` mod printserveren konfigureret i `site.conf` med tilpasset `smbspool-auth` CUPS-backend.
 
 **AIT (WebPrint):**
 1. Installerer `dtuprint.png` til `/usr/share/pixmaps/dtu-webprint.png`
