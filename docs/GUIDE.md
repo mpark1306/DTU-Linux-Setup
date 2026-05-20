@@ -20,7 +20,7 @@ Kontakt **[@mpark1306](https://github.com/mpark1306)** (Mark Parking, DTU Sustai
 
 ---
 
-### Trin 2 – Klon repo'etuvz3
+### Trin 2 – Klon repo'et
 
 ```bash
 git clone https://github.com/mpark1306/DTU-Linux-Setup
