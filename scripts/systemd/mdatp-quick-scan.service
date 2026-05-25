@@ -1,0 +1,12 @@
+[Unit]
+Description=Microsoft Defender for Endpoint – Scheduled Quick Scan
+Documentation=https://learn.microsoft.com/en-us/defender-endpoint/linux-schedule-scan-mde
+After=mdatp.service
+Requires=mdatp.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/mdatp scan quick
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mdatp-quick-scan

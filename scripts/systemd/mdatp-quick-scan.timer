@@ -1,0 +1,14 @@
+[Unit]
+Description=Microsoft Defender for Endpoint – Daily Quick Scan
+Documentation=https://learn.microsoft.com/en-us/defender-endpoint/linux-schedule-scan-mde
+
+[Timer]
+# Run daily at 02:00 with up to 30 minutes random delay
+# so all machines don't scan simultaneously.
+OnCalendar=*-*-* 02:00:00
+RandomizedDelaySec=1800
+# Run missed scans on next boot if the machine was off.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
