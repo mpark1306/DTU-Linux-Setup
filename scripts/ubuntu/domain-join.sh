@@ -19,6 +19,8 @@ banner "Domain Join – ${SITE_AD_DOMAIN} (realmd + SSSD)"
 
 DOMAIN="${SITE_AD_DOMAIN}"
 ADMIN_USER="${DTU_ADMIN_USERNAME:-$(get_username)}"
+DOMAIN_DN=$(echo "$DOMAIN" | sed 's/\./,DC=/g; s/^/DC=/')
+DOMAIN_UPPER=$(echo "$DOMAIN" | tr '[:lower:]' '[:upper:]')
 
 echo "[1/8] Setting hostname..."
 if [ -n "${DTU_HOSTNAME:-}" ]; then
@@ -81,7 +83,33 @@ echo "  Domain Join — ${DOMAIN}"
 echo "  Admin user: ${ADMIN_USER}"
 echo "══════════════════════════════════════════════════════════"
 echo ""
-realm join -U "${ADMIN_USER}" "${DOMAIN}"
+
+# Prompt for password once — used for AD check and domain join
+read -rsp "Password for ${ADMIN_USER}@${DOMAIN_UPPER}: " ADMIN_PASS
+echo ""
+echo ""
+
+# ── Check / pre-stage computer object in AD ───────────────────────────────
+COMPUTER_NAME="\$(hostname -s | tr '[:lower:]' '[:upper:]')"
+echo "▶  Checking computer object '\${COMPUTER_NAME}' in AD (CN=Computers,${DOMAIN_DN})..."
+ADCLI_ERR_FILE="\$(mktemp /tmp/dtu-adcli-XXXXXX.err)"
+if echo "\${ADMIN_PASS}" | adcli preset-computer --domain="${DOMAIN}" --domain-ou="CN=Computers,${DOMAIN_DN}" --login-user="${ADMIN_USER}" --stdin-password "\${COMPUTER_NAME}" 2>"\${ADCLI_ERR_FILE}"; then
+    echo "✅ Computer object ready in AD (CN=Computers,${DOMAIN_DN})"
+else
+    ADCLI_ERR="\$(cat "\${ADCLI_ERR_FILE}" 2>/dev/null)"
+    if echo "\${ADCLI_ERR}" | grep -qi "already exists\|object already\|Entry Already Exists"; then
+        echo "✅ Computer object already exists in AD — no pre-staging needed."
+    else
+        echo "⚠  Pre-staging note: \${ADCLI_ERR}"
+        echo "   Continuing with domain join..."
+    fi
+fi
+rm -f "\${ADCLI_ERR_FILE}"
+echo ""
+
+# ── Domain join ───────────────────────────────────────────────────────────
+echo "▶  Joining domain ${DOMAIN}..."
+echo "\${ADMIN_PASS}" | realm join -U "${ADMIN_USER}" "${DOMAIN}"
 JOIN_RC=\$?
 if [ \$JOIN_RC -eq 0 ]; then
   echo ""

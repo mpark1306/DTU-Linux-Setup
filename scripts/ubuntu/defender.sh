@@ -66,7 +66,44 @@ if [[ -n "${SUDO_USER:-}" ]]; then
   usermod -aG mdatp "$SUDO_USER" || true
 fi
 
-echo "[6/6] Final checks..."
+echo "[6/7] Scheduling automatic quick scans (systemd timer)..."
+cat > /etc/systemd/system/mdatp-quick-scan.service <<'UNIT'
+[Unit]
+Description=Microsoft Defender for Endpoint – Scheduled Quick Scan
+Documentation=https://learn.microsoft.com/en-us/defender-endpoint/linux-schedule-scan-mde
+After=mdatp.service
+Requires=mdatp.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/mdatp scan quick
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mdatp-quick-scan
+UNIT
+
+cat > /etc/systemd/system/mdatp-quick-scan.timer <<'UNIT'
+[Unit]
+Description=Microsoft Defender for Endpoint – Daily Quick Scan
+Documentation=https://learn.microsoft.com/en-us/defender-endpoint/linux-schedule-scan-mde
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+RandomizedDelaySec=1800
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now mdatp-quick-scan.timer
+ok "Quick scan scheduled daily at 02:00 (±30 min random delay)."
+echo "    Check:  systemctl status mdatp-quick-scan.timer"
+echo "    Logs:   journalctl -u mdatp-quick-scan.service"
+echo "    Manual: mdatp scan quick"
+
+echo "[7/7] Final checks..."
 mdatp definitions update || true
 sleep 5
 mdatp health || true
