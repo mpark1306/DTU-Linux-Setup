@@ -109,7 +109,7 @@ echo ""
 
 # ── Domain join ───────────────────────────────────────────────────────────
 echo "▶  Joining domain ${DOMAIN}..."
-echo "\${ADMIN_PASS}" | realm join --stdin-password -U "${ADMIN_USER}" "${DOMAIN}"
+echo "\${ADMIN_PASS}" | realm join -U "${ADMIN_USER}" "${DOMAIN}"
 JOIN_RC=\$?
 if [ \$JOIN_RC -eq 0 ]; then
   echo ""
