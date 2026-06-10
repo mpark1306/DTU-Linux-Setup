@@ -114,7 +114,7 @@ fi
 
 # ── Welcome dialog ───────────────────────────────────────────────────────────
 show_message "Velkommen til ${DEPT_LABEL}" \
-    "Velkommen til din nye Ubuntu-arbejdsstation!
+  "Velkommen til din nye DTU-Linux-arbejdsstation!
 
 For at fuldføre opsætningen har vi brug for dine WIN-domæne-oplysninger.
 
@@ -254,6 +254,9 @@ WRAPEOF
 else
     echo "WiFi script ikke fundet: $WIFI_SCRIPT – springer over." >&2
 fi
+
+# Install homebrew
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
 # ── Mark as done ─────────────────────────────────────────────────────────────
 mkdir -p "$(dirname "$MARKER")"
