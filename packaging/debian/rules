@@ -9,6 +9,9 @@ override_dh_auto_install:
 	cp -r scripts $(DESTDIR)/opt/dtu-sustain-setup/
 	cp -r data $(DESTDIR)/opt/dtu-sustain-setup/
 
+	# PPD file for FollowMe printers
+	install -m 644 KOC751iUX.ppd $(DESTDIR)/opt/dtu-sustain-setup/
+
 	# Launcher script
 	install -d $(DESTDIR)/opt/dtu-sustain-setup/bin
 	install -m 755 bin/dtu-sustain-setup $(DESTDIR)/opt/dtu-sustain-setup/bin/

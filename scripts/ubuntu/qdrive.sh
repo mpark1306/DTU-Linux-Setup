@@ -106,6 +106,21 @@ systemctl restart mnt-Personal.automount 2>/dev/null || systemctl start mnt-Pers
 echo "[7/9] Setting up user folder symlinks to P-Drive..."
 BACKUP_SUFFIX="bak-$(date +%Y%m%d%H%M)"
 
+# Trigger automount and create target directories on P-Drive if missing
+ls "$P_MOUNTPOINT" >/dev/null 2>&1 || true
+sleep 2
+if mountpoint -q "$P_MOUNTPOINT" 2>/dev/null; then
+  for FOLDER in Desktop Documents Pictures Downloads; do
+    if [ ! -d "${P_MOUNTPOINT}/${FOLDER}" ]; then
+      mkdir -p "${P_MOUNTPOINT}/${FOLDER}"
+      chown "$UID_NUM":"$GID_NUM" "${P_MOUNTPOINT}/${FOLDER}"
+      echo "  Created ${FOLDER}/ on P-Drive"
+    fi
+  done
+else
+  warn "P-Drive not mounted — target folders will be created on first login."
+fi
+
 for FOLDER in Desktop Documents Pictures Downloads; do
   LINK="${HOME_DIR}/${FOLDER}"
   TARGET="${P_MOUNTPOINT}/${FOLDER}"

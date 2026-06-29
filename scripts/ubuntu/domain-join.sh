@@ -142,7 +142,22 @@ ok "SSSD configured (short usernames, /home/%u)."
 echo "[6/8] Enabling mkhomedir (auto-create home on first login)..."
 pam-auth-update --enable mkhomedir
 
-echo "[7/8] Restarting services..."
+echo "[7/8] Configuring DNS search domain + restarting services..."
+# Add win.dtu.dk as DNS search domain so short hostnames resolve
+ACTIVE_CONN="$(nmcli -t -f NAME c show --active 2>/dev/null | head -1)"
+if [[ -n "$ACTIVE_CONN" ]]; then
+  CURRENT_SEARCH="$(nmcli -t -f ipv4.dns-search c show "$ACTIVE_CONN" 2>/dev/null | cut -d: -f2)"
+  if [[ "$CURRENT_SEARCH" != *"win.dtu.dk"* ]]; then
+    nmcli connection modify "$ACTIVE_CONN" ipv4.dns-search "win.dtu.dk" 2>/dev/null || true
+    nmcli connection up "$ACTIVE_CONN" 2>/dev/null || true
+    ok "DNS search domain 'win.dtu.dk' added to $ACTIVE_CONN"
+  else
+    echo "  DNS search domain already set."
+  fi
+else
+  warn "No active NetworkManager connection found — add 'win.dtu.dk' as DNS search domain manually."
+fi
+
 systemctl restart sssd
 systemctl enable sssd
 

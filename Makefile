@@ -34,6 +34,9 @@ install:
 	cp -r scripts $(DESTDIR)$(PREFIX)/
 	cp -r data $(DESTDIR)$(PREFIX)/
 
+	# PPD file for FollowMe printers
+	install -m 644 KOC751iUX.ppd $(DESTDIR)$(PREFIX)/
+
 	# Launcher
 	install -d $(DESTDIR)$(PREFIX)/bin
 	install -m 755 bin/dtu-sustain-setup $(DESTDIR)$(PREFIX)/bin/

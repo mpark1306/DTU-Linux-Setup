@@ -60,14 +60,38 @@ lpadmin -x FollowMe-MFP-PCL 2>/dev/null || true
 lpadmin -x FollowMe-Plot-PS  2>/dev/null || true
 
 echo "[7/8] Adding FollowMe printers..."
+
+# Use bundled PPD (Konica Minolta C751i) — copy to CUPS model dir
+PPD_SRC="${SCRIPT_DIR}/../../KOC751iUX.ppd"
+PPD_FALLBACK="/opt/dtu-sustain-setup/KOC751iUX.ppd"
+PPD_DST="/usr/share/cups/model/KOC751iUX.ppd"
+
+if [[ -f "$PPD_FALLBACK" ]]; then
+  cp "$PPD_FALLBACK" "$PPD_DST"
+elif [[ -f "$PPD_SRC" ]]; then
+  cp "$PPD_SRC" "$PPD_DST"
+else
+  fail "KOC751iUX.ppd not found. Place it in the repo root or /opt/dtu-sustain-setup/."
+  exit 1
+fi
+chmod 644 "$PPD_DST"
+
 lpadmin -p FollowMe-MFP-PCL -E \
   -v "smbspool-auth://print.sustain.dtu.dk/FollowMe-MFP-PCL" \
-  -m "openprinting-ppds:0/ppd/openprinting/KONICA_MINOLTA/KOC550UX.ppd" \
-  -o job-sheets=none,none
+  -P "$PPD_DST" \
+  -o job-sheets=none,none \
+  -o PaperSources=None \
+  -o Finisher=FS540 \
+  -o KOPunch=PK526-4 \
+  -o ZFoldUnit=ZU609 \
+  -o PostInserter=PI507 \
+  -o SaddleUnit=SD512 \
+  -o PrinterHDD=HDD \
+  -o Model=C550i
 
 lpadmin -p FollowMe-Plot-PS -E \
   -v "smbspool-auth://print.sustain.dtu.dk/FollowMe-Plot-PS" \
-  -m "openprinting-ppds:0/ppd/openprinting/KONICA_MINOLTA/KOC550UX.ppd" \
+  -P "$PPD_DST" \
   -o job-sheets=none,none
 
 systemctl restart cups

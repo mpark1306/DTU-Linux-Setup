@@ -152,8 +152,8 @@ WRAPEOF
     pkexec bash "$WRAPPER" &
     QDRIVE_PID=$!
     show_progress "DTU Sustain" "Opsætter Q-Drive & P-Drive..." "$QDRIVE_PID" || true
-    wait "$QDRIVE_PID" 2>/dev/null
-    QDRIVE_RC=$?
+    QDRIVE_RC=0
+    wait "$QDRIVE_PID" 2>/dev/null || QDRIVE_RC=$?
     rm -f "$WRAPPER"
 
     if [[ $QDRIVE_RC -eq 0 ]]; then
@@ -183,8 +183,8 @@ WRAPEOF
     pkexec bash "$WRAPPER" &
     FOLLOWME_PID=$!
     show_progress "DTU Sustain" "Opsætter FollowMe printere..." "$FOLLOWME_PID" || true
-    wait "$FOLLOWME_PID" 2>/dev/null
-    FOLLOWME_RC=$?
+    FOLLOWME_RC=0
+    wait "$FOLLOWME_PID" 2>/dev/null || FOLLOWME_RC=$?
     rm -f "$WRAPPER"
 
     if [[ $FOLLOWME_RC -eq 0 ]]; then
