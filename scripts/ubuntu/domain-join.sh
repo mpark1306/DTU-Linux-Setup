@@ -23,8 +23,11 @@ DOMAIN_DN=$(echo "$DOMAIN" | sed 's/\./,DC=/g; s/^/DC=/')
 DOMAIN_UPPER=$(echo "$DOMAIN" | tr '[:lower:]' '[:upper:]')
 
 echo "[1/8] Setting hostname..."
-SERIALNO="$(sudo dmidecode -s system-serial-number)"
-DTU_HOSTNAME="DTU-$SERIALNO"
+if [ -z "${DTU_HOSTNAME:-}" ] && [ "${DTU_DEPARTMENT:-}" = "ait" ]; then
+  SERIALNO="$(dmidecode -s system-serial-number 2>/dev/null | tr -d '[:space:]')"
+  DTU_HOSTNAME="DTU-${SERIALNO}"
+  warn "DTU_HOSTNAME not set — using serial number: $DTU_HOSTNAME"
+fi
 if [ -n "${DTU_HOSTNAME:-}" ]; then
   hostnamectl set-hostname "$DTU_HOSTNAME"
   ok "Hostname set to $DTU_HOSTNAME"
