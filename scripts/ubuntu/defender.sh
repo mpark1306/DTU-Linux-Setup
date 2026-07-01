@@ -59,7 +59,7 @@ python3 /tmp/MicrosoftDefenderATPOnboardingLinuxServer.py || true
 mdatp config passive-mode --value disabled || true
 mdatp config real-time-protection --value enabled || true
 case "$NP_MODE" in
-  audit|block) mdatp config network-protection --value "$NP_MODE" || true ;;
+  audit|block) mdatp config network-protection enforcement-level --value "$NP_MODE" || true ;;
 esac
 
 if [[ -n "${SUDO_USER:-}" ]]; then

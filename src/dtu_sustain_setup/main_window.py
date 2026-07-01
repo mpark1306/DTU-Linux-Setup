@@ -138,6 +138,15 @@ MODULES: list[ModuleDef] = [
         icon_name="preferences-desktop-remote-desktop",
     ),
     ModuleDef(
+        id="tpm2-enroll",
+        title="TPM2 Auto-Unlock",
+        description="LUKS disk auto-unlock\n(TPM2, no passphrase at boot)",
+        script_name="tpm2-enroll.sh",
+        needs_root=True,
+        input_type="none",
+        icon_name="security-high",
+    ),
+    ModuleDef(
         id="first-login-deploy",
         title="First-Login Setup",
         description="Deploy welcome dialog\nfor new domain users",

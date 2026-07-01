@@ -30,6 +30,12 @@ if [ -z "${DTU_HOSTNAME:-}" ] && [ "${DTU_DEPARTMENT:-}" = "ait" ]; then
 fi
 if [ -n "${DTU_HOSTNAME:-}" ]; then
   hostnamectl set-hostname "$DTU_HOSTNAME"
+  # Keep /etc/hosts in sync so sudo doesn't warn about unresolvable hostname
+  if grep -q "^127\.0\.1\.1" /etc/hosts; then
+    sed -i "s/^127\.0\.1\.1[[:space:]].*/127.0.1.1\t$DTU_HOSTNAME/" /etc/hosts
+  else
+    printf "127.0.1.1\t%s\n" "$DTU_HOSTNAME" >> /etc/hosts
+  fi
   ok "Hostname set to $DTU_HOSTNAME"
 else
   warn "DTU_HOSTNAME not set — keeping current hostname: $(hostname)"
@@ -153,24 +159,45 @@ ok "Successfully joined $DOMAIN."
 fi
 
 echo "[5/8] Configuring SSSD..."
-# Ensure sssd.conf has sensible defaults for DTU
+# Rewrite sssd.conf with Python for reliable multi-setting updates
 if [ -f /etc/sssd/sssd.conf ]; then
-  # Set short usernames (no @domain suffix)
-  sed -i 's/^use_fully_qualified_names\s*=.*/use_fully_qualified_names = False/' /etc/sssd/sssd.conf
-  # Set home directory template
-  sed -i 's|^fallback_homedir\s*=.*|fallback_homedir = /home/%u|' /etc/sssd/sssd.conf
+  python3 - <<'PYEOF'
+import re
 
-  # Add settings if not present
-  if ! grep -q "^use_fully_qualified_names" /etc/sssd/sssd.conf; then
-    sed -i "/^\[domain\/${DOMAIN}\]/a use_fully_qualified_names = False" /etc/sssd/sssd.conf
-  fi
-  if ! grep -q "^fallback_homedir" /etc/sssd/sssd.conf; then
-    sed -i "/^\[domain\/${DOMAIN}\]/a fallback_homedir = /home/%u" /etc/sssd/sssd.conf
-  fi
+with open('/etc/sssd/sssd.conf', 'r') as f:
+    content = f.read()
 
+# Settings to enforce — order matters for readability
+settings = [
+    ('use_fully_qualified_names',      'False'),
+    ('fallback_homedir',               '/home/%u'),
+    ('override_homedir',               '/home/%u'),
+    ('cache_credentials',              'True'),
+    ('krb5_store_password_if_offline', 'True'),
+    ('entry_cache_timeout',            '300'),
+    ('ldap_network_timeout',           '3'),
+]
+
+for key, value in settings:
+    pattern = re.compile(r'^' + re.escape(key) + r'\s*=.*$', re.MULTILINE)
+    replacement = f'{key} = {value}'
+    if pattern.search(content):
+        content = pattern.sub(replacement, content)
+    else:
+        # Append after the first [domain/...] header
+        content = re.sub(
+            r'(\[domain/[^\]]*\])',
+            lambda m: m.group(0) + '\n' + replacement,
+            content,
+            count=1
+        )
+
+with open('/etc/sssd/sssd.conf', 'w') as f:
+    f.write(content)
+PYEOF
   chmod 600 /etc/sssd/sssd.conf
 fi
-ok "SSSD configured (short usernames, /home/%u)."
+ok "SSSD configured (short usernames, /home/%u, credentials cached)."
 
 echo "[6/8] Enabling mkhomedir (auto-create home on first login)..."
 pam-auth-update --enable mkhomedir
