@@ -1,0 +1,80 @@
+name: Build and release .deb
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make dpkg-dev grep coreutils
+
+      - name: Read VERSION from Makefile
+        id: version
+        shell: bash
+        run: |
+          MAKE_VERSION="$(grep -E '^[[:space:]]*VERSION[[:space:]]*:=' Makefile | head -n1 | sed -E 's/^[^:]*:=[[:space:]]*//')"
+          if [[ -z "$MAKE_VERSION" ]]; then
+            echo "Could not parse VERSION from Makefile"
+            exit 1
+          fi
+          echo "make_version=$MAKE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Makefile VERSION: $MAKE_VERSION"
+
+      - name: Validate tag matches Makefile VERSION
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          MAKE_VERSION="${{ steps.version.outputs.make_version }}"
+          echo "Tag version:      $TAG"
+          echo "Makefile version: $MAKE_VERSION"
+          if [[ "$TAG" != "$MAKE_VERSION" ]]; then
+            echo "Version mismatch: tag v$TAG != Makefile VERSION $MAKE_VERSION"
+            exit 1
+          fi
+
+      - name: Build .deb with Makefile
+        run: |
+          make deb
+          echo "Looking for generated .deb files:"
+          find . -maxdepth 3 -name "*.deb" -print
+          ls -lah *.deb
+
+      - name: Compute checksums
+        run: |
+          sha256sum *.deb > sha256sums.txt
+          cat sha256sums.txt
+
+      - name: Upload artifact (.deb + checksums)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dtu-sustain-setup-deb-${{ steps.version.outputs.make_version }}
+          path: |
+            *.deb
+            sha256sums.txt
+          if-no-files-found: error
+
+      - name: Create GitHub Release and upload assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: DTU Sustain Setup v${{ steps.version.outputs.make_version }}
+          tag_name: ${{ github.ref_name }}
+          files: |
+            *.deb
+            sha256sums.txt
+          generate_release_notes: true
