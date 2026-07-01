@@ -1,3 +1,13 @@
+dtu-sustain-setup (1.1.0-1) noble; urgency=medium
+
+  * Dynamic department selection: load_site_conf() now sources
+    /etc/dtu-setup/dtu-<dept>.env when DTU_DEPARTMENT is set,
+    falling back to site.conf for backward compatibility.
+  * GUI auto-detects DTU_DEPARTMENT from /etc/dtu-setup/site.conf
+    on startup and syncs the department dropdown accordingly.
+
+ -- DTU Sustain IT <support@sustain.dtu.dk>  Tue, 01 Jul 2026 12:00:00 +0200
+
 dtu-sustain-setup (1.0.0-1) noble; urgency=medium
 
   * Initial release.

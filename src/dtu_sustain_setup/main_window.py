@@ -333,6 +333,21 @@ class MainWindow(QMainWindow):
         # ── Status bar ──────────────────────────────────────────────────
         self.statusBar().showMessage("Ready")
 
+        # Auto-detect department from installed site config.
+        self._auto_detect_department()
+
+    def _auto_detect_department(self) -> None:
+        """Read DTU_DEPARTMENT from /etc/dtu-setup/site.conf and sync the dropdown."""
+        site_conf = Path("/etc/dtu-setup/site.conf")
+        if not site_conf.exists():
+            return
+        result = parse_env_file(site_conf)
+        dept = result.values.get("DTU_DEPARTMENT", "").lower()
+        if dept in {"sustain", "ait"}:
+            idx = self._dept_combo.findData(dept)
+            if idx >= 0:
+                self._dept_combo.setCurrentIndex(idx)
+
     def _find_icon(self) -> Path | None:
         """Find the DTU icon for the window."""
         candidates = [

@@ -24,10 +24,16 @@ need_root() {
 # scripts can reference $SITE_* variables without repeating fallback logic.
 # Defaults match the DTU production environment for backward compatibility.
 load_site_conf() {
-  local conf="${SITE_CONF:-/etc/dtu-setup/site.conf}"
-  if [[ -r "$conf" ]]; then
+  local dept="${DTU_DEPARTMENT:-}"
+  local dept_conf="/etc/dtu-setup/dtu-${dept}.env"
+  local default_conf="${SITE_CONF:-/etc/dtu-setup/site.conf}"
+
+  if [[ -n "$dept" && -r "$dept_conf" ]]; then
     # shellcheck disable=SC1090
-    source "$conf"
+    source "$dept_conf"
+  elif [[ -r "$default_conf" ]]; then
+    # shellcheck disable=SC1090
+    source "$default_conf"
   fi
 
   # Active Directory / Kerberos

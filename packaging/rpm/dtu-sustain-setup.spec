@@ -1,5 +1,5 @@
 Name:           dtu-sustain-setup
-Version:        1.0.0
+Version:        1.1.0
 Release:        1%{?dist}
 Summary:        DTU Sustain Linux workstation setup tool
 License:        MIT
