@@ -1,4 +1,4 @@
-name: Build and release .deb
+name: Build and release packages
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  build-deb:
+  build-packages:
     runs-on: ubuntu-latest
 
     steps:
@@ -20,7 +20,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y make dpkg-dev grep coreutils
+          sudo apt-get install -y make dpkg-dev rpm grep coreutils
 
       - name: Read VERSION from Makefile
         id: version
@@ -47,24 +47,28 @@ jobs:
             exit 1
           fi
 
-      - name: Build .deb with Makefile
+      - name: Build .deb and .rpm with Makefile
         run: |
           make deb
-          echo "Looking for generated .deb files:"
-          find . -maxdepth 3 -name "*.deb" -print
-          ls -lah *.deb
+          make rpm
+          mkdir -p dist
+          find . -maxdepth 3 -name "*.deb" -exec cp -v {} dist/ \;
+          find "$HOME/rpmbuild/RPMS" -type f -name "*.rpm" -exec cp -v {} dist/ \;
+          echo "Collected package files:"
+          ls -lah dist/*.{deb,rpm}
 
       - name: Compute checksums
         run: |
-          sha256sum *.deb > sha256sums.txt
+          sha256sum dist/*.{deb,rpm} > sha256sums.txt
           cat sha256sums.txt
 
-      - name: Upload artifact (.deb + checksums)
+      - name: Upload artifact (.deb/.rpm + checksums)
         uses: actions/upload-artifact@v4
         with:
-          name: dtu-sustain-setup-deb-${{ steps.version.outputs.make_version }}
+          name: dtu-sustain-setup-packages-${{ steps.version.outputs.make_version }}
           path: |
-            *.deb
+            dist/*.deb
+            dist/*.rpm
             sha256sums.txt
           if-no-files-found: error
 
@@ -75,6 +79,7 @@ jobs:
           name: DTU Sustain Setup v${{ steps.version.outputs.make_version }}
           tag_name: ${{ github.ref_name }}
           files: |
-            *.deb
+            dist/*.deb
+            dist/*.rpm
             sha256sums.txt
           generate_release_notes: true
