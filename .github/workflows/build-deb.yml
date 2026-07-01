@@ -10,8 +10,11 @@ permissions:
   contents: write
 
 jobs:
-  build-packages:
+  # ── Job 1: Build .deb on Ubuntu ─────────────────────────────────────────
+  build-deb:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.make_version }}
 
     steps:
       - name: Checkout
@@ -20,7 +23,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y make dpkg-dev rpm rpm-build grep coreutils
+          sudo apt-get install -y make dpkg-dev
 
       - name: Read VERSION from Makefile
         id: version
@@ -40,46 +43,89 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME#v}"
           MAKE_VERSION="${{ steps.version.outputs.make_version }}"
-          echo "Tag version:      $TAG"
-          echo "Makefile version: $MAKE_VERSION"
           if [[ "$TAG" != "$MAKE_VERSION" ]]; then
             echo "Version mismatch: tag v$TAG != Makefile VERSION $MAKE_VERSION"
             exit 1
           fi
 
-      - name: Build .deb and .rpm with Makefile
+      - name: Build .deb
+        run: make deb
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-package
+          path: "*.deb"
+          if-no-files-found: error
+
+  # ── Job 2: Build .rpm in Fedora container ───────────────────────────────
+  build-rpm:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+
+    steps:
+      - name: Install build dependencies
+        run: dnf install -y make rpm-build git
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build .rpm
+        run: make rpm
+
+      - name: Collect .rpm
         run: |
-          make deb
-          make rpm
           mkdir -p dist
-          find . -maxdepth 3 -name "*.deb" -exec cp -v {} dist/ \;
           find "$HOME/rpmbuild/RPMS" -type f -name "*.rpm" -exec cp -v {} dist/ \;
-          echo "Collected package files:"
-          ls -lah dist/*.{deb,rpm}
+          ls -lah dist/
+
+      - name: Upload .rpm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-package
+          path: dist/*.rpm
+          if-no-files-found: error
+
+  # ── Job 3: Publish release ───────────────────────────────────────────────
+  release:
+    needs: [build-deb, build-rpm]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download .deb
+        uses: actions/download-artifact@v4
+        with:
+          name: deb-package
+          path: dist/
+
+      - name: Download .rpm
+        uses: actions/download-artifact@v4
+        with:
+          name: rpm-package
+          path: dist/
 
       - name: Compute checksums
         run: |
-          sha256sum dist/*.{deb,rpm} > sha256sums.txt
+          sha256sum dist/* > sha256sums.txt
           cat sha256sums.txt
 
-      - name: Upload artifact (.deb/.rpm + checksums)
+      - name: Upload combined artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dtu-sustain-setup-packages-${{ steps.version.outputs.make_version }}
+          name: dtu-sustain-setup-packages-${{ needs.build-deb.outputs.version }}
           path: |
-            dist/*.deb
-            dist/*.rpm
+            dist/
             sha256sums.txt
           if-no-files-found: error
 
-      - name: Create GitHub Release and upload assets
+      - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          name: DTU Sustain Setup v${{ steps.version.outputs.make_version }}
+          name: DTU Linux Setup v${{ needs.build-deb.outputs.version }}
           tag_name: ${{ github.ref_name }}
           files: |
-            dist/*.deb
-            dist/*.rpm
+            dist/*
             sha256sums.txt
           generate_release_notes: true
