@@ -167,6 +167,14 @@ sudo dpkg -i dtu-sustain-setup_1.0.0_all.deb
 11. First-Login Setup ← Welcome-dialog til nye brugere
 ```
 
+### Valgfrit modul: TPM2 Auto-Unlock
+
+`TPM2 Auto-Unlock` koeres ikke automatisk i `Run All`.
+
+Det er bevidst valgfrit, fordi modulet aendrer hvordan en LUKS-krypteret disk laases op ved boot. Koer det kun på maskiner hvor I specifikt vil have TPM2-baseret auto-unlock.
+
+Fejlfinding findes i `docs/TPM2-LUKS-fejlfinding.md`.
+
 ---
 
 ## Oversigt

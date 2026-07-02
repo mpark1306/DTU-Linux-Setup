@@ -1,145 +1,239 @@
 #!/usr/bin/env bash
-###############################################################################
-# DTU Linux Setup – Ubuntu 24.04 – Module: TPM2 LUKS Auto-Unlock
 #
-# Enrolls the TPM2 chip as a LUKS keyslot so the encrypted disk unlocks
-# automatically at boot — no passphrase prompt needed.
+# tpm2-clevis-luks-setup.sh
+# =============================================================
+# Configure TPM2 auto-unlock for a LUKS encrypted disk on
+# Ubuntu/Kubuntu (and other Debian/Ubuntu-based distros with
+# initramfs-tools).
 #
-# Binding policy: PCR 7 (Secure Boot state).
-# If BIOS/Secure Boot settings change, auto-unlock stops and the machine
-# falls back to the existing passphrase — re-run this module afterwards.
-#
-# Prerequisites:
-#   - LUKS2 encrypted disk (selected during Ubuntu installation)
-#   - TPM2 chip present and accessible (/dev/tpm0 or /dev/tpmrm0)
-#   - Secure Boot enabled in UEFI
-#   - systemd >= 248 (standard on Ubuntu 22.04+)
-###############################################################################
-set -euo pipefail
+# Why clevis and not systemd-cryptenroll + crypttab option?
+# initramfs-tools (default on Ubuntu/Kubuntu) does not consume
+# tpm2-device=auto in /etc/crypttab. Clevis ships an initramfs-tools
+# hook and works independently of crypttab TPM options.
+# =============================================================
+
+set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../common.sh"
 need_root
 
-banner "TPM2 LUKS Auto-Unlock"
+info() { echo "[i] $*"; }
+err()  { fail "$*"; }
 
-# ─── 1. Prerequisites ────────────────────────────────────────────────────────
-echo "[1/6] Checking prerequisites..."
+PCR_IDS="${PCR_IDS:-7}"
+PCR_BANK="${PCR_BANK:-sha256}"
+DEVICE_ARG="${1:-}"
 
-if ! command -v systemd-cryptenroll >/dev/null 2>&1; then
-  fail "systemd-cryptenroll not found. Requires systemd >= 248 (Ubuntu 22.04+)."
+die() {
+  err "$*"
   exit 1
-fi
+}
 
-if ! command -v cryptsetup >/dev/null 2>&1; then
-  apt-get install -y cryptsetup >/dev/null
-fi
+trap 'err "Unexpected error on line $LINENO. See docs/TPM2-LUKS-fejlfinding.md."; exit 1' ERR
 
-# ─── 2. Find LUKS partition ──────────────────────────────────────────────────
-echo "[2/6] Detecting LUKS partition..."
+require_apt() {
+  command -v apt-get >/dev/null 2>&1 \
+    || die "This script requires apt-get (Ubuntu/Kubuntu/Debian)."
+}
 
-LUKS_DEV=$(lsblk -rno NAME,FSTYPE | awk '$2 == "crypto_LUKS" {print "/dev/" $1}' | head -1)
+check_tpm2_presence() {
+  if [[ ! -e /dev/tpmrm0 && ! -e /dev/tpm0 ]]; then
+    die "No TPM2 device found (/dev/tpm0 or /dev/tpmrm0). Enable TPM/fTPM/PTT in BIOS first."
+  fi
+  ok "TPM2 device found."
+}
 
-if [[ -z "${LUKS_DEV:-}" ]]; then
-  fail "No LUKS-encrypted partition found."
-  echo "  Run: lsblk -f   to inspect your partition layout."
-  echo "  The disk must be encrypted (LUKS2) — this is selected during Ubuntu installation."
-  exit 1
-fi
-
-LUKS_UUID=$(blkid -s UUID -o value "$LUKS_DEV" 2>/dev/null)
-ok "Found LUKS partition: $LUKS_DEV  (UUID: $LUKS_UUID)"
-
-# ─── 3. Check TPM2 ──────────────────────────────────────────────────────────
-echo "[3/6] Checking TPM2 device..."
-
-TPM2_OUTPUT=$(systemd-cryptenroll --tpm2-device=list 2>&1 || true)
-if ! echo "$TPM2_OUTPUT" | grep -q "PATH\|/dev/tpm"; then
-  fail "No TPM2 device detected."
-  echo "$TPM2_OUTPUT"
-  echo "  Make sure TPM is enabled in UEFI/BIOS."
-  exit 1
-fi
-ok "TPM2 device detected."
-
-# ─── 4. Enroll TPM2 ─────────────────────────────────────────────────────────
-echo "[4/6] Enrolling TPM2 keyslot (PCR 7 — Secure Boot state)..."
-echo "  Enter your existing LUKS passphrase when prompted."
-echo ""
-
-systemd-cryptenroll \
-  --tpm2-device=auto \
-  --tpm2-pcrs=7 \
-  "$LUKS_DEV"
-
-ok "TPM2 enrolled as LUKS keyslot."
-
-# ─── 5. Update /etc/crypttab ─────────────────────────────────────────────────
-echo "[5/6] Updating /etc/crypttab..."
-
-if [[ -f /etc/crypttab ]]; then
-  if grep -q "$LUKS_UUID" /etc/crypttab; then
-    if grep "$LUKS_UUID" /etc/crypttab | grep -q "tpm2-device"; then
-      ok "tpm2-device=auto already in /etc/crypttab — no change needed."
+check_secure_boot() {
+  if command -v mokutil >/dev/null 2>&1; then
+    if mokutil --sb-state 2>/dev/null | grep -qi "enabled"; then
+      ok "Secure Boot appears enabled (recommended for PCR ${PCR_IDS})."
     else
-      # Insert tpm2-device=auto into the options field (4th column)
-      awk -v uuid="$LUKS_UUID" '
-        $0 ~ uuid {
-          if ($4 == "" || $4 == "none" || $4 == "-") {
-            $4 = "luks,tpm2-device=auto"
-          } else {
-            $4 = $4 ",tpm2-device=auto"
-          }
-        }
-        { print }
-      ' /etc/crypttab > /tmp/crypttab.new
-      mv /tmp/crypttab.new /etc/crypttab
-      ok "Updated /etc/crypttab with tpm2-device=auto."
+      warn "Secure Boot does not appear enabled. PCR ${PCR_IDS} binding may fail at boot."
     fi
   else
-    warn "UUID $LUKS_UUID not found in /etc/crypttab."
-    echo "  Current /etc/crypttab:"
-    cat /etc/crypttab
-    echo ""
-    echo "  Add tpm2-device=auto to the options column for your LUKS entry manually."
+    warn "mokutil not installed; cannot auto-check Secure Boot state."
+  fi
+}
+
+detect_luks_device() {
+  if [[ -n "$DEVICE_ARG" ]]; then
+    [[ -b "$DEVICE_ARG" ]] || die "'$DEVICE_ARG' does not exist or is not a block device."
+    echo "$DEVICE_ARG"
+    return
   fi
 
-  echo "  /etc/crypttab after update:"
-  cat /etc/crypttab
-else
-  warn "/etc/crypttab not found — skipping crypttab update."
-fi
+  local candidates
+  mapfile -t candidates < <(lsblk -rno NAME,FSTYPE | awk '$2=="crypto_LUKS"{print "/dev/"$1}')
 
-# ─── 5b. Rebuild initramfs ───────────────────────────────────────────────────
-echo "  Rebuilding initramfs (this may take a minute)..."
-update-initramfs -u -k all
-ok "initramfs rebuilt."
+  if [[ ${#candidates[@]} -eq 0 ]]; then
+    die "No LUKS partitions found. Pass a device explicitly: sudo $0 /dev/sdXN"
+  elif [[ ${#candidates[@]} -eq 1 ]]; then
+    echo "${candidates[0]}"
+  else
+    warn "Multiple LUKS partitions found:"
+    local i=1
+    for c in "${candidates[@]}"; do
+      echo "  $i) $c"
+      ((i++))
+    done
+    local choice
+    read -rp "Select number: " choice
+    [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#candidates[@]} )) \
+      || die "Invalid selection: $choice"
+    echo "${candidates[$((choice-1))]}"
+  fi
+}
 
-# ─── 6. Recovery key ────────────────────────────────────────────────────────
-echo "[6/6] Generating recovery key..."
-echo ""
-echo "  ┌──────────────────────────────────────────────────────────────────┐"
-echo "  │  A recovery key will now be added as an extra LUKS keyslot.     │"
-echo "  │  This is your fallback if TPM2 unlock fails (BIOS update,       │"
-echo "  │  Secure Boot change, hardware replacement, TPM reset, etc.).    │"
-echo "  │                                                                  │"
-echo "  │  The key is shown ONCE — write it down or save it in your       │"
-echo "  │  password manager (e.g. Vaultwarden) before closing this window.│"
-echo "  └──────────────────────────────────────────────────────────────────┘"
-echo ""
+verify_luks() {
+  cryptsetup isLuks "$1" 2>/dev/null || die "$1 is not a valid LUKS partition."
+  ok "Verified LUKS device: $1"
+}
 
-systemd-cryptenroll --recovery-key "$LUKS_DEV"
+install_packages() {
+  info "Installing clevis and TPM2 tooling..."
+  apt_wait
+  apt-get update || die "apt-get update failed."
+  apt-get install -y \
+    clevis clevis-luks clevis-tpm2 clevis-initramfs \
+    cryptsetup tpm2-tools initramfs-tools || die "Package installation failed."
+  ok "Required packages installed."
+}
 
-# ─── Summary ─────────────────────────────────────────────────────────────────
-echo ""
-ok "TPM2 LUKS auto-unlock configured."
-echo ""
-echo "  LUKS device : $LUKS_DEV"
-echo "  UUID        : $LUKS_UUID"
-echo "  TPM binding : PCR 7 (Secure Boot state)"
-echo ""
-echo "  Active keyslots:"
-cryptsetup luksDump "$LUKS_DEV" | grep -E "Keyslot|State|Type" || true
-echo ""
-echo "  ⚠  Keep your recovery key and install passphrase in a safe place."
-echo "  ⚠  After BIOS/Secure Boot changes: re-run this module to re-enroll."
-echo "  Reboot to verify automatic unlock."
+already_bound() {
+  clevis luks list -d "$1" 2>/dev/null | grep -q "tpm2"
+}
+
+bind_clevis() {
+  local dev="$1"
+  if already_bound "$dev"; then
+    warn "$dev already has a TPM2 clevis binding:"
+    clevis luks list -d "$dev" || true
+    read -rp "Add another binding anyway? [y/N] " ans
+    [[ "$ans" =~ ^[Yy]$ ]] || { info "Skipping additional binding."; return; }
+  fi
+
+  info "Binding $dev to TPM2 (PCR ${PCR_IDS}, bank ${PCR_BANK})."
+  info "Enter your existing LUKS passphrase when prompted."
+  clevis luks bind -d "$dev" tpm2 "{\"pcr_bank\":\"${PCR_BANK}\",\"pcr_ids\":\"${PCR_IDS}\"}" \
+    || die "Clevis binding failed."
+  ok "TPM2 clevis binding created on $dev."
+}
+
+clean_crypttab_legacy_option() {
+  if grep -q "tpm2-device" /etc/crypttab 2>/dev/null; then
+    info "Removing unsupported tpm2-device=auto from /etc/crypttab..."
+    cp /etc/crypttab "/etc/crypttab.bak.$(date +%s)"
+    sed -i 's/[[:space:]]*tpm2-device=auto//g' /etc/crypttab
+    ok "Cleaned /etc/crypttab (backup saved as /etc/crypttab.bak.*)."
+  fi
+}
+
+rebuild_initramfs() {
+  info "Rebuilding initramfs..."
+  update-initramfs -u -k all || die "update-initramfs failed."
+  ok "initramfs rebuilt."
+}
+
+verify_clevis_in_initramfs() {
+  if lsinitramfs "/boot/initrd.img-$(uname -r)" 2>/dev/null | grep -q "scripts/local-top/clevis"; then
+    ok "Clevis initramfs hook verified."
+  else
+    warn "Could not verify clevis hook automatically. Check manually with:"
+    warn "  lsinitramfs /boot/initrd.img-$(uname -r) | grep clevis"
+  fi
+}
+
+verify_binding() {
+  info "Current LUKS keyslot/token status for $1:"
+  cryptsetup luksDump "$1" || true
+}
+
+generate_recovery_hex() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  else
+    head -c32 /dev/urandom | od -An -tx1 | tr -d ' \n'
+  fi
+}
+
+format_recovery_key() {
+  fold -w8 <<< "$1" | paste -sd'-'
+}
+
+offer_recovery_key() {
+  local dev="$1"
+  read -rp "Generate a recovery key and export it to a local txt file? [Y/n] " ans
+  if [[ "$ans" =~ ^[Nn]$ ]]; then
+    info "Skipping recovery-key generation."
+    return
+  fi
+
+  local raw formatted keyfile outfile
+  raw="$(generate_recovery_hex)"
+  formatted="$(format_recovery_key "$raw")"
+
+  keyfile="$(mktemp)"
+  printf '%s' "$formatted" > "$keyfile"
+  chmod 600 "$keyfile"
+
+  info "Adding recovery key as a new LUKS keyslot."
+  info "Enter your existing LUKS passphrase when prompted."
+  if ! cryptsetup luksAddKey "$dev" "$keyfile"; then
+    shred -u "$keyfile" 2>/dev/null || rm -f "$keyfile"
+    die "Could not add recovery key to $dev."
+  fi
+
+  if cryptsetup luksOpen --test-passphrase --key-file "$keyfile" "$dev" 2>/dev/null; then
+    ok "Recovery key verified successfully."
+  else
+    warn "Automatic recovery key verification failed; inspect keyslots manually."
+  fi
+  shred -u "$keyfile" 2>/dev/null || rm -f "$keyfile"
+
+  outfile="./LUKS-recovery-key-$(hostname)-$(date +%Y%m%d-%H%M%S).txt"
+  {
+    echo "LUKS recovery key"
+    echo "Host:      $(hostname)"
+    echo "Device:    $dev"
+    echo "Generated: $(date -Iseconds)"
+    echo
+    echo "$formatted"
+    echo
+    echo "This key (including dashes) can be entered at boot unlock prompt."
+  } > "$outfile"
+  chmod 600 "$outfile"
+
+  echo
+  warn "RECOVERY KEY (shown once):"
+  echo "  $formatted"
+  echo
+  warn "Saved to: $(readlink -f "$outfile")"
+  warn "File contains an unencrypted disk key. Copy it to a secure location, then delete local copy: shred -u \"$outfile\""
+}
+
+main() {
+  banner "TPM2 LUKS Auto-Unlock (clevis)"
+  require_apt
+  check_tpm2_presence
+  check_secure_boot
+  info "Starting TPM2 + clevis LUKS auto-unlock setup."
+
+  local device
+  device="$(detect_luks_device)"
+  info "Using device: $device"
+
+  verify_luks "$device"
+  install_packages
+  bind_clevis "$device"
+  clean_crypttab_legacy_option
+  rebuild_initramfs
+  verify_clevis_in_initramfs
+  verify_binding "$device"
+  offer_recovery_key "$device"
+
+  echo
+  ok "Done. Reboot and verify auto-unlock."
+  info "If auto-unlock does not work after reboot, enter your normal passphrase and see docs/TPM2-LUKS-fejlfinding.md."
+}
+
+main "$@"

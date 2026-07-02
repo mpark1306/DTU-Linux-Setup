@@ -499,8 +499,10 @@ class MainWindow(QMainWindow):
             return
 
         # Modules that require the end-user's domain credentials are
-        # deferred to first login — skip them in the admin run.
-        DEFERRED_MODULES = {"qdrive", "followme", "onedrive", "wifi"}
+        # deferred to first login. TPM2 is intentionally excluded from
+        # bulk runs because it changes disk-unlock behavior and should
+        # only be executed when explicitly requested.
+        DEFERRED_MODULES = {"qdrive", "followme", "onedrive", "wifi", "tpm2-enroll"}
 
         # Collect admin info for Domain Join
         host = self._env_overrides.get("DTU_HOSTNAME", "")
@@ -532,6 +534,8 @@ class MainWindow(QMainWindow):
             "  \u2022 Q-Drive / O-Drive\n"
             "  \u2022 FollowMe Printers\n"
             "  \u2022 DTUSecure WiFi\n\n"
+            "Optional security modules skipped in Run All:\n\n"
+            "  \u2022 TPM2 Auto-Unlock (run manually if needed)\n\n"
             "Make sure 'First-Login Setup' is included in the run."
         )
         QMessageBox.information(self, "Admin Run – Deferred Modules", info_msg)
