@@ -9,7 +9,7 @@ APPDIR      ?= /usr/share/applications
 ICONDIR     ?= /usr/share/icons/hicolor/scalable/apps
 POLICYDIR   ?= /usr/share/polkit-1/actions
 
-VERSION     := 1.1.1
+VERSION     := 1.1.2
 
 .PHONY: help install uninstall deb rpm clean
 
@@ -174,6 +174,7 @@ rpm:
 		--transform='s,^,dtu-sustain-setup-$(VERSION)/,' \
 		src/ scripts/ data/ bin/ packaging/
 	cp packaging/rpm/dtu-sustain-setup.spec ~/rpmbuild/SPECS/
+	sed -i 's/^Version:[[:space:]]*.*/Version:        $(VERSION)/' ~/rpmbuild/SPECS/dtu-sustain-setup.spec
 	rpmbuild -bb ~/rpmbuild/SPECS/dtu-sustain-setup.spec
 	@echo "✅ RPM package built. Check ~/rpmbuild/RPMS/"
 

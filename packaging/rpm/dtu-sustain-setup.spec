@@ -1,9 +1,9 @@
 Name:           dtu-sustain-setup
-Version:        1.1.0
+Version:        1.1.2
 Release:        1%{?dist}
 Summary:        DTU Sustain Linux workstation setup tool
 License:        MIT
-URL:            https://github.com/DTU-Sustain/DTU-Umbrella
+URL:            https://github.com/mpark1306/DTU-Linux-Setup
 BuildArch:      noarch
 Source0:        dtu-sustain-setup-%{version}.tar.gz
 
