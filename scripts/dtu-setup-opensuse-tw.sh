@@ -19,7 +19,7 @@
 #   - CUPS backend path: /usr/lib/cups (Tumbleweed x86_64)
 #   - Defender repo: zypper + rpm key, SLES 15 packages
 #   - PolicyKit admin identities via JS rules (no pkla)
-#   - FollowMe: generic PostScript PPD (KOC550UX not in TW repos)
+#   - FollowMe: local Konica PPD from data/KOC751iUX.ppd
 #   - samba-client instead of smbclient
 #   - plasma6-print-manager instead of print-manager
 #   - OneDrive: zypper or build-from-source (no OBS apt repo);
@@ -537,20 +537,25 @@ TIMER
 }
 
 # ─── MODULE 5: FollowMe printers ────────────────────────────────────────────
-# NOTE: KOC550UX PPD is not available on Tumbleweed.
-#       FollowMe queues go through DTU's print server which handles rendering,
-#       so a generic PostScript PPD works correctly.
+# NOTE: FollowMe queues use the local Konica PPD from the repository so the
+#       queue defaults match the DTU printer's supported options.
 module_followme() {
   banner "Module 5 – DTU Sustain FollowMe Printers"
 
   read -rp "Username (e.g. mpark): " U
   read -rsp "Password: " P; echo
 
+  PPD_FILE="${SCRIPT_DIR}/../../data/KOC751iUX.ppd"
+  if [[ ! -f "$PPD_FILE" ]]; then
+    PPD_FILE="/opt/dtu-sustain-setup/data/KOC751iUX.ppd"
+  fi
+  if [[ ! -f "$PPD_FILE" ]]; then
+    fail "KOC751iUX.ppd not found. Reinstall DTU Linux Setup or run from the repository checkout."
+    return 1
+  fi
+
   echo "[1/8] Installing packages..."
   zypper --non-interactive install cups samba-client
-  zypper --non-interactive install OpenPrintingPPDs-postscript 2>/dev/null \
-    || zypper --non-interactive install OpenPrintingPPDs 2>/dev/null \
-    || warn "Could not install OpenPrintingPPDs — using generic PostScript PPD."
 
   echo "[2/8] Enabling CUPS..."
   systemctl enable --now cups
@@ -591,17 +596,40 @@ BACKEND
   lpadmin -x FollowMe-MFP-PCL 2>/dev/null || true
   lpadmin -x FollowMe-Plot-PS  2>/dev/null || true
 
-  PPD_MODEL="drv:///sample.drv/generic.ppd"
+  COMMON_DEFAULTS=(
+    -o PageSize=A4
+    -o InputSlot=AutoSelect
+    -o MediaType=Plain
+    -o Collate=True
+    -o KMDuplex=2Sided
+    -o SelectColor=Auto
+    -o TextPureBlack=Auto
+    -o TextScreen=Auto
+    -o GlossyMode=False
+    -o AutoTrapping=False
+    -o BlackOverPrint=Off
+    -o OutputBin=Default
+    -o Binding=LeftBinding
+    -o PaperSources=None
+    -o Finisher=None
+    -o KOPunch=None
+    -o ZFoldUnit=None
+    -o PostInserter=None
+    -o SaddleUnit=None
+    -o PrinterHDD=HDD
+  )
 
   echo "[7/8] Adding FollowMe printers..."
   lpadmin -p FollowMe-MFP-PCL -E \
     -v "smbspool-auth://konfigureret via site.conf/FollowMe-MFP-PCL" \
-    -m "$PPD_MODEL" \
+    -P "$PPD_FILE" \
+    "${COMMON_DEFAULTS[@]}" \
     -o job-sheets=none,none
 
   lpadmin -p FollowMe-Plot-PS -E \
     -v "smbspool-auth://konfigureret via site.conf/FollowMe-Plot-PS" \
-    -m "$PPD_MODEL" \
+    -P "$PPD_FILE" \
+    "${COMMON_DEFAULTS[@]}" \
     -o job-sheets=none,none
 
   systemctl restart cups

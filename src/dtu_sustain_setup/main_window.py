@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from . import __version__
 from .distro import Distro, detect_distro, distro_display_name, get_scripts_dir
 from .env_loader import KNOWN_VARS, SECRET_VARS, EnvLoadResult, parse_env_file
 from .error_dialog import ErrorDialog
@@ -233,7 +234,29 @@ class MainWindow(QMainWindow):
         distro_label = QLabel(f"Detected: {distro_display_name()}")
         distro_label.setStyleSheet("color: #666; font-size: 12px;")
         title_block.addWidget(distro_label)
+
+        version_label = QLabel(f"Version: {__version__}")
+        version_label.setStyleSheet("color: #666; font-size: 12px;")
+        title_block.addWidget(version_label)
         header.addLayout(title_block)
+
+        header.addStretch()
+
+        right_block = QVBoxLayout()
+        right_block.setSpacing(6)
+
+        self._update_btn = QPushButton("Update to latest version")
+        self._update_btn.setToolTip(
+            "Download the newest release from GitHub, remove the old installation, and reinstall."
+        )
+        self._update_btn.setStyleSheet(
+            f"QPushButton {{ background: {DTU_RED}; color: white; font-weight: bold; "
+            "padding: 8px 14px; border-radius: 6px; font-size: 12px; }"
+            f"QPushButton:hover {{ background: {DTU_RED_DARK}; }}"
+            "QPushButton:disabled { background: #ccc; color: #888; }"
+        )
+        self._update_btn.clicked.connect(self._update_latest_version)
+        right_block.addWidget(self._update_btn)
 
         # Department selector
         self._dept_combo = QComboBox()
@@ -247,9 +270,8 @@ class MainWindow(QMainWindow):
             "selection-background-color: #e0e0e0; selection-color: black; } "
             f"QComboBox:focus {{ border-color: {DTU_RED}; }}"
         )
-        header.addSpacing(20)
-        header.addWidget(self._dept_combo)
-        header.addStretch()
+        right_block.addWidget(self._dept_combo, alignment=Qt.AlignmentFlag.AlignRight)
+        header.addLayout(right_block)
 
         main_layout.addLayout(header)
 
@@ -487,6 +509,42 @@ class MainWindow(QMainWindow):
             script, mod.id, needs_root=mod.needs_root, env_vars=env_vars
         )
 
+    def _update_latest_version(self) -> None:
+        """Download and install the latest GitHub release."""
+        if self._runner.is_running():
+            QMessageBox.warning(
+                self, "Busy", "A module is already running. Wait for it to finish or cancel it."
+            )
+            return
+
+        update_script = self._scripts_dir.parent / "update-latest.sh"
+        if not update_script.exists():
+            QMessageBox.critical(
+                self,
+                "Update Script Missing",
+                f"Update script not found:\n{update_script}\n\nIs the installation complete?",
+            )
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Update to latest version",
+            "This will download the latest release from GitHub, remove the current installation, and reinstall the app.\n\nContinue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+
+        self._set_running(True)
+        self.statusBar().showMessage("Running: Update to latest version...")
+        self._runner.run(
+            update_script,
+            "update-latest",
+            needs_root=True,
+            env_vars={"DTU_DEPARTMENT": self._dept_combo.currentData()},
+        )
+
     def _run_all_admin(self) -> None:
         """Queue all admin modules (runs them sequentially).
 
@@ -614,6 +672,7 @@ class MainWindow(QMainWindow):
         """Enable/disable UI during module execution."""
         self._cancel_btn.setEnabled(running)
         self._run_all_btn.setEnabled(not running)
+        self._update_btn.setEnabled(not running)
         for mod_id, btn in self._module_buttons.items():
             mod = next((m for m in MODULES if m.id == mod_id), None)
             if mod and not mod.enabled:

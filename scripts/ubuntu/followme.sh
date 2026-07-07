@@ -133,8 +133,40 @@ fi
 U="$DTU_USERNAME"
 P="$DTU_PASSWORD"
 
+PPD_FILE="${SCRIPT_DIR}/../../data/KOC751iUX.ppd"
+if [[ ! -f "$PPD_FILE" ]]; then
+  PPD_FILE="/opt/dtu-sustain-setup/data/KOC751iUX.ppd"
+fi
+if [[ ! -f "$PPD_FILE" ]]; then
+  fail "KOC751iUX.ppd not found. Reinstall DTU Linux Setup or run from the repository checkout."
+  exit 1
+fi
+
 PRINT_SERVER="${SITE_PRINT_SERVER}"
 CREDS_FILE="/etc/cups/print-sustain.creds"
+
+COMMON_DEFAULTS=(
+  -o PageSize=A4
+  -o InputSlot=AutoSelect
+  -o MediaType=Plain
+  -o Collate=True
+  -o KMDuplex=2Sided
+  -o SelectColor=Auto
+  -o TextPureBlack=Auto
+  -o TextScreen=Auto
+  -o GlossyMode=False
+  -o AutoTrapping=False
+  -o BlackOverPrint=Off
+  -o OutputBin=Default
+  -o Binding=LeftBinding
+  -o PaperSources=None
+  -o Finisher=None
+  -o KOPunch=None
+  -o ZFoldUnit=None
+  -o PostInserter=None
+  -o SaddleUnit=None
+  -o PrinterHDD=HDD
+)
 
 echo "[1/8] Installing packages..."
 apt_wait
@@ -179,12 +211,14 @@ lpadmin -x FollowMe-Plot-PS  2>/dev/null || true
 echo "[7/8] Adding FollowMe printers..."
 lpadmin -p FollowMe-MFP-PCL -E \
   -v "smbspool-auth://${PRINT_SERVER}/FollowMe-MFP-PCL" \
-  -m "openprinting-ppds:0/ppd/openprinting/KONICA_MINOLTA/KOC550UX.ppd" \
+  -P "$PPD_FILE" \
+  "${COMMON_DEFAULTS[@]}" \
   -o job-sheets=none,none
 
 lpadmin -p FollowMe-Plot-PS -E \
   -v "smbspool-auth://${PRINT_SERVER}/FollowMe-Plot-PS" \
-  -m "openprinting-ppds:0/ppd/openprinting/KONICA_MINOLTA/KOC550UX.ppd" \
+  -P "$PPD_FILE" \
+  "${COMMON_DEFAULTS[@]}" \
   -o job-sheets=none,none
 
 systemctl restart cups

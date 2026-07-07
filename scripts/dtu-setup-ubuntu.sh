@@ -36,8 +36,7 @@ module_qdrive() {
   banner "Module 1 – Map \\\\\\\\<fileserver>\\\\Qdrev\\\\SUS → /mnt/Qdrev (CIFS)"
 
   read -rp "Enter domain username (e.g. mpark): " USERNAME
-  read -rsp "Enter password for WIN\\$USERNAME: " PASSWORD; echo
-
+  read -rsp "Enter password for WIN\$USERNAME: " PASSWORD; echo
   DOMAIN="WIN"
   SERVER="<fileserver>"
   SHARE_PATH="Qdrev/SUS"
@@ -81,7 +80,6 @@ EOF
     echo "fstab entry already exists — updating..."
     sed -i "\|^[[:space:]]*//${SERVER}/${SHARE_PATH}[[:space:]]|d" "$FSTAB_FILE"
   fi
-  echo "$FSTAB_LINE" >> "$FSTAB_FILE"
 
   if mount | grep -qE "[[:space:]]${MOUNTPOINT}[[:space:]]"; then
     echo "Already mounted — unmounting for clean remount..."
@@ -348,9 +346,18 @@ module_followme() {
   read -rp "Username (e.g. mpark): " U
   read -rsp "Password: " P; echo
 
+  PPD_FILE="${SCRIPT_DIR}/../../data/KOC751iUX.ppd"
+  if [[ ! -f "$PPD_FILE" ]]; then
+    PPD_FILE="/opt/dtu-sustain-setup/data/KOC751iUX.ppd"
+  fi
+  if [[ ! -f "$PPD_FILE" ]]; then
+    fail "KOC751iUX.ppd not found. Reinstall DTU Linux Setup or run from the repository checkout."
+    return 1
+  fi
+
   echo "[1/8] Installing packages..."
   apt-get update -qq
-  apt-get install -y cups smbclient openprinting-ppds samba-common-bin
+  apt-get install -y cups smbclient samba-common-bin
 
   echo "[2/8] Enabling CUPS..."
   systemctl enable --now cups
@@ -387,15 +394,40 @@ BACKEND
   lpadmin -x FollowMe-MFP-PCL 2>/dev/null || true
   lpadmin -x FollowMe-Plot-PS  2>/dev/null || true
 
+  COMMON_DEFAULTS=(
+    -o PageSize=A4
+    -o InputSlot=AutoSelect
+    -o MediaType=Plain
+    -o Collate=True
+    -o KMDuplex=2Sided
+    -o SelectColor=Auto
+    -o TextPureBlack=Auto
+    -o TextScreen=Auto
+    -o GlossyMode=False
+    -o AutoTrapping=False
+    -o BlackOverPrint=Off
+    -o OutputBin=Default
+    -o Binding=LeftBinding
+    -o PaperSources=None
+    -o Finisher=None
+    -o KOPunch=None
+    -o ZFoldUnit=None
+    -o PostInserter=None
+    -o SaddleUnit=None
+    -o PrinterHDD=HDD
+  )
+
   echo "[7/8] Adding FollowMe printers..."
   lpadmin -p FollowMe-MFP-PCL -E \
     -v "smbspool-auth://konfigureret via site.conf/FollowMe-MFP-PCL" \
-    -m "openprinting-ppds:0/ppd/openprinting/KONICA_MINOLTA/KOC550UX.ppd" \
+    -P "$PPD_FILE" \
+    "${COMMON_DEFAULTS[@]}" \
     -o job-sheets=none,none
 
   lpadmin -p FollowMe-Plot-PS -E \
     -v "smbspool-auth://konfigureret via site.conf/FollowMe-Plot-PS" \
-    -m "openprinting-ppds:0/ppd/openprinting/KONICA_MINOLTA/KOC550UX.ppd" \
+    -P "$PPD_FILE" \
+    "${COMMON_DEFAULTS[@]}" \
     -o job-sheets=none,none
 
   systemctl restart cups

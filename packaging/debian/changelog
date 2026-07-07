@@ -1,3 +1,13 @@
+dtu-sustain-setup (1.2.0-1) noble; urgency=medium
+
+  * Added an "Update to latest version" button in the app header.
+  * The button downloads the latest GitHub release, removes the old
+    installation, and reinstalls the new version.
+  * FollowMe printers now use the local Konica C751i PPD with explicit
+    queue defaults.
+
+ -- DTU Sustain IT <support@sustain.dtu.dk>  Tue, 07 Jul 2026 12:00:00 +0200
+
 dtu-sustain-setup (1.1.3-1) noble; urgency=medium
 
   * Domain join scripts now ignore DTU_HOSTNAME when the DTU Sustain
