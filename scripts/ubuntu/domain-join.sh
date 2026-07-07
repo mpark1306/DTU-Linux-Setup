@@ -24,6 +24,10 @@ DOMAIN_UPPER=$(echo "$DOMAIN" | tr '[:lower:]' '[:upper:]')
 
 echo "[1/8] Setting hostname..."
 DEPT_LOWER="$(printf '%s' "${DTU_DEPARTMENT:-}" | tr '[:upper:]' '[:lower:]')"
+if [ "$DEPT_LOWER" = "sustain" ] && [ -n "${DTU_HOSTNAME:-}" ]; then
+  warn "Sustain profile selected — ignoring DTU_HOSTNAME and keeping current hostname."
+  unset DTU_HOSTNAME
+fi
 if [ -z "${DTU_HOSTNAME:-}" ] && [ "$DEPT_LOWER" = "ait" ]; then
   SERIALNO="$(dmidecode -s system-serial-number 2>/dev/null | tr -d '[:space:]')"
   if [ -n "$SERIALNO" ] && [ "$SERIALNO" != "NotSpecified" ] && [ "$SERIALNO" != "ToBeFilledByO.E.M." ]; then
