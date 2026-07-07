@@ -9,7 +9,7 @@ APPDIR      ?= /usr/share/applications
 ICONDIR     ?= /usr/share/icons/hicolor/scalable/apps
 POLICYDIR   ?= /usr/share/polkit-1/actions
 
-VERSION     := 1.1.2
+VERSION     := 1.1.3
 
 .PHONY: help install uninstall deb rpm clean
 
