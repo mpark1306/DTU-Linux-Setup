@@ -1,3 +1,12 @@
+dtu-sustain-setup (1.2.1-1) noble; urgency=medium
+
+  * TPM2 Auto-Unlock now supports passphrase prompts even without an
+    interactive terminal by using GUI/system prompts and secure keyfile flow.
+  * Added a completion popup after "Run All Admin Modules" that asks whether
+    the machine should reboot now.
+
+ -- DTU Sustain IT <support@sustain.dtu.dk>  Tue, 07 Jul 2026 12:30:00 +0200
+
 dtu-sustain-setup (1.2.0-1) noble; urgency=medium
 
   * Added an "Update to latest version" button in the app header.

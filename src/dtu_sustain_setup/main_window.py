@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QProcess, Qt
 from PyQt6.QtGui import QFont, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -194,6 +194,8 @@ class MainWindow(QMainWindow):
         # Pre-loaded answers from an env file (see _load_env_file).
         self._env_overrides: dict[str, str] = {}
         self._env_source: Path | None = None
+        self._running_admin_batch = False
+        self._admin_batch_cancelled = False
 
         self.setWindowTitle("DTU Linux Setup")
         self.setMinimumSize(800, 700)
@@ -580,6 +582,8 @@ class MainWindow(QMainWindow):
         self._queued_modules = [
             m for m in MODULES if m.enabled and m.id not in DEFERRED_MODULES
         ]
+        self._running_admin_batch = True
+        self._admin_batch_cancelled = False
         self._shared_env = {
             "DTU_HOSTNAME": admin_result[0],
             "DTU_ADMIN_USERNAME": admin_result[1],
@@ -606,6 +610,10 @@ class MainWindow(QMainWindow):
             self._set_running(False)
             self.statusBar().showMessage("All modules completed.")
             self._append_log("\n═══ All modules completed ═══\n")
+            if self._running_admin_batch and not self._admin_batch_cancelled:
+                self._prompt_reboot_after_admin_run()
+            self._running_admin_batch = False
+            self._admin_batch_cancelled = False
             return
 
         mod = self._queued_modules.pop(0)
@@ -662,11 +670,33 @@ class MainWindow(QMainWindow):
 
     def _cancel_running(self) -> None:
         """Cancel the running module."""
+        if self._running_admin_batch:
+            self._admin_batch_cancelled = True
         if hasattr(self, "_queued_modules"):
             self._queued_modules.clear()
         self._runner.cancel()
         self._set_running(False)
         self.statusBar().showMessage("Cancelled.")
+
+    def _prompt_reboot_after_admin_run(self) -> None:
+        """Offer reboot after completing the admin batch run."""
+        answer = QMessageBox.question(
+            self,
+            "Run All Completed",
+            "Run All Admin Modules is finished.\n\nDo you want to reboot the computer now?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        started = QProcess.startDetached("pkexec", ["systemctl", "reboot"])
+        if not started:
+            QMessageBox.warning(
+                self,
+                "Reboot failed",
+                "Could not start reboot automatically. Please reboot manually.",
+            )
 
     def _set_running(self, running: bool) -> None:
         """Enable/disable UI during module execution."""

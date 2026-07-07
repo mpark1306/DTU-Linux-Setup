@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dtu-sustain-setup"
-version = "1.2.0"
+version = "1.2.1"
 description = "DTU Sustain Linux workstation setup tool"
 readme = "README.md"
 license = {text = "MIT"}

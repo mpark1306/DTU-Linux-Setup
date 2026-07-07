@@ -65,6 +65,24 @@ Anbefaling:
   shred -u ./LUKS-recovery-key-*.txt
   ```
 
+### 6) Ingen passphrase-prompt vises
+
+Symptom:
+- TPM2 modulet skriver at du skal indtaste eksisterende LUKS passphrase,
+  men der kommer ingen prompt i GUI-korlen.
+
+Aarsag:
+- Modulet kan koere uden en interaktiv terminal (TTY), saa klassiske
+  passphrase-prompts fra clevis/cryptsetup ikke vises.
+
+Løsning:
+- Opdater til nyeste version af TPM2 modulet, som bruger en fallback-prompt
+  (zenity/systemd-ask-password) og sender passphrase sikkert via keyfile.
+- Hvis prompt stadig ikke vises, koer modulet direkte fra terminal:
+  ```bash
+  sudo scripts/ubuntu/tpm2-enroll.sh
+  ```
+
 ## Nyttige kommandoer
 
 ```bash

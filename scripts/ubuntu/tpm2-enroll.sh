@@ -23,13 +23,63 @@ err()  { fail "$*"; }
 PCR_IDS="${PCR_IDS:-7}"
 PCR_BANK="${PCR_BANK:-sha256}"
 DEVICE_ARG="${1:-}"
+EXISTING_PASSPHRASE_FILE=""
 
 die() {
   err "$*"
   exit 1
 }
 
+cleanup_secret_files() {
+  if [[ -n "$EXISTING_PASSPHRASE_FILE" && -f "$EXISTING_PASSPHRASE_FILE" ]]; then
+    shred -u "$EXISTING_PASSPHRASE_FILE" 2>/dev/null || rm -f "$EXISTING_PASSPHRASE_FILE"
+    EXISTING_PASSPHRASE_FILE=""
+  fi
+}
+
+prompt_secret() {
+  local prompt="$1"
+  local value=""
+
+  if [[ -t 0 ]]; then
+    read -rsp "$prompt: " value
+    echo
+  elif command -v zenity >/dev/null 2>&1 && [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
+    value="$(zenity --password --title="TPM2 Auto-Unlock" --text="$prompt")" \
+      || die "Passphrase prompt was cancelled."
+  elif command -v systemd-ask-password >/dev/null 2>&1; then
+    value="$(systemd-ask-password "$prompt")" || die "Passphrase prompt failed."
+  else
+    die "No interactive passphrase prompt available. Run this script from a terminal."
+  fi
+
+  [[ -n "$value" ]] || die "Empty passphrase is not allowed."
+  printf '%s' "$value"
+}
+
+ensure_existing_passphrase_file() {
+  local dev="$1"
+  if [[ -n "$EXISTING_PASSPHRASE_FILE" && -f "$EXISTING_PASSPHRASE_FILE" ]]; then
+    return
+  fi
+
+  local passphrase
+  passphrase="$(prompt_secret "Enter your existing LUKS passphrase")"
+
+  EXISTING_PASSPHRASE_FILE="$(mktemp)"
+  chmod 600 "$EXISTING_PASSPHRASE_FILE"
+  printf '%s' "$passphrase" > "$EXISTING_PASSPHRASE_FILE"
+  unset passphrase
+
+  if cryptsetup luksOpen --test-passphrase --key-file "$EXISTING_PASSPHRASE_FILE" "$dev" 2>/dev/null; then
+    ok "Existing passphrase verified."
+  else
+    die "The provided passphrase could not unlock $dev."
+  fi
+}
+
 trap 'err "Unexpected error on line $LINENO. See docs/TPM2-LUKS-fejlfinding.md."; exit 1' ERR
+trap cleanup_secret_files EXIT
 
 require_apt() {
   command -v apt-get >/dev/null 2>&1 \
@@ -113,8 +163,8 @@ bind_clevis() {
   fi
 
   info "Binding $dev to TPM2 (PCR ${PCR_IDS}, bank ${PCR_BANK})."
-  info "Enter your existing LUKS passphrase when prompted."
-  clevis luks bind -d "$dev" tpm2 "{\"pcr_bank\":\"${PCR_BANK}\",\"pcr_ids\":\"${PCR_IDS}\"}" \
+  ensure_existing_passphrase_file "$dev"
+  clevis luks bind -k "$EXISTING_PASSPHRASE_FILE" -d "$dev" tpm2 "{\"pcr_bank\":\"${PCR_BANK}\",\"pcr_ids\":\"${PCR_IDS}\"}" \
     || die "Clevis binding failed."
   ok "TPM2 clevis binding created on $dev."
 }
@@ -177,8 +227,8 @@ offer_recovery_key() {
   chmod 600 "$keyfile"
 
   info "Adding recovery key as a new LUKS keyslot."
-  info "Enter your existing LUKS passphrase when prompted."
-  if ! cryptsetup luksAddKey "$dev" "$keyfile"; then
+  ensure_existing_passphrase_file "$dev"
+  if ! cryptsetup luksAddKey --key-file "$EXISTING_PASSPHRASE_FILE" "$dev" "$keyfile"; then
     shred -u "$keyfile" 2>/dev/null || rm -f "$keyfile"
     die "Could not add recovery key to $dev."
   fi
