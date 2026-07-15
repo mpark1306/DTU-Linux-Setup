@@ -1,3 +1,17 @@
+dtu-sustain-setup (1.3.0-1) noble; urgency=medium
+
+  * Ny card-baseret UI til modulvalg i setup-vinduet.
+  * Refaktoreret AIT M-Drive og O-Drive mounting i qdrive.sh (Ubuntu + openSUSE)
+    – bruger nu delte CIFS helpers i common.sh (cifs_test_mount, cifs_setup_share,
+    cifs_find_mdrive_subdir, cifs_start_automount).
+  * Ny SITE_MDRIVE_SERVER / SITE_MDRIVE_BASE site-variabel i common.sh.
+  * Nyt script: scripts/setup-dtu-auto-update_Version4.sh.
+  * TPM2-enroll understøtter nu passphrase via miljøvariablen DTU_LUKS_PASSPHRASE.
+  * DTU_LUKS_PASSPHRASE markeret som sensitiv variabel i env_loader.py.
+  * Opdateret site.conf.example og dtu-ait.env / dtu-sustain.env.
+
+ -- DTU Sustain IT <support@sustain.dtu.dk>  Tue, 15 Jul 2026 12:00:00 +0200
+
 dtu-sustain-setup (1.2.1-1) noble; urgency=medium
 
   * TPM2 Auto-Unlock now supports passphrase prompts even without an
