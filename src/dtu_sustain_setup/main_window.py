@@ -6,18 +6,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from PyQt6.QtCore import QProcess, Qt
+from PyQt6.QtCore import QProcess, Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QComboBox,
     QFileDialog,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -42,6 +47,7 @@ class ModuleDef:
     needs_root: bool
     input_type: str  # "none", "credentials", "username", "domain_join"
     icon_name: str
+    script_type: str = "admin"  # "admin" or "user"
     enabled: bool = True
     common_script: bool = False
 
@@ -64,6 +70,7 @@ MODULES: list[ModuleDef] = [
         needs_root=True,
         input_type="credentials",
         icon_name="folder-remote",
+        script_type="user",
     ),
     ModuleDef(
         id="defender",
@@ -91,6 +98,7 @@ MODULES: list[ModuleDef] = [
         needs_root=True,
         input_type="credentials",
         icon_name="printer",
+        script_type="user",
     ),
     ModuleDef(
         id="wifi",
@@ -127,6 +135,17 @@ MODULES: list[ModuleDef] = [
         needs_root=True,
         input_type="none",
         icon_name="folder-download",
+        script_type="user",
+        common_script=True,
+    ),
+    ModuleDef(
+        id="auto-update-setup",
+        title="Auto Update Setup",
+        description="Install daily automatic updates\n(for DTU Sustain + AIT)",
+        script_name="setup-dtu-auto-update_Version4.sh",
+        needs_root=True,
+        input_type="none",
+        icon_name="system-software-update",
         common_script=True,
     ),
     ModuleDef(
@@ -180,6 +199,83 @@ USER_BADGE = "#339933"
 
 # ─── Main Window ────────────────────────────────────────────────────────────
 
+class ModuleCard(QFrame):
+    """Clickable module card with title, role badge, and description."""
+
+    clicked = pyqtSignal()
+
+    def __init__(self, mod: ModuleDef):
+        super().__init__()
+        self._hover_border = "#98a2b3"
+
+        self.setObjectName("moduleCard")
+        self.setFixedHeight(104)
+        self.setMinimumWidth(210)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._apply_default_style()
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 9, 12, 9)
+        layout.setSpacing(4)
+
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(6)
+
+        title_label = QLabel(mod.title)
+        title_label.setStyleSheet("color: #1f2937; font-size: 13px; font-weight: 600;")
+        title_row.addWidget(title_label)
+
+        badge = QLabel("ADMIN" if mod.script_type == "admin" else "USER")
+        if mod.script_type == "admin":
+            badge.setStyleSheet(
+                "QLabel { color: #b42318; font-size: 10px; font-weight: 700; }"
+            )
+        else:
+            badge.setStyleSheet(
+                "QLabel { color: #475467; font-size: 10px; font-weight: 700; }"
+            )
+        title_row.addWidget(badge)
+        title_row.addStretch()
+        layout.addLayout(title_row)
+
+        desc_label = QLabel(mod.description)
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("color: #667085; font-size: 11px;")
+        layout.addWidget(desc_label)
+
+    def _apply_default_style(self) -> None:
+        self.setStyleSheet(
+            "QFrame { background: #ffffff; border: 1px solid #d0d5dd; border-radius: 8px; }"
+            "QFrame QLabel { border: none; }"
+            f"QFrame:hover {{ border-color: {self._hover_border}; background: #fcfcfd; }}"
+        )
+
+    def set_result(self, success: bool) -> None:
+        """Highlight card based on latest run result."""
+        border = "#66a48a" if success else "#d08c8c"
+        bg = "#f8fbf9" if success else "#fdf8f8"
+        self.setStyleSheet(
+            f"QFrame {{ background: {bg}; border: 1px solid {border}; border-radius: 8px; }}"
+            "QFrame QLabel { border: none; }"
+        )
+
+    def setEnabled(self, enabled: bool) -> None:
+        """Keep visual style aligned with enabled state."""
+        super().setEnabled(enabled)
+        if enabled:
+            self._apply_default_style()
+        else:
+            self.setStyleSheet(
+                "QFrame { background: #f8f9fb; border: 1px solid #e4e7ec; border-radius: 8px; }"
+                "QFrame QLabel { border: none; }"
+            )
+
+    def mousePressEvent(self, event) -> None:
+        if self.isEnabled() and event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -190,7 +286,8 @@ class MainWindow(QMainWindow):
         self._runner.output_received.connect(self._append_log)
         self._runner.finished.connect(self._on_module_finished)
         self._runner.failed.connect(self._on_module_failed)
-        self._module_buttons: dict[str, QPushButton] = {}
+        self._module_buttons: dict[str, QWidget] = {}
+        self._module_tab_for_mod: dict[str, str] = {}
         # Pre-loaded answers from an env file (see _load_env_file).
         self._env_overrides: dict[str, str] = {}
         self._env_source: Path | None = None
@@ -208,8 +305,9 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
-        main_layout.setSpacing(12)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(14)
+        main_layout.setContentsMargins(22, 22, 22, 22)
+        central.setStyleSheet("background: #fafafa;")
 
         # ── Header ──────────────────────────────────────────────────────
         header = QHBoxLayout()
@@ -290,33 +388,71 @@ class MainWindow(QMainWindow):
             warn_label.setWordWrap(True)
             main_layout.addWidget(warn_label)
 
-        # ── Module grid ─────────────────────────────────────────────────
-        grid = QGridLayout()
-        grid.setSpacing(10)
+        section_label = QLabel("Modules")
+        section_label.setStyleSheet(
+            f"color: {DTU_RED}; font-size: 15px; font-weight: 700; margin-top: 4px;"
+        )
+        main_layout.addWidget(section_label)
 
-        for i, mod in enumerate(MODULES):
+        # ── Module grid tabs ────────────────────────────────────────────
+        self._module_tabs = QTabWidget()
+        self._module_tabs.setStyleSheet(
+            "QTabWidget::pane { border: 1px solid #d0d7e2; border-radius: 8px; background: #fff; }"
+            "QTabBar::tab { background: #f3f4f6; color: #374151; padding: 7px 14px; "
+            "border: 1px solid #d0d7e2; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; font-weight: 500; }"
+            f"QTabBar::tab:selected {{ background: #ffffff; color: {DTU_RED}; font-weight: 600; }}"
+            "QTabBar::tab:!selected:hover { background: #eceff3; }"
+        )
+
+        self._module_containers: dict[str, QWidget] = {}
+        self._module_grids: dict[str, QGridLayout] = {}
+
+        for key, title in (("admin", "Admin Scripts"), ("user", "User Scripts")):
+            tab = QWidget()
+            tab_layout = QVBoxLayout(tab)
+            tab_layout.setContentsMargins(8, 8, 8, 8)
+
+            container = QWidget()
+            grid = QGridLayout(container)
+            grid.setHorizontalSpacing(12)
+            grid.setVerticalSpacing(12)
+            self._module_containers[key] = container
+            self._module_grids[key] = grid
+
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(scroll.Shape.NoFrame)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroll.setWidget(container)
+            tab_layout.addWidget(scroll)
+            self._module_tabs.addTab(tab, title)
+
+        for mod in MODULES:
             btn = self._create_module_button(mod)
             if not mod.enabled:
                 btn.setEnabled(False)
                 btn.setToolTip("This module has been disabled.")
             self._module_buttons[mod.id] = btn
-            row, col = divmod(i, 3)
-            grid.addWidget(btn, row, col)
+            self._module_tab_for_mod[mod.id] = mod.script_type
 
-        main_layout.addLayout(grid)
+        main_layout.addWidget(self._module_tabs, 1)
+        self._rebuild_module_grid()
+        self._module_tabs.currentChanged.connect(self._update_run_all_button_label)
 
         # ── Action bar ──────────────────────────────────────────────────
         action_bar = QHBoxLayout()
 
         run_all_btn = QPushButton("▶  Run All Admin Modules")
         run_all_btn.setStyleSheet(
-            f"QPushButton {{ background: {DTU_RED}; color: white; font-weight: bold; "
-            f"padding: 10px 20px; border-radius: 6px; font-size: 14px; }}"
+            f"QPushButton {{ background: {DTU_RED}; color: white; font-weight: 700; "
+            f"padding: 9px 18px; border-radius: 8px; font-size: 13px; border: 1px solid {DTU_RED_DARK}; }}"
             f"QPushButton:hover {{ background: {DTU_RED_DARK}; }}"
-            f"QPushButton:disabled {{ background: #ccc; color: #888; }}"
+            "QPushButton:pressed { padding-top: 11px; padding-bottom: 9px; }"
+            f"QPushButton:disabled {{ background: #ccc; color: #888; border-color: #bbb; }}"
         )
-        run_all_btn.clicked.connect(self._run_all_admin)
+        run_all_btn.clicked.connect(self._run_all_for_active_tab)
         self._run_all_btn = run_all_btn
+        self._update_run_all_button_label()
         action_bar.addWidget(run_all_btn)
 
         load_env_btn = QPushButton("☰  Load env file…")
@@ -325,9 +461,10 @@ class MainWindow(QMainWindow):
             "Modules with all required variables already set will not show input dialogs."
         )
         load_env_btn.setStyleSheet(
-            "QPushButton { padding: 10px 16px; border-radius: 6px; font-size: 13px; "
-            "background: #f0f0f0; color: #222; border: 1px solid #bbb; }"
-            "QPushButton:hover { background: #e0e0e0; }"
+            "QPushButton { padding: 9px 14px; border-radius: 8px; font-size: 13px; "
+            "background: #f9fafb; color: #374151; border: 1px solid #d1d5db; font-weight: 600; }"
+            "QPushButton:hover { background: #f3f4f6; }"
+            "QPushButton:pressed { padding-top: 11px; padding-bottom: 9px; }"
         )
         load_env_btn.clicked.connect(self._load_env_file)
         action_bar.addWidget(load_env_btn)
@@ -337,10 +474,11 @@ class MainWindow(QMainWindow):
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setEnabled(False)
         cancel_btn.setStyleSheet(
-            "QPushButton { padding: 10px 20px; border-radius: 6px; font-size: 14px; "
-            "background: #e0e0e0; color: #333; border: 1px solid #bbb; }"
-            "QPushButton:hover { background: #d0d0d0; }"
-            "QPushButton:disabled { background: #555; color: #888; border-color: #666; }"
+            "QPushButton { padding: 9px 18px; border-radius: 8px; font-size: 13px; "
+            "background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; font-weight: 600; }"
+            "QPushButton:hover { background: #e9edf2; }"
+            "QPushButton:pressed { padding-top: 11px; padding-bottom: 9px; }"
+            "QPushButton:disabled { background: #eceff3; color: #98a2b3; border-color: #d8dde6; }"
         )
         cancel_btn.clicked.connect(self._cancel_running)
         self._cancel_btn = cancel_btn
@@ -393,27 +531,61 @@ class MainWindow(QMainWindow):
                 return p
         return None
 
-    def _create_module_button(self, mod: ModuleDef) -> QPushButton:
-        """Create a styled button for a module."""
-        badge = "ADMIN" if mod.needs_root else "USER"
-        badge_color = ADMIN_BADGE if mod.needs_root else USER_BADGE
+    def _create_module_button(self, mod: ModuleDef) -> QWidget:
+        """Create a styled card for a module."""
+        card = ModuleCard(mod)
+        card.clicked.connect(lambda m=mod: self._run_module(m))
+        return card
 
-        btn = QPushButton()
-        btn.setMinimumSize(220, 100)
-        btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    def _rebuild_module_grid(self) -> None:
+        """Rebuild tabbed module grids with responsive column count."""
+        if not hasattr(self, "_module_grids"):
+            return
 
-        btn.setText(f"{mod.title}\n{mod.description}")
-        btn.setStyleSheet(
-            f"QPushButton {{"
-            f"  text-align: left; padding: 12px; border: 2px solid #ddd;"
-            f"  border-radius: 8px; font-size: 12px; background: white; color: #222;"
-            f"}}"
-            f"QPushButton:hover {{ border-color: {DTU_RED}; background: #fff5f5; color: #222; }}"
-            f"QPushButton:disabled {{ background: #f0f0f0; color: #aaa; border-color: #eee; }}"
-        )
+        for tab_key, grid in self._module_grids.items():
+            for btn in self._module_buttons.values():
+                grid.removeWidget(btn)
 
-        btn.clicked.connect(lambda checked, m=mod: self._run_module(m))
-        return btn
+            available_width = max(320, self._module_containers[tab_key].width() - 12)
+            preferred_card_width = 300
+            max_columns = 3
+            columns = max(1, min(max_columns, available_width // preferred_card_width))
+
+            tab_modules = [
+                m for m in MODULES if self._module_tab_for_mod.get(m.id) == tab_key
+            ]
+            for i, mod in enumerate(tab_modules):
+                btn = self._module_buttons[mod.id]
+                row, col = divmod(i, columns)
+                grid.addWidget(btn, row, col)
+
+            for col in range(columns):
+                grid.setColumnStretch(col, 1)
+
+    def resizeEvent(self, event) -> None:
+        """Keep module layout tidy when window size changes."""
+        super().resizeEvent(event)
+        self._rebuild_module_grid()
+
+    def _active_script_tab(self) -> str:
+        """Return active module tab key."""
+        return "user" if self._module_tabs.currentIndex() == 1 else "admin"
+
+    def _update_run_all_button_label(self) -> None:
+        """Sync the run-all button text with the active scripts tab."""
+        if not hasattr(self, "_run_all_btn"):
+            return
+        if self._active_script_tab() == "user":
+            self._run_all_btn.setText("▶  Run All User Scripts")
+        else:
+            self._run_all_btn.setText("▶  Run All Admin Modules")
+
+    def _run_all_for_active_tab(self) -> None:
+        """Run all modules from the currently selected scripts tab."""
+        if self._active_script_tab() == "user":
+            self._run_all_user()
+        else:
+            self._run_all_admin()
 
     def _run_module(self, mod: ModuleDef) -> None:
         """Collect input and start a module."""
@@ -423,10 +595,7 @@ class MainWindow(QMainWindow):
             )
             return
 
-        if mod.common_script:
-            script = self._scripts_dir.parent / mod.script_name
-        else:
-            script = self._scripts_dir / mod.script_name
+        script = self._resolve_script_path(mod)
         if not script.exists():
             QMessageBox.critical(
                 self, "Script Missing",
@@ -504,6 +673,26 @@ class MainWindow(QMainWindow):
             if cisco_tarball:
                 env_vars["DTU_CISCO_TARBALL"] = cisco_tarball
 
+        if mod.id == "tpm2-enroll":
+            luks_passphrase = self._env_overrides.get("DTU_LUKS_PASSPHRASE", "")
+            if not luks_passphrase:
+                luks_passphrase, ok = QInputDialog.getText(
+                    self,
+                    "TPM2 Auto-Unlock",
+                    "Enter your existing LUKS passphrase:",
+                    QLineEdit.EchoMode.Password,
+                )
+                if not ok:
+                    return
+            if not luks_passphrase:
+                QMessageBox.warning(
+                    self,
+                    "Missing passphrase",
+                    "A LUKS passphrase is required to continue TPM2 enrollment.",
+                )
+                return
+            env_vars["DTU_LUKS_PASSPHRASE"] = luks_passphrase
+
         env_vars["DTU_DEPARTMENT"] = self._dept_combo.currentData()
         self._set_running(True)
         self.statusBar().showMessage(f"Running: {mod.title}...")
@@ -580,7 +769,9 @@ class MainWindow(QMainWindow):
                 return
 
         self._queued_modules = [
-            m for m in MODULES if m.enabled and m.id not in DEFERRED_MODULES
+            m
+            for m in MODULES
+            if m.enabled and m.script_type == "admin" and m.id not in DEFERRED_MODULES
         ]
         self._running_admin_batch = True
         self._admin_batch_cancelled = False
@@ -604,6 +795,47 @@ class MainWindow(QMainWindow):
 
         self._run_next_queued()
 
+    def _run_all_user(self) -> None:
+        """Queue all user scripts (runs them sequentially)."""
+        if self._runner.is_running():
+            QMessageBox.warning(self, "Busy", "A module is already running.")
+            return
+
+        user_modules = [m for m in MODULES if m.enabled and m.script_type == "user"]
+        if not user_modules:
+            QMessageBox.information(self, "No user scripts", "No enabled user scripts found.")
+            return
+
+        shared_env: dict[str, str] = {"DTU_DEPARTMENT": self._dept_combo.currentData()}
+
+        needs_credentials = any(m.input_type == "credentials" for m in user_modules)
+        if needs_credentials:
+            user = self._env_overrides.get("DTU_USERNAME", "")
+            pw = self._env_overrides.get("DTU_PASSWORD", "")
+            if not (user and pw):
+                dlg = CredentialDialog(
+                    self,
+                    title="User Scripts – Credentials",
+                    message=(
+                        "Enter your WIN domain credentials for User Scripts "
+                        "(Network Drives / Printers)."
+                    ),
+                )
+                if user:
+                    dlg.username_edit.setText(user)
+                result = dlg.get_credentials()
+                if result is None:
+                    return
+                user, pw = result
+            shared_env["DTU_USERNAME"] = user
+            shared_env["DTU_PASSWORD"] = pw
+
+        self._queued_modules = user_modules
+        self._running_admin_batch = False
+        self._admin_batch_cancelled = False
+        self._shared_env = shared_env
+        self._run_next_queued()
+
     def _run_next_queued(self) -> None:
         """Run the next module in the queue."""
         if not hasattr(self, "_queued_modules") or not self._queued_modules:
@@ -617,10 +849,7 @@ class MainWindow(QMainWindow):
             return
 
         mod = self._queued_modules.pop(0)
-        if mod.common_script:
-            script = self._scripts_dir.parent / mod.script_name
-        else:
-            script = self._scripts_dir / mod.script_name
+        script = self._resolve_script_path(mod)
         if not script.exists():
             self._append_log(f"⚠ Skipping {mod.title}: script not found\n")
             self._run_next_queued()
@@ -635,15 +864,8 @@ class MainWindow(QMainWindow):
     def _on_module_finished(self, success: bool, module_id: str) -> None:
         """Handle module completion."""
         btn = self._module_buttons.get(module_id)
-        if btn:
-            color = "#d4edda" if success else "#f8d7da"
-            border = "#28a745" if success else "#dc3545"
-            btn.setStyleSheet(
-                f"QPushButton {{ text-align: left; padding: 12px; "
-                f"border: 2px solid {border}; border-radius: 8px; "
-                f"font-size: 12px; background: {color}; color: #222; }}"
-                f"QPushButton:hover {{ border-color: {DTU_RED}; }}"
-            )
+        if isinstance(btn, ModuleCard):
+            btn.set_result(success)
 
         # If we have queued modules, run the next one
         if hasattr(self, "_queued_modules") and self._queued_modules:
@@ -709,6 +931,12 @@ class MainWindow(QMainWindow):
                 btn.setEnabled(False)
             else:
                 btn.setEnabled(not running)
+
+    def _resolve_script_path(self, mod: ModuleDef) -> Path:
+        """Resolve script location based on module type."""
+        if mod.common_script:
+            return self._scripts_dir.parent / mod.script_name
+        return self._scripts_dir / mod.script_name
 
     def _load_env_file(self) -> None:
         """Open a file picker, parse a KEY=VALUE env file and pre-fill prompts."""

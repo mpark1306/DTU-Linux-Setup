@@ -32,8 +32,13 @@ SITE_USERS_BASE="Users"                                  # AIT: Users0..Users9 l
 SITE_SUSTAIN_Q_SHARE="Qdrev/SUS"
 SITE_SUSTAIN_P_SUBPATH="Qdrev/SUS/Personal"      # + /<username>
 
+# M-Drive (personal home, Users0..Users9). Central drive mounted for both
+# AIT and Sustain. Server + top share (literal $ in the share name).
+SITE_MDRIVE_SERVER="<qumulo-server>"             # host serving personal homes
+SITE_MDRIVE_BASE="Users$"                        # top share holding Users0..9
+
 # AIT share defaults (override per department in /etc/dtu-setup/drives.conf)
-SITE_AIT_O_SHARE=""                              # set per department
+SITE_AIT_O_SHARE="2adm$/AIT"                     # fixed shared dept O-Drive
 
 # ─── Printing ────────────────────────────────────────────────────────────────
 SITE_PRINT_SERVER="konfigureret via site.conf"         # CUPS/SMB FollowMe (Sustain)

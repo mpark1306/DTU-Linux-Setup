@@ -41,14 +41,16 @@ prompt_secret() {
   local prompt="$1"
   local value=""
 
-  if [[ -t 0 ]]; then
+  if [[ -n "${DTU_LUKS_PASSPHRASE:-}" ]]; then
+    value="$DTU_LUKS_PASSPHRASE"
+  elif [[ -t 0 ]]; then
     read -rsp "$prompt: " value
     echo
   elif command -v zenity >/dev/null 2>&1 && [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
     value="$(zenity --password --title="TPM2 Auto-Unlock" --text="$prompt")" \
       || die "Passphrase prompt was cancelled."
   elif command -v systemd-ask-password >/dev/null 2>&1; then
-    value="$(systemd-ask-password "$prompt")" || die "Passphrase prompt failed."
+    value="$(systemd-ask-password --timeout=0 "$prompt")" || die "Passphrase prompt failed."
   else
     die "No interactive passphrase prompt available. Run this script from a terminal."
   fi
@@ -69,6 +71,7 @@ ensure_existing_passphrase_file() {
   EXISTING_PASSPHRASE_FILE="$(mktemp)"
   chmod 600 "$EXISTING_PASSPHRASE_FILE"
   printf '%s' "$passphrase" > "$EXISTING_PASSPHRASE_FILE"
+  unset DTU_LUKS_PASSPHRASE
   unset passphrase
 
   if cryptsetup luksOpen --test-passphrase --key-file "$EXISTING_PASSPHRASE_FILE" "$dev" 2>/dev/null; then

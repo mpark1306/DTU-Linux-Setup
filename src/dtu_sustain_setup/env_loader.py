@@ -25,12 +25,13 @@ KNOWN_VARS: tuple[str, ...] = (
     "DTU_ADMIN_USERNAME",
     "DTU_USERNAME",
     "DTU_PASSWORD",
+    "DTU_LUKS_PASSPHRASE",
     "DTU_SOFTWARE_CONF",
     "DTU_CISCO_TARBALL",
 )
 
 # Variables that should never be displayed in their entirety.
-SECRET_VARS: frozenset[str] = frozenset({"DTU_PASSWORD"})
+SECRET_VARS: frozenset[str] = frozenset({"DTU_PASSWORD", "DTU_LUKS_PASSPHRASE"})
 
 
 @dataclass

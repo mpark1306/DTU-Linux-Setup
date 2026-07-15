@@ -49,6 +49,11 @@ load_site_conf() {
   : "${SITE_SUSTAIN_P_SUBPATH:=Qdrev/SUS/Personal}"
   : "${SITE_AIT_O_SHARE:=}"
 
+  # M-Drive (personal home, Users0..Users9). Central drive shared by all
+  # departments — server defaults to SITE_FILE_SERVER, top share to "Users$".
+  : "${SITE_MDRIVE_SERVER:=${SITE_FILE_SERVER}}"
+  : "${SITE_MDRIVE_BASE:=Users\$}"
+
   # Printing
   : "${SITE_PRINT_SERVER:=konfigureret via site.conf}"
   : "${SITE_WEBPRINT_URL:=https://webprint.dtu.dk}"
@@ -67,6 +72,7 @@ load_site_conf() {
   export SITE_AD_DOMAIN SITE_AD_REALM SITE_AD_ADMIN_GROUP
   export SITE_FILE_SERVER SITE_FILE_SERVER_QUMULO SITE_USERS_BASE
   export SITE_SUSTAIN_Q_SHARE SITE_SUSTAIN_P_SUBPATH SITE_AIT_O_SHARE
+  export SITE_MDRIVE_SERVER SITE_MDRIVE_BASE
   export SITE_PRINT_SERVER SITE_WEBPRINT_URL
   export SITE_WIFI_SSID SITE_WIFI_IDENTITY_SUFFIX
   export SITE_DEFENDER_ONBOARDING_URL
@@ -123,6 +129,83 @@ apt_wait() {
       return 1
     fi
   done
+}
+
+# ─── CIFS mount helpers ─────────────────────────────────────────────────────
+# Shared logic for the personal M-Drive (Users0..9 auto-discovery) and any
+# fixed CIFS share, used by both the AIT and Sustain profiles on Ubuntu and
+# openSUSE. Mirrors the proven approach from mount-mdrive-kubuntu.sh:
+#   • real short-lived test-mounts to locate/verify a share (not smbclient ls)
+#   • vers=3.0/ntlmssp/nodfs options that avoid the kernel DFS-referral bug
+#   • systemd automount with nofail + idle-timeout so boot never hangs
+CIFS_MOUNT_OPTS="vers=3.0,sec=ntlmssp,nosharesock,nodfs,iocharset=utf8,serverino"
+CIFS_SYSTEMD_OPTS="_netdev,nofail,x-systemd.automount,x-systemd.idle-timeout=600,x-systemd.mount-timeout=30"
+
+# cifs_test_mount SERVER SHARE_PATH CREDS_FILE UID GID
+# Attempts a short-lived CIFS mount to verify a share path is reachable.
+# Returns 0 if it mounts (and cleanly unmounts), 1 otherwise.
+cifs_test_mount() {
+  local server="$1" path="$2" creds="$3" uid="$4" gid="$5"
+  local tmp; tmp="$(mktemp -d /tmp/dtu-probe.XXXXXX)"
+  if mount -t cifs "//${server}/${path}" "$tmp" \
+       -o "credentials=${creds},uid=${uid},gid=${gid},${CIFS_MOUNT_OPTS}" \
+       >/dev/null 2>&1; then
+    umount "$tmp" 2>/dev/null || umount -l "$tmp" 2>/dev/null || true
+    rmdir "$tmp" 2>/dev/null || true
+    return 0
+  fi
+  rmdir "$tmp" 2>/dev/null || true
+  return 1
+}
+
+# cifs_setup_share SERVER SHARE_PATH MOUNTPOINT CREDS_FILE UID GID
+# Creates the mountpoint and writes/refreshes a single /etc/fstab line using
+# the shared CIFS + systemd automount options. Any prior line for the same
+# mountpoint is removed first, and the share is unmounted for a clean state.
+cifs_setup_share() {
+  local server="$1" path="$2" mp="$3" creds="$4" uid="$5" gid="$6"
+  local fstab="/etc/fstab"
+  mkdir -p "$mp"
+  chown "$uid:$gid" "$mp"
+  chmod 0770 "$mp"
+  local line="//${server}/${path}  ${mp}  cifs  credentials=${creds},uid=${uid},gid=${gid},dir_mode=0770,file_mode=0660,${CIFS_MOUNT_OPTS},${CIFS_SYSTEMD_OPTS}  0  0"
+  sed -i "\|[[:space:]]${mp}[[:space:]].*cifs|d" "$fstab" 2>/dev/null || true
+  printf '%s\n' "$line" >> "$fstab"
+  if mount | grep -qE "[[:space:]]${mp}[[:space:]]"; then
+    umount "$mp" 2>/dev/null || umount -l "$mp" 2>/dev/null || true
+  fi
+}
+
+# cifs_start_automount MOUNTPOINT
+# (Re)starts the systemd automount unit derived from the mountpoint path.
+cifs_start_automount() {
+  local mp="$1" unit
+  unit="$(systemd-escape -p --suffix=automount "$mp")"
+  systemctl restart "$unit" 2>/dev/null || systemctl start "$unit" || true
+}
+
+# cifs_find_mdrive_subdir SERVER USERS_BASE USERNAME CREDS_FILE UID GID CACHE_FILE
+# Locates the user's personal M-Drive folder by test-mounting
+# USERS_BASE/Users0..Users9/USERNAME, honouring a cache file. Echoes the
+# matching subdir (e.g. "Users7") on stdout and returns 0; returns 1 if none.
+cifs_find_mdrive_subdir() {
+  local server="$1" base="$2" user="$3" creds="$4" uid="$5" gid="$6" cache="$7"
+  local d cached
+  if [[ -f "$cache" ]]; then
+    cached="$(cat "$cache")"
+    if cifs_test_mount "$server" "${base}/${cached}/${user}" "$creds" "$uid" "$gid"; then
+      printf '%s' "$cached"; return 0
+    fi
+  fi
+  for d in Users0 Users1 Users2 Users3 Users4 Users5 Users6 Users7 Users8 Users9; do
+    if cifs_test_mount "$server" "${base}/${d}/${user}" "$creds" "$uid" "$gid"; then
+      mkdir -p "$(dirname "$cache")"
+      printf '%s' "$d" > "$cache"
+      chown -R "$uid:$gid" "$(dirname "$cache")"
+      printf '%s' "$d"; return 0
+    fi
+  done
+  return 1
 }
 
 # ─── Resolve SCRIPT_DIR ─────────────────────────────────────────────────────
