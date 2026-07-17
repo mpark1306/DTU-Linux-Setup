@@ -102,7 +102,66 @@ Ved første start (eller via dropdown'en i toppen af GUI'en) vælges den institu
 | **Privilegier**| `policykit-1`       | `polkit`            |
 | **Shell**      | `bash`              | `bash`              |
 
-### Ubuntu 24.04
+Der er tre måder at installere på: **A) hurtig curl one-liner** (nyeste version), **B) færdige pakker fra GitHub Releases**, eller **C) manuel installation fra kildekode**.
+
+---
+
+### A) Hurtig install (curl one-liner)
+
+Henter og installerer nyeste version direkte fra GitHub — ingen git eller GitHub-konto nødvendig. Samme kommando opdaterer også en eksisterende installation.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mpark1306/DTU-Linux-Setup/main/bin/dtu-install.sh | sudo bash
+```
+
+Virker på både Ubuntu og openSUSE — manglende byggeværktøjer (`tar`, `make`) installeres automatisk. Du skal stadig selv installere GUI-afhængighederne (`python3-pyqt6` / `python3-qt6`) hvis de ikke allerede er til stede.
+
+> **Vælg en bestemt branch:** `curl -fsSL <url> | sudo BRANCH=main bash`
+
+---
+
+### B) Installér fra GitHub Releases
+
+Hver release på [GitHub Releases](https://github.com/mpark1306/DTU-Linux-Setup/releases/latest) indeholder færdigbyggede pakker:
+
+- `dtu-sustain-setup_<version>_all.deb` — Ubuntu
+- `dtu-sustain-setup-<version>-1.*.noarch.rpm` — openSUSE/Fedora
+- `sha256sums.txt` — checksums til verifikation
+
+#### Ubuntu 24.04
+
+```bash
+# Installér afhængigheder
+sudo apt update
+sudo apt install kde-standard python3 python3-pyqt6 policykit-1
+
+# Hent nyeste DEB-pakke fra Releases og installér
+VERSION=1.3.0
+curl -fsSLO "https://github.com/mpark1306/DTU-Linux-Setup/releases/download/v${VERSION}/dtu-sustain-setup_${VERSION}_all.deb"
+sudo apt install "./dtu-sustain-setup_${VERSION}_all.deb"
+```
+
+#### openSUSE Tumbleweed
+
+```bash
+# Installér afhængigheder
+sudo zypper install python3-qt6 polkit
+
+# Hent nyeste RPM-pakke fra Releases og installér
+VERSION=1.3.0
+curl -fsSLO "https://github.com/mpark1306/DTU-Linux-Setup/releases/download/v${VERSION}/dtu-sustain-setup-${VERSION}-1.fc44.noarch.rpm"
+sudo zypper install "./dtu-sustain-setup-${VERSION}-1.fc44.noarch.rpm"
+```
+
+> **Tip:** Se seneste versionsnummer og de eksakte asset-navne på [Releases-siden](https://github.com/mpark1306/DTU-Linux-Setup/releases/latest).
+
+---
+
+### C) Manuel installation fra kildekode
+
+Klon eller download repo'et og installér direkte, eller byg pakken selv.
+
+#### Ubuntu 24.04
 
 ```bash
 sudo apt update
@@ -111,12 +170,12 @@ sudo apt install kde-standard python3 python3-pyqt6 policykit-1
 # Direkte
 sudo make install
 
-# Eller byg DEB-pakke (anbefalet)
+# Eller byg DEB-pakke selv
 make deb
 sudo dpkg -i dtu-sustain-setup_1.3.0_all.deb
 ```
 
-### openSUSE Tumbleweed
+#### openSUSE Tumbleweed
 
 ```bash
 sudo zypper install python3-qt6 polkit
@@ -124,10 +183,12 @@ sudo zypper install python3-qt6 polkit
 # Direkte
 sudo make install
 
-# Eller byg RPM-pakke
+# Eller byg RPM-pakke selv
 make rpm
 sudo zypper install ~/rpmbuild/RPMS/noarch/dtu-sustain-setup-1.3.0-1.noarch.rpm
 ```
+
+---
 
 ### Afinstallation
 
