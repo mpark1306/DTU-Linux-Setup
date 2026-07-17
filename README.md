@@ -24,6 +24,8 @@ DTU Linux Setup samler alle de manuelle trin en IT-administrator (eller selvbetj
 - Konfigurere **PolicyKit** så domænebrugere må håndtere USB, WiFi og pakker uden adgangskode
 - Installere **Flatpak**, **Snap** og **Cisco Secure Client VPN** efter en redigerbar pakkeliste
 - Sætte **xrdp** (Remote Desktop) op
+- Aktivere **daglige automatiske opdateringer** (Sustain + AIT)
+- Låse LUKS-krypterede diske op automatisk ved boot via **TPM2** (ingen passphrase)
 - Sikre at brugerens **Skrivebord, Dokumenter og Billeder** synkroniseres til netværksdrevet — ingen symlinks, kun rsync ved login og hver time
 - Vise en **first-login welcome-dialog** for nye domænebrugere
 - Diagnosticere fejl med en indbygget **error dialog** (heuristisk klassificering + "Copy Error and Fix"-knap)
@@ -65,7 +67,7 @@ Ved første start (eller via dropdown'en i toppen af GUI'en) vælges den institu
 
 ## Moduler
 
-12 moduler i alt. Alle kræver root og kører via `pkexec`.
+14 moduler i alt (13 synlige + 1 skjult). Alle kræver root og kører via `pkexec`.
 
 | # | Modul | Hvad det gør | Ubuntu | openSUSE |
 |---|---|---|:-:|:-:|
@@ -78,9 +80,11 @@ Ved første start (eller via dropdown'en i toppen af GUI'en) vælges den institu
 | 7 | **Software** | Flatpaks, Snaps & Cisco Secure Client VPN | ✅ | ✅ |
 | 8 | **Auto-mount** | USB automount + udev-regler (ingen symlinks) | ✅ | ✅ |
 | 9 | **Sync Home Dirs** | Backup af Desktop/Documents/Pictures til netværksdrev (rsync, login + timer) | ✅ | ✅ |
-| 10 | **RDP (xrdp)** | Remote Desktop med KDE Plasma over xrdp | ✅ | — |
-| 11 | **First-Login Setup** | Deploy welcome-dialog der vises ved nye domænebrugeres første login | ✅ | ✅ |
-| 12 | **Reset Test User** | (skjult) Fjern domain-user state + home-dir til gen-test | ✅ | ✅ |
+| 10 | **Auto Update Setup** | Daglige automatiske opdateringer (Sustain + AIT) | ✅ | ✅ |
+| 11 | **RDP (xrdp)** | Remote Desktop med KDE Plasma over xrdp | ✅ | — |
+| 12 | **TPM2 Auto-Unlock** | LUKS disk auto-unlock ved boot (TPM2, ingen passphrase) | ✅ | — |
+| 13 | **First-Login Setup** | Deploy welcome-dialog der vises ved nye domænebrugeres første login | ✅ | ✅ |
+| 14 | **Reset Test User** | (skjult) Fjern domain-user state + home-dir til gen-test | ✅ | ✅ |
 
 \* openSUSE Tumbleweed bruger SLES 15-pakker — ikke officielt understøttet af Microsoft.
 
@@ -109,7 +113,7 @@ sudo make install
 
 # Eller byg DEB-pakke (anbefalet)
 make deb
-sudo dpkg -i dtu-sustain-setup_1.0.0_all.deb
+sudo dpkg -i dtu-sustain-setup_1.3.0_all.deb
 ```
 
 ### openSUSE Tumbleweed
@@ -122,7 +126,7 @@ sudo make install
 
 # Eller byg RPM-pakke
 make rpm
-sudo zypper install ~/rpmbuild/RPMS/noarch/dtu-sustain-setup-1.0.0-1.noarch.rpm
+sudo zypper install ~/rpmbuild/RPMS/noarch/dtu-sustain-setup-1.3.0-1.noarch.rpm
 ```
 
 ### Afinstallation
@@ -192,9 +196,13 @@ make run                # Fra kildekode
 │  │ Flatpak/Snap │  │ USB udev     │  │ Dirs         │            │
 │  └──────────────┘  └──────────────┘  └──────────────┘            │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐            │
-│  │ RDP (xrdp)   │  │ First-Login  │            │
-│  │              │  │ Setup        │            │
+│  │ Auto Update  │  │ RDP (xrdp)   │  │ TPM2 Auto-   │            │
+│  │ Setup        │  │              │  │ Unlock       │            │
 │  └──────────────┘  └──────────────┘  └──────────────┘            │
+│  ┌──────────────┐                                                  │
+│  │ First-Login  │                                                  │
+│  │ Setup        │                                                  │
+│  └──────────────┘                                                  │
 │                                                                  │
 │  [ ▶  Run All Admin Modules ]                       [ Cancel ]   │
 │                                                                  │
@@ -309,9 +317,17 @@ Bruger rsync (offline-first) til at sikre at brugerens nøglemapper er synkronis
 
 Synkroniserede mapper: `~/Desktop`, `~/Documents`, `~/Pictures`.
 
+### ⏫ Auto Update Setup
+
+Installerer daglige automatiske opdateringer for både Sustain og AIT (`setup-dtu-auto-update_Version4.sh`, fælles script). Kører distro-passende opdateringsmekanisme (`unattended-upgrades` på Ubuntu / `zypper`-timer på openSUSE).
+
 ### 🖥️ RDP (xrdp) — kun Ubuntu
 
 xrdp på port 3389/tcp med KDE Plasma X11-session, TLS-only, clipboard- og drive-redirection.
+
+### 🔐 TPM2 Auto-Unlock — kun Ubuntu
+
+Enroller LUKS-krypterede diske i maskinens TPM2-chip (`tpm2-enroll.sh`) så disken låses op automatisk ved boot uden at brugeren skal indtaste en passphrase. Se [docs/TPM2-LUKS-fejlfinding.md](docs/TPM2-LUKS-fejlfinding.md) for fejlfinding.
 
 ### 👤 First-Login Setup
 
@@ -340,9 +356,11 @@ org.remmina.Remmina
 us.zoom.Zoom
 com.usebottles.bottles
 io.github.alescdb.mailviewer
+io.gitlab.librewolf-community
+io.github.ungoogled_software.ungoogled_chromium
 
 [snap]
-office365webdesktop
+office365webdesktop --channel=latest/beta
 
 [cisco]
 cisco-secure-client
@@ -436,20 +454,26 @@ DTU-Umbrella/
 │   ├── setup-sync-homedir.sh     # Installerer sync-service
 │   ├── sync-homedir.sh           # Daglig rsync (timer)
 │   ├── sync-homedir-login.sh     # Login-tids rsync (PAM)
+│   ├── setup-dtu-auto-update_Version4.sh  # Daglige auto-opdateringer
 │   ├── reset-test-user.sh        # Genbrug test-bruger
 │   ├── install-software-manual.sh
 │   ├── systemd/
 │   │   ├── sync-homedir.service
-│   │   └── sync-homedir.timer
+│   │   ├── sync-homedir.timer
+│   │   ├── mdatp-quick-scan.service
+│   │   └── mdatp-quick-scan.timer
 │   ├── ubuntu/                   # Ubuntu modul-scripts
 │   │   ├── domain-join.sh
 │   │   ├── qdrive.sh
 │   │   ├── defender.sh
 │   │   ├── polkit.sh
 │   │   ├── followme.sh           # Sustain CUPS / AIT WebPrint
+│   │   ├── wifi.sh
+│   │   ├── onedrive.sh
 │   │   ├── automount.sh
 │   │   ├── software.sh
 │   │   ├── rdp.sh
+│   │   ├── tpm2-enroll.sh        # TPM2 LUKS auto-unlock
 │   │   └── first-login-deploy.sh
 │   └── opensuse/                 # openSUSE modul-scripts
 │       ├── domain-join.sh
@@ -457,6 +481,8 @@ DTU-Umbrella/
 │       ├── defender.sh
 │       ├── polkit.sh
 │       ├── followme.sh
+│       ├── wifi.sh
+│       ├── onedrive.sh
 │       ├── automount.sh
 │       └── software.sh
 ├── data/
@@ -470,7 +496,9 @@ DTU-Umbrella/
 ├── packaging/
 │   ├── debian/                   # DEB-pakke
 │   └── rpm/                      # RPM spec
-├── docs/GUIDE.md                 # Brugerguide
+├── docs/
+│   ├── GUIDE.md                  # Brugerguide
+│   └── TPM2-LUKS-fejlfinding.md  # TPM2 auto-unlock fejlfinding
 ├── Makefile                      # build / install / deb / rpm
 ├── pyproject.toml
 └── README.md
@@ -502,7 +530,7 @@ make rpm   # openSUSE
    - Brug `banner`, `ok`, `warn`, `fail` helpers
    - Branch på `$DTU_DEPARTMENT` hvis adfærden afhænger af profilen
 2. **Registrer i GUI:** Tilføj en `ModuleDef` til `MODULES`-listen i [`main_window.py`](src/dtu_sustain_setup/main_window.py)
-3. **Vælg `input_type`:** `none`, `credentials`, `username`, `password`, `domain_join`, eller `software`
+3. **Vælg `input_type`:** `none`, `credentials`, `username`, `domain_join`, eller `software`
 4. **(Valgfrit)** Tilføj nye fejlmønstre i [`error_dialog.py`](src/dtu_sustain_setup/error_dialog.py)
 
 ### Tilføj standard-software
