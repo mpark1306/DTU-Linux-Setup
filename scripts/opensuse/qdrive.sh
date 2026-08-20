@@ -126,17 +126,16 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 DOMAIN="WIN"
 # Prefer direct Qumulo target to avoid DFS referral issues on newer kernels.
-if [[ -n "${SITE_FILE_SERVER_QUMULO:-}" ]]; then
-  SERVER="${SITE_FILE_SERVER_QUMULO}"
-  Q_SHARE_PATH='sus-q$'
-  P_SHARE_PATH='sus-q$/Personal/'"${USERNAME}"
-  CIFS_OPTS="vers=3.0,sec=ntlmssp,nosharesock,nodfs"
-else
-  SERVER="${SITE_FILE_SERVER}"
-  Q_SHARE_PATH="${SITE_SUSTAIN_Q_SHARE}"
-  P_SHARE_PATH="${SITE_SUSTAIN_P_SUBPATH}/${USERNAME}"
-  CIFS_OPTS="serverino"
+# Prefer the direct Qumulo target; fall back to the DFS root when Qumulo
+# isn't reachable on the current network (DTUSecure WiFi and some VPN
+# profiles cannot route to it — see dtu-drives-reselect.sh, which re-picks
+# the target automatically whenever the network changes).
+if ! sustain_pick_target "$USERNAME"; then
+  fail "Neither Qumulo (${SITE_FILE_SERVER_QUMULO:-unset}) nor the DFS root (${SITE_FILE_SERVER}) is reachable on port 445 right now."
+  fail "Check network/VPN and re-run this module."
+  exit 1
 fi
+ok "Using ${TARGET_LABEL} target: //${SERVER}"
 MOUNTPOINT="/mnt/Qdrev"
 P_MOUNTPOINT="/mnt/Personal"
 CREDS_FILE="/home/$USERNAME/.smbcred-<fileserver>"
@@ -239,10 +238,14 @@ mkdir -p "$DTU_SETUP_DIR"
 echo "sustain" > "${DTU_SETUP_DIR}/department"
 cat > "${DTU_SETUP_DIR}/drives.conf" <<DCONF
 DEPARTMENT=sustain
+USERNAME=${USERNAME}
+TARGET=${TARGET_LABEL}
 MOUNT_POINT=${MOUNTPOINT}
 REMOTE_BASE=${MOUNTPOINT}/Personal/${USERNAME}
 DCONF
 chmod 644 "${DTU_SETUP_DIR}/drives.conf"
+
+"${SCRIPT_DIR}/../deploy-drives-autoswitch.sh"
 
 ok "Q-Drive & P-Drive configured."
 echo "    fstab: x-systemd.automount (auto-mounts on access)"
@@ -253,3 +256,4 @@ if [[ -n "${M_SUBDIR:-}" ]]; then
 fi
 echo "    Local home folders are NOT symlinked — synced by sync-homedir."
 echo "    A Konsole window will verify the mount on first login."
+echo "    Target auto-switches between Qumulo-direct and DFS-root on network change."

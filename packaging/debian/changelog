@@ -1,3 +1,29 @@
+dtu-sustain-setup (1.4.0-1) noble; urgency=medium
+
+  * Rettet SSSD nss/pam socket-activation crash-loop (sssd-nss.socket,
+    sssd-pam.socket, sssd-pac.service) i domain-join.sh for Ubuntu og
+    openSUSE.
+  * Rettet Microsoft Defender Network Protection, der fejlede permanent med
+    "unsupported release ring" på Production-kanalen — NP_MODE default
+    ændret fra audit til disabled i defender.sh (Ubuntu + openSUSE).
+  * Rettet PolicyKit domain-user-reglen (48-domain-users.rules), som kun
+    matchede "Domain Users" med stort forbogstav — SSSD kan resolve
+    AD-gruppen som "domain users". Rettet i polkit.sh (Ubuntu + openSUSE)
+    og xrdp color-manager-reglen i rdp.sh.
+  * load_site_conf() i common.sh: kalderens DTU_DEPARTMENT-værdi vinder nu
+    altid over en eventuel værdi i site.conf.
+  * Fjernet en fejlagtig Homebrew-installation fra dtu-first-login.sh.
+  * Fjernet to forældede, ubrugte monolitiske scripts (dtu-setup-ubuntu.sh,
+    dtu-setup-opensuse-tw.sh).
+  * Normaliseret executable-bit på alle scripts.
+  * Nyt modul: "Repair Home Folders" (repair-user-folders.sh).
+  * Ny Qumulo-direct/DFS-root fallback-logik til Sustain Q-Drive/P-Drive
+    (cifs_host_up, sustain_pick_target, sustain_write_fstab i common.sh,
+    scripts/dtu-drives-reselect.sh, scripts/deploy-drives-autoswitch.sh,
+    scripts/repair-pdrive.sh).
+
+ -- DTU Sustain IT <support@sustain.dtu.dk>  Thu, 20 Aug 2026 12:00:00 +0200
+
 dtu-sustain-setup (1.3.0-1) noble; urgency=medium
 
   * Ny card-baseret UI til modulvalg i setup-vinduet.

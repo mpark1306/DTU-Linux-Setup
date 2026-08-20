@@ -9,7 +9,10 @@ need_root
 
 banner "Microsoft Defender for Endpoint"
 
-NP_MODE="${NP_MODE:-audit}"
+# Network Protection is only supported on the Insiders Slow/Fast channels —
+# this script installs from Production, where it always fails to start
+# ("unsupported release ring") and makes mdatp report unhealthy forever.
+NP_MODE="${NP_MODE:-disabled}"
 
 . /etc/os-release
 echo "[i] Detected: $NAME $VERSION_ID ($PRETTY_NAME)"

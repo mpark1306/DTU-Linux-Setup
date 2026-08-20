@@ -176,6 +176,13 @@ import re
 with open('/etc/sssd/sssd.conf', 'r') as f:
     content = f.read()
 
+# Ubuntu 24.04's sssd-common socket-activates the nss/pam responders
+# (sssd-nss.socket, sssd-pam.socket). realm join's default sssd.conf still
+# lists them on the services= line too, which makes SSSD's monitor race
+# systemd for the same socket and crash-loop (start-limit-hit). Drop the
+# line so responders are purely socket-activated, as intended on 24.04.
+content = re.sub(r'^services\s*=.*\n?', '', content, flags=re.MULTILINE)
+
 # Settings to enforce — order matters for readability
 settings = [
     ('use_fully_qualified_names',      'False'),
@@ -212,6 +219,11 @@ echo "[6/8] Enabling mkhomedir (auto-create home on first login)..."
 pam-auth-update --enable mkhomedir
 
 echo "[7/8] Restarting services..."
+# sssd-pac responder exits immediately with NOTIMPLEMENTED on Ubuntu's SSSD
+# build regardless of config — disable it so it doesn't show as a failed
+# unit; PAC validation isn't needed for the plain AD login flow used here.
+systemctl disable --now sssd-pac.socket sssd-pac.service 2>/dev/null || true
+systemctl reset-failed 2>/dev/null || true
 systemctl restart sssd
 systemctl enable sssd
 

@@ -36,6 +36,15 @@ load_site_conf() {
     source "$default_conf"
   fi
 
+  # site.conf is often installed straight from examples/dtu-ait.env or
+  # dtu-sustain.env, which both hardcode DTU_DEPARTMENT=... themselves. That
+  # would silently override the department the GUI/env file already chose
+  # (e.g. "sustain" script env clobbered by a leftover "ait" in site.conf).
+  # The caller-supplied value always wins.
+  if [[ -n "$dept" ]]; then
+    DTU_DEPARTMENT="$dept"
+  fi
+
   # Active Directory / Kerberos
   : "${SITE_AD_DOMAIN:=WIN.DTU.DK}"
   : "${SITE_AD_REALM:=win.dtu.dk}"
@@ -156,6 +165,72 @@ cifs_test_mount() {
   fi
   rmdir "$tmp" 2>/dev/null || true
   return 1
+}
+
+# cifs_host_up HOST [PORT] [TIMEOUT_SEC]
+# Fast TCP reachability probe (no mount, no extra packages) used to detect
+# whether the current network (wired / DTUSecure WiFi / VPN) can route to
+# a given file server at all before attempting a CIFS mount.
+cifs_host_up() {
+  local host="$1" port="${2:-445}" timeout_s="${3:-3}"
+  timeout "$timeout_s" bash -c "exec 3<>/dev/tcp/${host}/${port}" 2>/dev/null
+}
+
+# sustain_pick_target USERNAME
+# Picks the Q-Drive/P-Drive CIFS target for the Sustain profile based on
+# which server is reachable right now, not just which is configured.
+# DTUSecure WiFi and some VPN profiles cannot route to the Qumulo backend
+# directly, so falling back to the DFS root keeps Q-Drive (and best-effort
+# P-Drive) working there instead of failing outright. Sets SERVER,
+# Q_SHARE_PATH, P_SHARE_PATH, CIFS_OPTS, TARGET_LABEL. Returns 1 if neither
+# server is reachable.
+sustain_pick_target() {
+  local user="$1"
+  if [[ -n "${SITE_FILE_SERVER_QUMULO:-}" ]] && cifs_host_up "$SITE_FILE_SERVER_QUMULO"; then
+    SERVER="$SITE_FILE_SERVER_QUMULO"
+    Q_SHARE_PATH='sus-q$'
+    P_SHARE_PATH='sus-q$/Personal/'"${user}"
+    CIFS_OPTS="vers=3.0,sec=ntlmssp,nosharesock,nodfs"
+    TARGET_LABEL="qumulo-direct"
+    return 0
+  fi
+  if cifs_host_up "$SITE_FILE_SERVER"; then
+    SERVER="$SITE_FILE_SERVER"
+    Q_SHARE_PATH="$SITE_SUSTAIN_Q_SHARE"
+    P_SHARE_PATH="${SITE_SUSTAIN_P_SUBPATH}/${user}"
+    CIFS_OPTS="serverino"
+    TARGET_LABEL="dfs-root"
+    return 0
+  fi
+  return 1
+}
+
+# sustain_write_fstab MOUNTPOINT P_MOUNTPOINT CREDS_FILE UID GID
+# Writes the Q-Drive/P-Drive fstab lines using the SERVER/Q_SHARE_PATH/
+# P_SHARE_PATH/CIFS_OPTS globals set by sustain_pick_target, replacing any
+# prior entry for either mountpoint. Shared by qdrive.sh (initial setup)
+# and dtu-drives-reselect.sh (re-run after a network change) so both stay
+# in sync.
+sustain_write_fstab() {
+  local mp="$1" p_mp="$2" creds="$3" uid="$4" gid="$5"
+  local fstab="/etc/fstab"
+  mkdir -p "$mp" "$p_mp"
+  chown "$uid:$gid" "$mp" "$p_mp"
+  chmod 0770 "$mp" "$p_mp"
+
+  local q_line="//${SERVER}/${Q_SHARE_PATH}  ${mp}  cifs  credentials=${creds},iocharset=utf8,uid=${uid},gid=${gid},dir_mode=0770,file_mode=0660,${CIFS_OPTS},_netdev,x-systemd.automount  0  0"
+  local p_line="//${SERVER}/${P_SHARE_PATH}  ${p_mp}  cifs  credentials=${creds},iocharset=utf8,uid=${uid},gid=${gid},dir_mode=0770,file_mode=0660,${CIFS_OPTS},_netdev,x-systemd.automount  0  0"
+
+  sed -i "\|[[:space:]]${mp}[[:space:]].*cifs|d" "$fstab" 2>/dev/null || true
+  sed -i "\|[[:space:]]${p_mp}[[:space:]].*cifs|d" "$fstab" 2>/dev/null || true
+  printf '%s\n%s\n' "$q_line" "$p_line" >> "$fstab"
+
+  local m
+  for m in "$mp" "$p_mp"; do
+    if mount | grep -qE "[[:space:]]${m}[[:space:]]"; then
+      umount "$m" 2>/dev/null || umount -l "$m" 2>/dev/null || true
+    fi
+  done
 }
 
 # cifs_setup_share SERVER SHARE_PATH MOUNTPOINT CREDS_FILE UID GID

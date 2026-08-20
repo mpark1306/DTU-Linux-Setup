@@ -255,9 +255,6 @@ else
     echo "WiFi script ikke fundet: $WIFI_SCRIPT – springer over." >&2
 fi
 
-# Install homebrew
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
 # ── Mark as done ─────────────────────────────────────────────────────────────
 mkdir -p "$(dirname "$MARKER")"
 date '+%F %T' > "$MARKER"

@@ -66,8 +66,8 @@ polkit.addRule(function(action, subject) {
     if (!subject.local || !subject.active)
         return polkit.Result.NOT_HANDLED;
 
-    // Only apply to Domain Users
-    if (!subject.isInGroup("Domain Users"))
+    // Only apply to Domain Users (SSSD may resolve the AD group in either casing)
+    if (!subject.isInGroup("Domain Users") && !subject.isInGroup("domain users"))
         return polkit.Result.NOT_HANDLED;
 
     var id = action.id;

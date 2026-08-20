@@ -146,6 +146,13 @@ ok "Successfully joined $DOMAIN."
 
 echo "[5/8] Configuring SSSD..."
 if [ -f /etc/sssd/sssd.conf ]; then
+  # Some SSSD builds socket-activate the nss/pam responders (sssd-nss.socket,
+  # sssd-pam.socket). realm join's default sssd.conf still lists them on the
+  # services= line too, which makes SSSD's monitor race systemd for the same
+  # socket and crash-loop (start-limit-hit). Drop the line so responders are
+  # purely socket-activated.
+  sed -i '/^services\s*=/d' /etc/sssd/sssd.conf
+
   sed -i 's/^use_fully_qualified_names\s*=.*/use_fully_qualified_names = False/' /etc/sssd/sssd.conf
   sed -i 's|^fallback_homedir\s*=.*|fallback_homedir = /home/%u|' /etc/sssd/sssd.conf
 
@@ -179,6 +186,11 @@ chmod 0644 /etc/skel/.dmrc
 ok "Default session set to '${KDE_X11_SESSION}' (X11) for all new users via /etc/skel/.dmrc."
 
 echo "[7/8] Restarting services..."
+# sssd-pac exits immediately with NOTIMPLEMENTED on some SSSD builds
+# regardless of config — disable it so it doesn't show as a failed unit;
+# PAC validation isn't needed for the plain AD login flow used here.
+systemctl disable --now sssd-pac.socket sssd-pac.service 2>/dev/null || true
+systemctl reset-failed 2>/dev/null || true
 systemctl restart sssd
 systemctl enable sssd
 

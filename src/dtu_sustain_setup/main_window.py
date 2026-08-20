@@ -186,6 +186,17 @@ MODULES: list[ModuleDef] = [
         enabled=False,
         common_script=True,
     ),
+    ModuleDef(
+        id="repair-folders",
+        title="Repair Home Folders",
+        description="Fix broken Desktop/Documents/Pictures\nfrom earlier installs + dedupe fstab",
+        script_name="repair-user-folders.sh",
+        needs_root=True,
+        input_type="username",
+        icon_name="view-refresh",
+        script_type="user",
+        common_script=True,
+    ),
 ]
 
 
@@ -207,6 +218,7 @@ class ModuleCard(QFrame):
     def __init__(self, mod: ModuleDef):
         super().__init__()
         self._hover_border = "#98a2b3"
+        self._last_result: bool | None = None
 
         self.setObjectName("moduleCard")
         self.setFixedHeight(104)
@@ -253,18 +265,26 @@ class ModuleCard(QFrame):
 
     def set_result(self, success: bool) -> None:
         """Highlight card based on latest run result."""
-        border = "#66a48a" if success else "#d08c8c"
-        bg = "#f8fbf9" if success else "#fdf8f8"
+        self._last_result = success
+        self._apply_result_style()
+
+    def _apply_result_style(self) -> None:
+        success = self._last_result
+        border = "#2e8b57" if success else "#d08c8c"
+        bg = "#eaf7ef" if success else "#fdf8f8"
         self.setStyleSheet(
-            f"QFrame {{ background: {bg}; border: 1px solid {border}; border-radius: 8px; }}"
+            f"QFrame {{ background: {bg}; border: 2px solid {border}; border-radius: 8px; }}"
             "QFrame QLabel { border: none; }"
         )
 
     def setEnabled(self, enabled: bool) -> None:
-        """Keep visual style aligned with enabled state."""
+        """Keep visual style aligned with enabled state, preserving the last run result."""
         super().setEnabled(enabled)
         if enabled:
-            self._apply_default_style()
+            if self._last_result is not None:
+                self._apply_result_style()
+            else:
+                self._apply_default_style()
         else:
             self.setStyleSheet(
                 "QFrame { background: #f8f9fb; border: 1px solid #e4e7ec; border-radius: 8px; }"
@@ -829,6 +849,19 @@ class MainWindow(QMainWindow):
                 user, pw = result
             shared_env["DTU_USERNAME"] = user
             shared_env["DTU_PASSWORD"] = pw
+        elif any(m.input_type == "username" for m in user_modules):
+            user = self._env_overrides.get("DTU_USERNAME", "")
+            if not user:
+                dlg = UsernameDialog(
+                    self,
+                    title="User Scripts – Username",
+                    message="Enter the target username for User Scripts (e.g. Repair Home Folders):",
+                )
+                username = dlg.get_username()
+                if username is None:
+                    return
+                user = username
+            shared_env["DTU_USERNAME"] = user
 
         self._queued_modules = user_modules
         self._running_admin_batch = False
