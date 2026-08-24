@@ -1,5 +1,29 @@
 ## v1.5.1 — 24. august 2026
 
+### Ny funktionalitet
+
+- **TPM2-modulet viser nu hvad der mangler, før det forsøger noget.**
+  Forudsætningerne for TPM2-oplåsning kan brugeren ikke gøre noget ved inde fra
+  programmet: TPM'en skal være slået til i firmware, disken skal have været
+  krypteret ved installationen, og Secure Boot skal stå i sin endelige tilstand
+  **før** enrollment, ikke efter. Hidtil viste alle tre sig som en fejlet
+  modulkørsel — og rækkefølgen omkring Secure Boot viste sig slet ikke, men
+  som en maskine der holdt op med at låse op efter næste firmwareændring.
+
+  `tpm2-enroll.sh --check` kører nu forudsætningerne som ren læsning og
+  udskriver én struktureret linje pr. fund, med status og — hvor der er noget
+  at gøre — hvad man gør. En ny dialog kører den før enrollment og viser
+  resultatet som en liste. Et blokerende fund deaktiverer Fortsæt.
+
+  Tjeklisten ligger i scriptet, ikke i GUI'en. Ét sted skal vide hvad TPM2
+  kræver; en kopi i Python ville være den der driver fra virkeligheden.
+
+  `--check` kører **uden root**, så man opdager at maskinen ikke har en TPM før
+  man bliver bedt om en adgangskode. De to punkter der reelt kræver root — en
+  eksisterende binding, og om clevis er i initramfs — melder sig som ukendte, og
+  dialogen tilbyder at køre resten med rettigheder frem for at lade som om alt
+  er kontrolleret.
+
 ### Rettelser
 
 - **TPM2-modulet afbrød med exit 1 på maskiner der allerede havde en binding.**
