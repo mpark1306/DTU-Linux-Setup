@@ -116,14 +116,21 @@ if $CISCO_ENABLED; then
     # Tarball path: prefer env var, then look in repo root
     CISCO_TAR="${DTU_CISCO_TARBALL:-}"
     if [[ -z "$CISCO_TAR" ]]; then
-        # Try to find any cisco tarball in the repo root
-        for f in "${REPO_ROOT}"/cisco-secure-client-linux64-*.tar.gz; do
-            [[ -f "$f" ]] && CISCO_TAR="$f" && break
+        # Search the places the tarball can legitimately live, in order.
+        #
+        # /etc/dtu-setup is first because that is where the DTU image ships it:
+        # baked into the ISO so the Software module needs no file picker on a
+        # freshly imaged machine. The repo root comes next for developers
+        # running from a checkout.
+        for d in /etc/dtu-setup /opt/dtu-sustain-setup "${REPO_ROOT}"; do
+            for f in "$d"/cisco-secure-client-linux64-*.tar.gz; do
+                [[ -f "$f" ]] && CISCO_TAR="$f" && break 2
+            done
         done
     fi
 
     if [[ -z "$CISCO_TAR" || ! -f "$CISCO_TAR" ]]; then
-        warn "Cisco tarball not found. Set DTU_CISCO_TARBALL or place .tar.gz in repo root."
+        warn "Cisco tarball not found. Set DTU_CISCO_TARBALL, or place the .tar.gz in /etc/dtu-setup/ (where the DTU image ships it) or the repo root."
     else
         echo "    Using tarball: ${CISCO_TAR}"
 
