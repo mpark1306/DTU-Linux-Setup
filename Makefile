@@ -9,19 +9,58 @@ APPDIR      ?= /usr/share/applications
 ICONDIR     ?= /usr/share/icons/hicolor/scalable/apps
 POLICYDIR   ?= /usr/share/polkit-1/actions
 
-VERSION     := 1.4.0
+VERSION     := 1.5.0
 
-.PHONY: help install uninstall deb rpm clean
+.PHONY: help install uninstall deb rpm clean check-version lint test
 
 help:
 	@echo "DTU Linux Setup – Build targets"
 	@echo ""
-	@echo "  make install    Install to $(PREFIX) (run as root)"
-	@echo "  make uninstall  Remove installation"
-	@echo "  make deb        Build DEB package (Ubuntu)"
-	@echo "  make rpm        Build RPM package (openSUSE)"
-	@echo "  make run        Run from source (development)"
-	@echo "  make clean      Clean build artifacts"
+	@echo "  make install        Install to $(PREFIX) (run as root)"
+	@echo "  make uninstall      Remove installation"
+	@echo "  make deb            Build DEB package (Ubuntu)"
+	@echo "  make rpm            Build RPM package (openSUSE)"
+	@echo "  make run            Run from source (development)"
+	@echo "  make check-version  Verify all version strings agree"
+	@echo "  make lint           shellcheck all scripts + byte-compile Python"
+	@echo "  make test           Guard + smoke tests (no root, no network)"
+	@echo "  make clean          Clean build artifacts"
+
+# ─── Checks ─────────────────────────────────────────────────────────────────
+# VERSION above is the single source of truth. These files repeat it because
+# they are read by tools that cannot see the Makefile; this target makes the
+# duplication safe by failing the build when they drift.
+
+check-version:
+	@echo "Makefile VERSION:      $(VERSION)"
+	@PYPROJECT_V="$$(grep -E '^version[[:space:]]*=' pyproject.toml | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')"; \
+	 INIT_V="$$(grep -E '^__version__[[:space:]]*=' src/dtu_sustain_setup/__init__.py | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')"; \
+	 echo "pyproject.toml:        $$PYPROJECT_V"; \
+	 echo "__init__.py:           $$INIT_V"; \
+	 RC=0; \
+	 [ "$$PYPROJECT_V" = "$(VERSION)" ] || { echo "❌ pyproject.toml ($$PYPROJECT_V) != Makefile ($(VERSION))"; RC=1; }; \
+	 [ "$$INIT_V" = "$(VERSION)" ]      || { echo "❌ __init__.py ($$INIT_V) != Makefile ($(VERSION)) — this string is shown in the GUI header"; RC=1; }; \
+	 [ $$RC -eq 0 ] && echo "✅ All version strings agree."; \
+	 exit $$RC
+
+test:
+	@echo "── Guard: no internal values in tracked files ───────────────"
+	bash tests/check-no-internal-values.sh
+	@echo ""
+	@echo "── Bash: site configuration ─────────────────────────────────"
+	bash tests/test_site_conf.sh
+	@echo ""
+	@echo "── Python: env loader ───────────────────────────────────────"
+	PYTHONPATH=src python3 -m unittest discover -s tests -v
+
+lint:
+	@echo "Running shellcheck..."
+	@command -v shellcheck >/dev/null || { echo "shellcheck not installed: sudo apt install shellcheck"; exit 1; }
+	shellcheck --severity=warning --external-sources \
+		bin/*.sh scripts/*.sh scripts/ubuntu/*.sh scripts/opensuse/*.sh
+	@echo "Byte-compiling Python..."
+	python3 -m compileall -q src/dtu_sustain_setup
+	@echo "✅ Lint passed."
 
 # ─── Install / uninstall ────────────────────────────────────────────────────
 
@@ -118,11 +157,11 @@ deb:
 	install -d $(DEB_ROOT)/usr/share/polkit-1/actions
 	install -m 644 data/dk.dtu.sustain.setup.policy $(DEB_ROOT)/usr/share/polkit-1/actions/
 
-	# Site-config examples (for IT admins to install as /etc/dtu-setup/site.conf)
+	# Site-config template (for IT admins to fill in as /etc/dtu-setup/site.conf).
+	# The DTU Sustain / AIT profiles are distributed out-of-band, not shipped here.
 	install -d $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/examples
-	[ -f examples/dtu-sustain.env ] && install -m 644 examples/dtu-sustain.env $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/examples/ || true
-	[ -f examples/dtu-ait.env ]     && install -m 644 examples/dtu-ait.env     $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/examples/ || true
 	install -m 644 data/site.conf.example         $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/examples/
+	install -m 644 examples/dtu-runtime.env.example $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/examples/
 	install -m 644 README.md                       $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/
 	install -m 644 LICENSE                         $(DEB_ROOT)/usr/share/doc/dtu-sustain-setup/
 
@@ -139,7 +178,7 @@ deb:
 	@echo "Description: DTU Sustain Linux workstation setup tool" >> $(DEB_ROOT)/DEBIAN/control
 	@echo " A graphical setup utility for DTU Sustain Linux workstations." >> $(DEB_ROOT)/DEBIAN/control
 	@echo " Provides modules for domain join, Q-Drive, printers, Defender," >> $(DEB_ROOT)/DEBIAN/control
-	@echo " PolicyKit, OneDrive for Business, and RDP." >> $(DEB_ROOT)/DEBIAN/control
+	@echo " PolicyKit, home-directory sync, and RDP." >> $(DEB_ROOT)/DEBIAN/control
 
 	# Post-install script
 	@echo '#!/bin/sh'                                          >  $(DEB_ROOT)/DEBIAN/postinst
@@ -150,9 +189,12 @@ deb:
 	@echo 'if [ ! -f /etc/dtu-setup/site.conf ]; then'         >> $(DEB_ROOT)/DEBIAN/postinst
 	@echo '  echo ""'                                          >> $(DEB_ROOT)/DEBIAN/postinst
 	@echo '  echo "*** No /etc/dtu-setup/site.conf found ***"' >> $(DEB_ROOT)/DEBIAN/postinst
-	@echo '  echo "Pick one of the supplied site profiles:"'   >> $(DEB_ROOT)/DEBIAN/postinst
-	@echo '  echo "  sudo install -m 0644 /usr/share/doc/dtu-sustain-setup/examples/dtu-sustain.env /etc/dtu-setup/site.conf"' >> $(DEB_ROOT)/DEBIAN/postinst
-	@echo '  echo "  sudo install -m 0644 /usr/share/doc/dtu-sustain-setup/examples/dtu-ait.env     /etc/dtu-setup/site.conf"' >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '  echo "Modules that need site-specific values will refuse to run"' >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '  echo "until one exists. Either install the profile for your"'     >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '  echo "department (distributed separately by DTU IT):"'            >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '  echo "  sudo install -m 0644 dtu-<department>.env /etc/dtu-setup/site.conf"' >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '  echo "or start from the template and fill in the placeholders:"'  >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '  echo "  sudo install -m 0644 /usr/share/doc/dtu-sustain-setup/examples/site.conf.example /etc/dtu-setup/site.conf"' >> $(DEB_ROOT)/DEBIAN/postinst
 	@echo '  echo "Then set department:"'                      >> $(DEB_ROOT)/DEBIAN/postinst
 	@echo '  echo "  echo ait     | sudo tee /etc/dtu-setup/department"' >> $(DEB_ROOT)/DEBIAN/postinst
 	@echo '  echo "  echo sustain | sudo tee /etc/dtu-setup/department"' >> $(DEB_ROOT)/DEBIAN/postinst

@@ -30,8 +30,9 @@ TODO.local
 /etc/dtu-setup/
 site.conf
 *.env
-# Site profiles with real DTU values are distributed out-of-band — never commit
-# examples/ is tracked intentionally (see examples/*.env, examples/*.example)
+# Site profiles with real DTU values are distributed out-of-band — never commit.
+# examples/ holds only generic templates (*.example); the department profiles
+# dtu-sustain.env / dtu-ait.env were removed from the repo in v1.5.0.
 
 
 # Cisco redistributables (proprietary — never commit)
