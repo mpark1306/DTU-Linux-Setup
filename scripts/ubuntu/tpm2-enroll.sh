@@ -15,7 +15,13 @@
 set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../common.sh"
-need_root
+
+# Parathedskontrollen læser kun og skal kunne køres uden rettigheder, så
+# brugeren kan se hvad der mangler uden først at taste en adgangskode. De
+# punkter der faktisk kræver root rapporterer sig selv som "unknown".
+if [[ "${1:-}" != "--check" && -z "${DTU_TPM2_CHECK_ONLY:-}" ]]; then
+  need_root
+fi
 
 info() { echo "[i] $*"; }
 err()  { fail "$*"; }
@@ -330,6 +336,173 @@ offer_recovery_key() {
   warn "Saved to: $(readlink -f "$outfile")"
   warn "File contains an unencrypted disk key. Copy it to a secure location, then delete local copy: shred -u \"$outfile\""
 }
+
+# ── Parathedskontrol ────────────────────────────────────────────────────────
+#
+# Kører kun læsninger og ændrer intet. Udskriver én linje pr. punkt i formatet
+#
+#   TPM2CHECK|<id>|<status>|<overskrift>|<detalje>|<afhjælpning>
+#
+# hvor status er ok, warn, fail eller unknown. GUI'en parser det og viser en
+# liste; køres scriptet i en terminal er linjerne stadig læsbare.
+#
+# Grunden til at det er en tilstand i selve scriptet og ikke separat kode i
+# GUI'en: så er der ét sted der ved hvad TPM2-oplåsning kræver. To lister ville
+# drive fra hinanden, og den i GUI'en ville være den forkerte.
+#
+# Punkter markeret "unknown" kræver root. Uden root udskrives de som unknown i
+# stedet for at blive udeladt, så GUI'en kan tilbyde at køre resten med
+# rettigheder frem for at lade som om alt er kontrolleret.
+
+emit_check() {
+  # id | status | overskrift | detalje | afhjælpning
+  printf 'TPM2CHECK|%s|%s|%s|%s|%s\n' "$1" "$2" "$3" "${4//|/ }" "${5//|/ }"
+}
+
+have_root() { [[ $EUID -eq 0 ]]; }
+
+run_checks() {
+  local dev=""
+
+  # 1. Distro
+  if command -v apt-get >/dev/null 2>&1; then
+    emit_check distro ok "Understøttet distribution" \
+      "apt-get fundet" ""
+  else
+    emit_check distro fail "Ikke-understøttet distribution" \
+      "Dette modul bruger clevis via initramfs-tools og kræver apt." \
+      "TPM2-oplåsning skal sættes op manuelt på denne distribution."
+  fi
+
+  # 2. TPM2-enhed
+  if [[ -e /dev/tpmrm0 ]]; then
+    emit_check tpm-device ok "TPM2-enhed til stede" "/dev/tpmrm0" ""
+  elif [[ -e /dev/tpm0 ]]; then
+    emit_check tpm-device warn "TPM2-enhed til stede uden resource manager" \
+      "/dev/tpm0 findes, men /dev/tpmrm0 mangler." \
+      "Normalt uskadeligt. Mangler tpm2-abrmd, kan clevis stadig bruge /dev/tpm0."
+  else
+    emit_check tpm-device fail "Ingen TPM2-enhed fundet" \
+      "Hverken /dev/tpm0 eller /dev/tpmrm0 findes." \
+      "Slå TPM, fTPM eller Intel PTT til i BIOS/UEFI. På AMD hedder den ofte fTPM, på Intel PTT."
+  fi
+
+  # 3. Svarer TPM'en
+  if command -v tpm2_pcrread >/dev/null 2>&1; then
+    if tpm2_pcrread "${PCR_BANK}:${PCR_IDS}" >/dev/null 2>&1; then
+      emit_check tpm-responds ok "TPM svarer" "Kunne læse PCR ${PCR_IDS} i bank ${PCR_BANK}." ""
+    else
+      emit_check tpm-responds fail "TPM svarer ikke" \
+        "Enheden findes, men PCR ${PCR_IDS} kunne ikke læses i bank ${PCR_BANK}." \
+        "Tjek at TPM'en ikke er deaktiveret eller ejet af noget andet. Prøv: tpm2_pcrread ${PCR_BANK}:${PCR_IDS}"
+    fi
+  else
+    emit_check tpm-responds unknown "TPM-respons ikke kontrolleret" \
+      "tpm2-tools er ikke installeret endnu." \
+      "Installeres automatisk når modulet køres."
+  fi
+
+  # 4. Secure Boot
+  #
+  # Binding sker mod PCR 7, som måler Secure Boot-tilstanden. Slås Secure Boot
+  # til eller fra EFTER enrollment, ændrer PCR 7 sig og oplåsningen holder op
+  # med at virke. Derfor er rækkefølgen vigtig, ikke bare tilstanden.
+  if command -v mokutil >/dev/null 2>&1; then
+    if mokutil --sb-state 2>/dev/null | grep -qi "enabled"; then
+      emit_check secure-boot ok "Secure Boot er slået til" \
+        "PCR ${PCR_IDS} måler Secure Boot-tilstanden." \
+        "Slå den ikke fra bagefter — så ændrer PCR ${PCR_IDS} sig og oplåsningen stopper."
+    else
+      emit_check secure-boot warn "Secure Boot er slået fra" \
+        "Binding mod PCR ${PCR_IDS} virker stadig, men beskytter mindre, og slår du Secure Boot til bagefter holder oplåsningen op med at virke." \
+        "Slå Secure Boot til i BIOS/UEFI FØR du kører modulet. Gør du det bagefter, skal bindingen laves om."
+    fi
+  else
+    emit_check secure-boot unknown "Secure Boot-tilstand ukendt" \
+      "mokutil er ikke installeret." \
+      "Installér mokutil, eller aflæs tilstanden i BIOS/UEFI."
+  fi
+
+  # 5. LUKS-partition
+  local candidates
+  mapfile -t candidates < <(lsblk -rno NAME,FSTYPE 2>/dev/null | awk '$2=="crypto_LUKS"{print "/dev/"$1}')
+  if [[ -n "$DEVICE_ARG" ]]; then
+    if [[ -b "$DEVICE_ARG" ]]; then
+      dev="$DEVICE_ARG"
+      emit_check luks-device ok "LUKS-enhed valgt" "$dev (angivet eksplicit)" ""
+    else
+      emit_check luks-device fail "Angivet enhed findes ikke" \
+        "$DEVICE_ARG er ikke en blokenhed." \
+        "Ret DTU_LUKS_DEVICE, eller lad den være tom så enheden findes automatisk."
+    fi
+  elif [[ ${#candidates[@]} -eq 1 ]]; then
+    dev="${candidates[0]}"
+    emit_check luks-device ok "LUKS-partition fundet" "$dev" ""
+  elif [[ ${#candidates[@]} -eq 0 ]]; then
+    emit_check luks-device fail "Ingen LUKS-partition fundet" \
+      "Disken ser ikke ud til at være krypteret." \
+      "TPM2-oplåsning kræver en LUKS-krypteret disk. Kryptering skal vælges ved installationen og kan ikke slås til bagefter."
+  else
+    emit_check luks-device warn "Flere LUKS-partitioner fundet" \
+      "${candidates[*]}" \
+      "Sæt DTU_LUKS_DEVICE til den rigtige, ellers kan modulet ikke vælge uden en terminal."
+  fi
+
+  # 6. Pakker
+  local missing=()
+  for pkg in clevis clevis-luks clevis-tpm2 clevis-initramfs cryptsetup tpm2-tools; do
+    dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed" || missing+=("$pkg")
+  done
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    emit_check packages ok "Nødvendige pakker installeret" "clevis, cryptsetup, tpm2-tools" ""
+  else
+    emit_check packages info "Pakker mangler endnu" \
+      "Mangler: ${missing[*]}" \
+      "Modulet installerer dem selv. Kræver netværk."
+  fi
+
+  # 7. Eksisterende binding — kræver root
+  if ! have_root; then
+    emit_check already-bound unknown "Eksisterende binding ikke kontrolleret" \
+      "Kræver administratorrettigheder." ""
+    emit_check initramfs unknown "initramfs ikke kontrolleret" \
+      "Kræver administratorrettigheder." ""
+    return 0
+  fi
+
+  if [[ -n "$dev" ]]; then
+    if clevis luks list -d "$dev" 2>/dev/null | grep -q tpm2; then
+      emit_check already-bound warn "Disken er allerede bundet til TPM2" \
+        "$(clevis luks list -d "$dev" 2>/dev/null | tr '\n' ' ')" \
+        "Kør kun modulet igen hvis bindingen skal laves om — fx efter en BIOS-opdatering."
+    else
+      emit_check already-bound ok "Ingen eksisterende TPM2-binding" "$dev er ikke bundet endnu." ""
+    fi
+  else
+    emit_check already-bound unknown "Eksisterende binding ikke kontrolleret" \
+      "Ingen entydig LUKS-enhed at kontrollere." ""
+  fi
+
+  # 8. clevis i initramfs
+  local initrd
+  initrd="/boot/initrd.img-$(uname -r)"
+  if [[ ! -f "$initrd" ]]; then
+    emit_check initramfs unknown "initramfs ikke fundet" "$initrd findes ikke." ""
+  elif lsinitramfs "$initrd" 2>/dev/null | grep -q clevis; then
+    emit_check initramfs ok "clevis er i initramfs" "$(basename "$initrd")" ""
+  else
+    emit_check initramfs info "clevis er ikke i initramfs endnu" \
+      "Forventet før modulet har kørt." \
+      "Modulet kører update-initramfs selv."
+  fi
+}
+
+# --check / DTU_TPM2_CHECK_ONLY=1: kontrollér og afslut uden at ændre noget.
+if [[ "${1:-}" == "--check" || -n "${DTU_TPM2_CHECK_ONLY:-}" ]]; then
+  [[ "${1:-}" == "--check" ]] && DEVICE_ARG="${2:-${DTU_LUKS_DEVICE:-}}"
+  run_checks
+  exit 0
+fi
 
 main() {
   banner "TPM2 LUKS Auto-Unlock (clevis)"

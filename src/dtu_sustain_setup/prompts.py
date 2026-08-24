@@ -20,6 +20,7 @@ from .input_dialog import (
     UsernameDialog,
 )
 from .modules import ModuleDef
+from .tpm2_dialog import Tpm2ReadinessDialog
 
 # Returned instead of a dict when the user dismissed a dialog. `None` is the
 # signal to abort the run without an error — cancelling is not a failure.
@@ -27,7 +28,10 @@ Cancelled = None
 
 
 def collect_module_env(
-    parent: QWidget, mod: ModuleDef, overrides: dict[str, str]
+    parent: QWidget,
+    mod: ModuleDef,
+    overrides: dict[str, str],
+    script_path=None,
 ) -> dict[str, str] | None:
     """Return the env vars for `mod`, or None if the user cancelled.
 
@@ -105,6 +109,18 @@ def collect_module_env(
     # input_type: the value is never stored, only handed to systemd-cryptenroll
     # for this one run.
     if mod.id == "tpm2-enroll":
+        # Preconditions first. They are things the user cannot fix from inside
+        # this application — firmware settings, and whether the disk was
+        # encrypted at install time — so finding out afterwards from a failed
+        # run costs a reboot into BIOS either way. Better to say so up front.
+        if script_path is not None:
+            dlg = Tpm2ReadinessDialog(
+                parent, script_path, overrides.get("DTU_LUKS_DEVICE", "")
+            )
+            dlg.exec()
+            if not dlg.should_proceed():
+                return Cancelled
+
         passphrase = overrides.get("DTU_LUKS_PASSPHRASE", "")
         if not passphrase:
             passphrase, ok = QInputDialog.getText(

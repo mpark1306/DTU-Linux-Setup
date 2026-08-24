@@ -480,7 +480,7 @@ class MainWindow(QMainWindow):
             )
             return
 
-        env_vars = collect_module_env(self, mod, self._env_overrides)
+        env_vars = collect_module_env(self, mod, self._env_overrides, script)
         if env_vars is None:
             return
 
