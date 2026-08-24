@@ -32,7 +32,7 @@ for v in "<fileserver>" "https://<defender-host>/x.py" "konfigureret via site.co
   out="$(with_conf "$TMP/empty.conf" "site_is_placeholder '$v' && echo YES || echo NO")"
   check "afviser [$v]" "YES" "$out"
 done
-for v in "fs.example.invalid" "https://def.example.invalid/onboard.py" "SOME-Admin-Group" 'share$/SUB' 'Users$'; do
+for v in "fs.example.invalid" "https://def.example.invalid/onboard.py" "SOME-Admin-Group.invalid" 'share$/SUB' 'Users$'; do
   out="$(with_conf "$TMP/empty.conf" "site_is_placeholder '$v' && echo YES || echo NO")"
   check "accepterer [$v]" "NO" "$out"
 done
@@ -43,12 +43,12 @@ cat > "$TMP/mixed.conf" <<'EOF'
 SITE_FILE_SERVER="<fileserver>"
 SITE_PRINT_SERVER="print.example.invalid"
 SITE_DEFENDER_ONBOARDING_URL="https://<defender-host>/onboard.py"
-SITE_AD_ADMIN_GROUP="Real-Admins"
+SITE_AD_ADMIN_GROUP="Real-Admins.invalid"
 EOF
 check "placeholder-hostname tømmes"  ""                  "$(with_conf "$TMP/mixed.conf" 'printf "%s" "$SITE_FILE_SERVER"')"
 check "ægte printserver bevares"     "print.example.invalid" "$(with_conf "$TMP/mixed.conf" 'printf "%s" "$SITE_PRINT_SERVER"')"
 check "placeholder-i-URL tømmes"     ""                  "$(with_conf "$TMP/mixed.conf" 'printf "%s" "$SITE_DEFENDER_ONBOARDING_URL"')"
-check "ægte admingruppe bevares"     "Real-Admins"       "$(with_conf "$TMP/mixed.conf" 'printf "%s" "$SITE_AD_ADMIN_GROUP"')"
+check "ægte admingruppe bevares"     "Real-Admins.invalid"       "$(with_conf "$TMP/mixed.conf" 'printf "%s" "$SITE_AD_ADMIN_GROUP"')"
 check "site-uafhængig default sat"   "DTUSecure"         "$(with_conf "$TMP/mixed.conf" 'printf "%s" "$SITE_WIFI_SSID"')"
 check "SITE_CONF_LOADED sat"         "$TMP/mixed.conf"   "$(with_conf "$TMP/mixed.conf" 'printf "%s" "$SITE_CONF_LOADED"')"
 

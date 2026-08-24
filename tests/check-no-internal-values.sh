@@ -68,6 +68,11 @@ while IFS= read -r file; do
     [[ -z "$val" ]] && continue
     [[ "$val" == *'$'* && "$val" != 'Users$' && "$val" != '2adm$/AIT' ]] && continue  # variable reference
     [[ "$val" == *"<"*">"* ]] && continue                                             # placeholder
+    # RFC 2606 reserverer .invalid: navnet kan aldrig opløses og kan derfor
+    # ikke være rigtig infrastruktur. Det er hvad testfixtures bruger, så
+    # tests/ kan scannes af spærren i stedet for at være undtaget — en
+    # undtaget mappe ville være det oplagte sted at gemme en rigtig værdi.
+    [[ "$val" == *".invalid" || "$val" == *".invalid/"* ]] && continue
     in_list "$val" "${APPROVED_VALUES[@]}" && continue
     note "$file: SITE_*-værdi der hverken er godkendt default eller placeholder: [$val]"
   done < <(grep -E 'SITE_[A-Z0-9_]+(:=|=")' "$file" 2>/dev/null)
