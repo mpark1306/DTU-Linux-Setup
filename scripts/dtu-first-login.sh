@@ -162,8 +162,12 @@ QDRIVE_LOG=$(mktemp /tmp/dtu-qdrive-XXXXXX.log)
 QDRIVE_SCRIPT="${SCRIPTS_DIR}/qdrive.sh"
 
 if [[ -f "$QDRIVE_SCRIPT" ]]; then
-    WRAPPER=$(mktemp /tmp/dtu-first-login-XXXXXX.sh)
-    cat > "$WRAPPER" <<WRAPEOF
+    # Piped to `bash -s` rather than written to a file in /tmp. A wrapper file
+    # is owned by this (unprivileged) user but read by root only *after* the
+    # PolicyKit prompt is answered, leaving a window in which another process
+    # running as the same user could swap its contents and have its own code
+    # run as root. It also keeps the domain password off the filesystem.
+    pkexec bash -s <<WRAPEOF &
 #!/usr/bin/env bash
 export HOME=/root
 export DTU_USERNAME=$(printf '%q' "$DTU_USERNAME")
@@ -171,14 +175,10 @@ export DTU_PASSWORD=$(printf '%q' "$DTU_PASSWORD")
 export DTU_DEPARTMENT=$(printf '%q' "$DEPARTMENT")
 bash $(printf '%q' "$QDRIVE_SCRIPT") > $(printf '%q' "$QDRIVE_LOG") 2>&1
 WRAPEOF
-    chmod 700 "$WRAPPER"
-
-    pkexec bash "$WRAPPER" &
     QDRIVE_PID=$!
     show_progress "${DEPT_LABEL}" "Opsætter ${DRIVE_TEXT}..." "$QDRIVE_PID" || true
     wait "$QDRIVE_PID" 2>/dev/null
     QDRIVE_RC=$?
-    rm -f "$WRAPPER"
 
     if [[ $QDRIVE_RC -eq 0 ]]; then
         show_message "Netværksdrev" "${DRIVE_TEXT} er sat op!
@@ -197,8 +197,8 @@ FOLLOWME_LOG=$(mktemp /tmp/dtu-followme-XXXXXX.log)
 FOLLOWME_SCRIPT="${SCRIPTS_DIR}/followme.sh"
 
 if [[ -f "$FOLLOWME_SCRIPT" ]]; then
-    WRAPPER=$(mktemp /tmp/dtu-first-login-XXXXXX.sh)
-    cat > "$WRAPPER" <<WRAPEOF
+    # See the note on the Q-Drive block above: piped, not written to /tmp.
+    pkexec bash -s <<WRAPEOF &
 #!/usr/bin/env bash
 export HOME=/root
 export DTU_USERNAME=$(printf '%q' "$DTU_USERNAME")
@@ -206,14 +206,10 @@ export DTU_PASSWORD=$(printf '%q' "$DTU_PASSWORD")
 export DTU_DEPARTMENT=$(printf '%q' "$DEPARTMENT")
 bash $(printf '%q' "$FOLLOWME_SCRIPT") > $(printf '%q' "$FOLLOWME_LOG") 2>&1
 WRAPEOF
-    chmod 700 "$WRAPPER"
-
-    pkexec bash "$WRAPPER" &
     FOLLOWME_PID=$!
     show_progress "${DEPT_LABEL}" "Opsætter FollowMe printere..." "$FOLLOWME_PID" || true
     wait "$FOLLOWME_PID" 2>/dev/null
     FOLLOWME_RC=$?
-    rm -f "$WRAPPER"
 
     if [[ $FOLLOWME_RC -eq 0 ]]; then
         show_message "FollowMe" "FollowMe printere er konfigureret!\n\n  • FollowMe-MFP-PCL\n  • FollowMe-Plot-PS"
@@ -229,22 +225,19 @@ WIFI_LOG=$(mktemp /tmp/dtu-wifi-XXXXXX.log)
 WIFI_SCRIPT="${SCRIPTS_DIR}/wifi.sh"
 
 if [[ -f "$WIFI_SCRIPT" ]]; then
-    WRAPPER=$(mktemp /tmp/dtu-first-login-XXXXXX.sh)
-    cat > "$WRAPPER" <<WRAPEOF
+    # See the note on the Q-Drive block above: piped, not written to /tmp.
+    pkexec bash -s <<WRAPEOF &
 #!/usr/bin/env bash
 export HOME=/root
 export DTU_USERNAME=$(printf '%q' "$DTU_USERNAME")
 export DTU_PASSWORD=$(printf '%q' "$DTU_PASSWORD")
+export DTU_DEPARTMENT=$(printf '%q' "$DEPARTMENT")
 bash $(printf '%q' "$WIFI_SCRIPT") > $(printf '%q' "$WIFI_LOG") 2>&1
 WRAPEOF
-    chmod 700 "$WRAPPER"
-
-    pkexec bash "$WRAPPER" &
     WIFI_PID=$!
     show_progress "${DEPT_LABEL}" "Opsætter DTUSecure WiFi..." "$WIFI_PID" || true
     wait "$WIFI_PID" 2>/dev/null
     WIFI_RC=$?
-    rm -f "$WRAPPER"
 
     if [[ $WIFI_RC -eq 0 ]]; then
         show_message "DTUSecure WiFi" "DTUSecure WiFi er konfigureret!\n\nMaskinen forbinder automatisk til DTUSecure når du er i nærheden og ikke har kabel."

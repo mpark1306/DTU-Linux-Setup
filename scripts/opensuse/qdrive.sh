@@ -11,6 +11,10 @@ need_root
 
 banner "Q-Drive SUS → /mnt/Qdrev (direct CIFS)"
 
+# Every profile mounts something from the site file server. Without it the
+# mount would target //<fileserver>/... and fail with a confusing CIFS error.
+site_require SITE_FILE_SERVER
+
 # Require credentials via environment (interactive prompts hang in GUI)
 if [[ -z "${DTU_USERNAME:-}" || -z "${DTU_PASSWORD:-}" ]]; then
   fail "DTU_USERNAME and DTU_PASSWORD must be set. Run via the GUI or export them."
@@ -138,7 +142,7 @@ fi
 ok "Using ${TARGET_LABEL} target: //${SERVER}"
 MOUNTPOINT="/mnt/Qdrev"
 P_MOUNTPOINT="/mnt/Personal"
-CREDS_FILE="/home/$USERNAME/.smbcred-<fileserver>"
+CREDS_FILE="$(cifs_creds_file "$USERNAME")"
 FSTAB_FILE="/etc/fstab"
 
 if ! id "$USERNAME" >/dev/null 2>&1; then
@@ -185,10 +189,18 @@ domain=${DOMAIN}
 EOF
 chown "$USERNAME":"$GID_NUM" "$CREDS_FILE"
 chmod 600 "$CREDS_FILE"
+cifs_creds_drop_legacy "$USERNAME"
 
 echo "[4/7] Ensuring /etc/fstab entry for Q-Drive..."
+# Legacy entries written before SITE_* config existed, plus any line left over
+# from a release that wrote the literal placeholder into fstab.
+sed -i "/${SITE_FILE_SERVER}.*[Qq]drev/d" "$FSTAB_FILE" 2>/dev/null || true
 sed -i "/<fileserver>.*[Qq]drev/d" "$FSTAB_FILE" 2>/dev/null || true
-sed -i "/ait-pqumulo.*sus-q/d" "$FSTAB_FILE" 2>/dev/null || true
+# Legacy entry pointing straight at the Qumulo backend, written before the
+# target was chosen dynamically. Derived from config, not hardcoded.
+if [[ -n "${SITE_FILE_SERVER_QUMULO:-}" && -n "${SITE_SUSTAIN_Q_SHARE_QUMULO:-}" ]]; then
+  sed -i "\|//${SITE_FILE_SERVER_QUMULO}/${SITE_SUSTAIN_Q_SHARE_QUMULO}|d" "$FSTAB_FILE" 2>/dev/null || true
+fi
 sed -i "\|[[:space:]]${MOUNTPOINT}[[:space:]].*cifs|d" "$FSTAB_FILE" 2>/dev/null || true
 sed -i "\|//${SITE_FILE_SERVER}/${SITE_SUSTAIN_Q_SHARE}[[:space:]]|d" "$FSTAB_FILE" 2>/dev/null || true
 

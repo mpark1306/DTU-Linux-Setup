@@ -23,6 +23,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/common.sh"
 need_root
 
+site_require SITE_FILE_SERVER
+
 if [[ -z "${1:-}" && -z "${DTU_USERNAME:-}" ]]; then
   echo "Usage: sudo bash $0 <username>"
   echo "  or:  DTU_USERNAME=<username> sudo bash $0"
@@ -42,13 +44,12 @@ fi
 
 UID_NUM="$(id -u "$USERNAME")"
 GID_NUM="$(id -g "$USERNAME")"
-HOME_DIR="/home/${USERNAME}"
 
 banner "Repair Q-Drive/P-Drive for ${USERNAME}"
 
 MOUNTPOINT="/mnt/Qdrev"
 P_MOUNTPOINT="/mnt/Personal"
-CREDS_FILE="/home/${USERNAME}/.smbcred-<fileserver>"
+CREDS_FILE="$(cifs_creds_file_resolve "$USERNAME")"
 
 echo "[1/5] Refreshing credentials file..."
 install -o "$USERNAME" -g "$GID_NUM" -m 600 /dev/null "$CREDS_FILE"

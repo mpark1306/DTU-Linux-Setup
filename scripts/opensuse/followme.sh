@@ -130,6 +130,10 @@ if [[ ! -f "$PPD_FILE" ]]; then
   exit 1
 fi
 
+# The Sustain queues point at a site-specific print server — refuse to create
+# CUPS queues against a placeholder host.
+site_require SITE_PRINT_SERVER
+
 PRINT_SERVER="${SITE_PRINT_SERVER}"
 CREDS_FILE="/etc/cups/print-sustain.creds"
 
@@ -199,7 +203,6 @@ echo "[6/8] Removing old queues..."
 lpadmin -x FollowMe-MFP-PCL 2>/dev/null || true
 lpadmin -x FollowMe-Plot-PS  2>/dev/null || true
 
-PPD_MODEL="drv:///sample.drv/generic.ppd"
 
 echo "[7/8] Adding FollowMe printers..."
 lpadmin -p FollowMe-MFP-PCL -E \

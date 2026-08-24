@@ -8,7 +8,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../common.sh"
 need_root
 
-banner "Q-Drive & P-Drive – Map CIFS shares from \\\\<fileserver>"
+banner "Network drives – map CIFS shares"
+
+# Every profile mounts something from the site file server. Without it the
+# mount would target //<fileserver>/... and fail with a confusing CIFS error.
+site_require SITE_FILE_SERVER
 
 # Require credentials via environment (interactive prompts hang in GUI)
 if [[ -z "${DTU_USERNAME:-}" || -z "${DTU_PASSWORD:-}" ]]; then
@@ -138,7 +142,7 @@ fi
 # Sustain profile (default)
 #
 # We mount directly against the Qumulo backend (SITE_FILE_SERVER_QUMULO)
-# instead of the DFS root konfigureret via site.conf, because DFS referral
+# instead of the DFS root (SITE_FILE_SERVER), because DFS referral
 # resolution in the Linux kernel CIFS client is unreliable — particularly
 # over VPN (split tunnel) and on kernels 6.19+. Symptom: Q-drive mounts but
 # /mnt/Personal fails with "mount.cifs: permission denied" because the
@@ -158,7 +162,7 @@ ok "Using ${TARGET_LABEL} target: //${SERVER}"
 SHARE_PATH="$Q_SHARE_PATH"
 MOUNTPOINT="/mnt/Qdrev"
 P_MOUNTPOINT="/mnt/Personal"
-CREDS_FILE="/home/$USERNAME/.smbcred-<fileserver>"
+CREDS_FILE="$(cifs_creds_file "$USERNAME")"
 FSTAB_FILE="/etc/fstab"
 
 if ! id "$USERNAME" >/dev/null 2>&1; then
@@ -202,6 +206,7 @@ domain=${DOMAIN}
 EOF
 chown "$USERNAME":"$GID_NUM" "$CREDS_FILE"
 chmod 600 "$CREDS_FILE"
+cifs_creds_drop_legacy "$USERNAME"
 
 echo "[4/8] Ensuring /etc/fstab entry for Q-Drive..."
 FSTAB_LINE="//${SERVER}/${SHARE_PATH}  ${MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,${CIFS_OPTS},_netdev,x-systemd.automount  0  0"

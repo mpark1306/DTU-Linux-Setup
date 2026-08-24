@@ -9,7 +9,10 @@ need_root
 
 banner "PolicyKit / KDE IT Admin Backdoor + Domain User Rights"
 
-# Admin group from site.conf (default: SUS-ITAdm-Client-Admins).
+# Admin group from site.conf. No default: granting sudo + polkit admin rights
+# to a guessed group name is worse than refusing to run.
+site_require SITE_AD_ADMIN_GROUP
+
 ADMIN_GROUP="${SITE_AD_ADMIN_GROUP}"
 ADMIN_GROUP_LC="$(echo "$ADMIN_GROUP" | tr '[:upper:]' '[:lower:]')"
 ADMIN_GROUP_LC_NODASH="$(echo "$ADMIN_GROUP_LC" | tr -d -)"

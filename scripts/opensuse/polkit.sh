@@ -9,6 +9,10 @@ need_root
 
 banner "PolicyKit / KDE IT Admin Backdoor + Domain User Rights"
 
+# Admin group from site.conf. No default: granting sudo + polkit admin rights
+# to a guessed group name is worse than refusing to run.
+site_require SITE_AD_ADMIN_GROUP
+
 ADMIN_GROUP="${SITE_AD_ADMIN_GROUP}"
 ADMIN_GROUP_LC="$(echo "$ADMIN_GROUP" | tr '[:upper:]' '[:lower:]')"
 ADMIN_GROUP_LC_NODASH="$(echo "$ADMIN_GROUP_LC" | tr -d -)"
@@ -67,7 +71,7 @@ EOF
 echo "[3/6] Creating domain-user rights (50-domain-users.rules)..."
 tee /etc/polkit-1/rules.d/50-domain-users.rules > /dev/null <<'EOF'
 // Domain Users – daily-use rights without admin password prompt.
-// IT admins (SUS-ITAdm-Client-Admins) are already handled by
+// IT admins (the SITE_AD_ADMIN_GROUP configured in site.conf) are handled by
 // 49-domain-admins.rules and get YES for everything.
 //
 // Installed by dtu-setup-opensuse-tw.sh Module 4.

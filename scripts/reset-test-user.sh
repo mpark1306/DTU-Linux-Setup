@@ -101,15 +101,17 @@ ok "Shares unmounted."
 echo "[3/7] Removing fstab entries referencing ${USERNAME}..."
 if grep -q "${USERNAME}" /etc/fstab 2>/dev/null; then
     # Back up fstab first
-    cp /etc/fstab /etc/fstab.bak-reset-$(date +%Y%m%d%H%M%S)
+    cp /etc/fstab "/etc/fstab.bak-reset-$(date +%Y%m%d%H%M%S)"
     sed -i "/${USERNAME}/d" /etc/fstab
-    # Also remove entries with the credential file path
-    sed -i "\|smbcred-<fileserver>|d" /etc/fstab
+    # Also remove entries referencing any CIFS credentials file. Matching
+    # `.smbcred-` covers both the per-server name and the literal
+    # `.smbcred-<fileserver>` written by releases up to v1.4.0.
+    sed -i "\|\.smbcred-|d" /etc/fstab
     systemctl daemon-reload
     ok "fstab entries removed. Backup at /etc/fstab.bak-reset-*"
-elif grep -q "smbcred-<fileserver>" /etc/fstab 2>/dev/null; then
-    cp /etc/fstab /etc/fstab.bak-reset-$(date +%Y%m%d%H%M%S)
-    sed -i "\|smbcred-<fileserver>|d" /etc/fstab
+elif grep -q "\.smbcred-" /etc/fstab 2>/dev/null; then
+    cp /etc/fstab "/etc/fstab.bak-reset-$(date +%Y%m%d%H%M%S)"
+    sed -i "\|\.smbcred-|d" /etc/fstab
     systemctl daemon-reload
     ok "fstab CIFS entries removed."
 else

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# deploy-sync-homedir.sh — Deploy sync-homedir to Ubuntu 24.04 workstations
-# Run as root: sudo bash deploy-sync-homedir.sh
+# setup-sync-homedir.sh — Deploy sync-homedir to Ubuntu 24.04 workstations
+# Run as root: sudo bash setup-sync-homedir.sh
 #
 # Features:
 #   • Backs up every file it touches before overwriting

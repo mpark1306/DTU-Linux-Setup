@@ -9,6 +9,9 @@ need_root
 
 banner "Microsoft Defender for Endpoint"
 
+# Onboarding downloads from a site-specific URL — refuse to run without it.
+site_require SITE_DEFENDER_ONBOARDING_URL
+
 export DEBIAN_FRONTEND=noninteractive
 # Network Protection is only supported on the Insiders Slow/Fast channels —
 # this script installs from Production, where it always fails to start

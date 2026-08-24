@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import tempfile
 from pathlib import Path
 from shlex import quote as shlex_quote
 
@@ -21,7 +20,6 @@ class ModuleRunner(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._process: QProcess | None = None
-        self._wrapper_file: str | None = None
         self._output_buffer: list[str] = []
         self._last_script_name: str = ""
 
@@ -56,11 +54,18 @@ class ModuleRunner(QObject):
                 self.finished.emit(False, module_id)
                 return
 
-            # pkexec strips environment variables. Write a small wrapper
+            # pkexec strips environment variables. Build a small wrapper
             # script that re-exports DTU_* vars, then exec's the real script.
             # Explicitly isolate root's HOME and XDG dirs to prevent tools
             # (flatpak, Qt, KDE libs) from writing config files into the
             # calling user's home directory as root.
+            #
+            # The wrapper is fed to `bash -s` on stdin rather than written to a
+            # file in /tmp. A file would be owned by the unprivileged user and
+            # read by root only *after* the PolicyKit prompt is answered, so
+            # any other process running as that user could swap its contents in
+            # between and get its own code executed as root. A pipe has no such
+            # window — and it keeps the domain password out of the filesystem.
             wrapper_lines = ["#!/usr/bin/env bash"]
             wrapper_lines.append("export HOME=/root")
             wrapper_lines.append("unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_RUNTIME_DIR XDG_STATE_HOME")
@@ -77,14 +82,17 @@ class ModuleRunner(QObject):
                         wrapper_lines.append(f"export {key}={shlex_quote(value)}")
             wrapper_lines.append(f'exec bash {shlex_quote(script)}')
 
-            fd, wrapper_path = tempfile.mkstemp(prefix="dtu-run-", suffix=".sh")
-            with os.fdopen(fd, "w") as f:
-                f.write("\n".join(wrapper_lines) + "\n")
-            os.chmod(wrapper_path, 0o700)
-            self._wrapper_file = wrapper_path
-
             self.output_received.emit(f"▶ Running with elevated privileges: {script_path.name}\n")
-            self._process.start(pkexec, ["bash", wrapper_path])
+
+            # The polkit action (dk.dtu.sustain.setup.run-module) is annotated
+            # on /usr/bin/bash, so `bash -s` authenticates exactly as before.
+            self._process.start(pkexec, ["bash", "-s"])
+            if not self._process.waitForStarted(10000):
+                self.output_received.emit("ERROR: Could not start pkexec.\n")
+                self.finished.emit(False, module_id)
+                return
+            self._process.write(("\n".join(wrapper_lines) + "\n").encode("utf-8"))
+            self._process.closeWriteChannel()
         else:
             # Non-root: pass env vars directly via QProcessEnvironment
             proc_env = QProcessEnvironment.systemEnvironment()
@@ -117,11 +125,6 @@ class ModuleRunner(QObject):
             self.output_received.emit(text)
 
     def _on_finished(self, exit_code: int, exit_status: QProcess.ExitStatus) -> None:
-        # Clean up wrapper script
-        if self._wrapper_file and os.path.exists(self._wrapper_file):
-            os.unlink(self._wrapper_file)
-            self._wrapper_file = None
-
         success = exit_code == 0 and exit_status == QProcess.ExitStatus.NormalExit
         status_text = "✅ Completed successfully" if success else f"❌ Failed (exit code {exit_code})"
         self.output_received.emit(f"\n{status_text}\n{'─' * 60}\n")

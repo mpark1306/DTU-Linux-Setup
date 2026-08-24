@@ -3,34 +3,49 @@
 # =============================================================================
 # Install location: /etc/dtu-setup/site.conf
 #
-# This file MUST NOT be committed with real values. Two ready-to-use
-# configurations are provided in:
-#   examples/dtu-sustain.env
-#   examples/dtu-ait.env
+# This file MUST NOT be committed with real values.
 #
-# To activate one:
+# Ready-made profiles for DTU Sustain and DTU AIT are NOT part of this repo;
+# they are distributed out-of-band (see README, "DTU-interne profiler").
+# Once you have one:
 #   sudo install -d /etc/dtu-setup
-#   sudo install -m 0644 examples/dtu-ait.env /etc/dtu-setup/site.conf
+#   sudo install -m 0644 dtu-ait.env /etc/dtu-setup/site.conf
 #
 # All values are simple shell variables (KEY="value"). Module scripts source
-# this file via load_site_conf() in scripts/common.sh and use the values with
-# safe defaults (`${VAR:-default}`), so any value left commented falls back to
-# the DTU production default.
+# this file via load_site_conf() in scripts/common.sh.
+#
+# Values in <angle brackets> below are placeholders. They are NOT defaults —
+# load_site_conf() blanks them out, and any module that needs one stops with an
+# error naming the variable rather than running against a placeholder host.
+# Fill in every placeholder for the modules you intend to use.
+#
+# Variables not listed here (AD realm, DTUSecure SSID, WebPrint URL, helpdesk
+# links) do have real defaults that are valid across DTU; override them only if
+# your site differs.
 # =============================================================================
 
 # ─── Active Directory / Kerberos ─────────────────────────────────────────────
 SITE_AD_DOMAIN="WIN.DTU.DK"          # uppercase realm
 SITE_AD_REALM="win.dtu.dk"           # lowercase, used as UPN suffix
-SITE_AD_ADMIN_GROUP="SUS-ITAdm-Client-Admins"   # group with full sudo + polkit
+SITE_AD_ADMIN_GROUP="<ad-admin-group>"   # AD group granted full sudo + polkit
 
 # ─── File servers ────────────────────────────────────────────────────────────
 SITE_FILE_SERVER="<fileserver>"                              # primary CIFS host
 SITE_FILE_SERVER_QUMULO="<qumulo-server>"         # openSUSE DFS bypass
 SITE_USERS_BASE="Users"                                  # AIT: Users0..Users9 lookup
 
-# Sustain shares (used when DTU_DEPARTMENT=sustain)
+# Sustain shares (used when DTU_DEPARTMENT=sustain).
+# Two sets: the DFS root paths, and the paths on the Qumulo backend. The
+# module picks whichever server is reachable (see sustain_pick_target in
+# scripts/common.sh) — DTUSecure WiFi and some VPN profiles cannot route to
+# Qumulo, so the DFS root is the fallback.
 SITE_SUSTAIN_Q_SHARE="Qdrev/SUS"
 SITE_SUSTAIN_P_SUBPATH="Qdrev/SUS/Personal"      # + /<username>
+
+# Qumulo-direct equivalents. Leave blank to disable the direct mount entirely
+# and always use the DFS root. P defaults to "<Q share>/Personal" if unset.
+SITE_SUSTAIN_Q_SHARE_QUMULO="<qumulo-q-share>"
+#SITE_SUSTAIN_P_SUBPATH_QUMULO="<qumulo-q-share>/Personal"
 
 # M-Drive (personal home, Users0..Users9). Central drive mounted for both
 # AIT and Sustain. Server + top share (literal $ in the share name).
@@ -41,7 +56,7 @@ SITE_MDRIVE_BASE="Users$"                        # top share holding Users0..9
 SITE_AIT_O_SHARE="2adm$/AIT"                     # fixed shared dept O-Drive
 
 # ─── Printing ────────────────────────────────────────────────────────────────
-SITE_PRINT_SERVER="konfigureret via site.conf"         # CUPS/SMB FollowMe (Sustain)
+SITE_PRINT_SERVER="<print-server>"               # CUPS/SMB FollowMe (Sustain)
 SITE_WEBPRINT_URL="https://webprint.dtu.dk"      # WebPrint webapp (AIT)
 
 # ─── WiFi (DTUSecure / WPA2-Enterprise) ──────────────────────────────────────
@@ -50,7 +65,7 @@ SITE_WIFI_SSID="DTUSecure"
 SITE_WIFI_IDENTITY_SUFFIX="@win.dtu.dk"          # appended to DTU_USERNAME
 
 # ─── Microsoft Defender for Endpoint ─────────────────────────────────────────
-SITE_DEFENDER_ONBOARDING_URL="konfigureret via site.conf/download/MicrosoftDefenderATPOnboardingLinuxServer.py"
+SITE_DEFENDER_ONBOARDING_URL="https://<defender-host>/download/MicrosoftDefenderATPOnboardingLinuxServer.py"
 
 # ─── First-login welcome (optional) ──────────────────────────────────────────
 SITE_HELPDESK_URL="https://serviceportal.dtu.dk"

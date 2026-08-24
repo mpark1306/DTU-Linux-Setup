@@ -142,6 +142,10 @@ if [[ ! -f "$PPD_FILE" ]]; then
   exit 1
 fi
 
+# The Sustain queues point at a site-specific print server — refuse to create
+# CUPS queues against a placeholder host.
+site_require SITE_PRINT_SERVER
+
 PRINT_SERVER="${SITE_PRINT_SERVER}"
 CREDS_FILE="/etc/cups/print-sustain.creds"
 

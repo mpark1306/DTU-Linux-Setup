@@ -37,7 +37,7 @@ id "$USERNAME" >/dev/null 2>&1 || exit 0
 
 UID_NUM="$(id -u "$USERNAME")"
 GID_NUM="$(id -g "$USERNAME")"
-CREDS_FILE="/home/${USERNAME}/.smbcred-<fileserver>"
+CREDS_FILE="$(cifs_creds_file_resolve "$USERNAME")"
 [[ -r "$CREDS_FILE" ]] || { log "Credentials file missing: ${CREDS_FILE}"; exit 0; }
 
 MOUNTPOINT="/mnt/Qdrev"
