@@ -519,7 +519,7 @@ nano /opt/dtu-sustain-setup/data/software.conf
 
 | Problem             | Løsning                                                         |
 |---------------------|-----------------------------------------------------------------|
-| Mount fejler        | Tjek credentials og netværk: `smbclient -L //<fileserver> -U <username>` |
+| Mount fejler        | Tjek credentials og netværk: `smbclient -L //$SITE_FILE_SERVER -U <username>` (værdien står i `/etc/dtu-setup/site.conf`) |
 | "Permission denied" | Tjek `/etc/fstab` entries og credentials-fil                    |
 
 ### Cisco VPN

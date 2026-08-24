@@ -67,7 +67,9 @@ Ved første start (eller via dropdown'en i toppen af GUI'en) vælges den institu
 
 ## Moduler
 
-14 moduler i alt (13 synlige + 1 skjult). Alle kræver root og kører via `pkexec`.
+15 moduler i alt (14 synlige + 1 deaktiveret). Alle kræver root og kører via `pkexec`.
+Modulerne er fordelt på to faner i GUI'en: **Admin Scripts** (kører uden
+brugerens egne credentials) og **User Scripts** (kræver brugerens DTU-login).
 
 | # | Modul | Hvad det gør | Ubuntu | openSUSE |
 |---|---|---|:-:|:-:|
@@ -84,7 +86,8 @@ Ved første start (eller via dropdown'en i toppen af GUI'en) vælges den institu
 | 11 | **RDP (xrdp)** | Remote Desktop med KDE Plasma over xrdp | ✅ | — |
 | 12 | **TPM2 Auto-Unlock** | LUKS disk auto-unlock ved boot (TPM2, ingen passphrase) | ✅ | — |
 | 13 | **First-Login Setup** | Deploy welcome-dialog der vises ved nye domænebrugeres første login | ✅ | ✅ |
-| 14 | **Reset Test User** | (skjult) Fjern domain-user state + home-dir til gen-test | ✅ | ✅ |
+| 14 | **Reset Test User** | (deaktiveret) Fjern domain-user state + home-dir til gen-test | ✅ | ✅ |
+| 15 | **Repair Home Folders** | Ret ødelagte Desktop/Documents/Pictures fra tidligere installationer + fjern fstab-dubletter | ✅ | ✅ |
 
 \* openSUSE Tumbleweed bruger SLES 15-pakker — ikke officielt understøttet af Microsoft.
 
@@ -135,8 +138,8 @@ Hver release på [GitHub Releases](https://github.com/mpark1306/DTU-Linux-Setup/
 sudo apt update
 sudo apt install kde-standard python3 python3-pyqt6 policykit-1
 
-# Hent nyeste DEB-pakke fra Releases og installér
-VERSION=1.3.0
+# Slå nyeste version op og installér den
+VERSION=$(curl -fsSL https://api.github.com/repos/mpark1306/DTU-Linux-Setup/releases/latest | grep -oP '"tag_name":\s*"v\K[^"]+')
 curl -fsSLO "https://github.com/mpark1306/DTU-Linux-Setup/releases/download/v${VERSION}/dtu-sustain-setup_${VERSION}_all.deb"
 sudo apt install "./dtu-sustain-setup_${VERSION}_all.deb"
 ```
@@ -147,8 +150,8 @@ sudo apt install "./dtu-sustain-setup_${VERSION}_all.deb"
 # Installér afhængigheder
 sudo zypper install python3-qt6 polkit
 
-# Hent nyeste RPM-pakke fra Releases og installér
-VERSION=1.3.0
+# Slå nyeste version op og installér den
+VERSION=$(curl -fsSL https://api.github.com/repos/mpark1306/DTU-Linux-Setup/releases/latest | grep -oP '"tag_name":\s*"v\K[^"]+')
 curl -fsSLO "https://github.com/mpark1306/DTU-Linux-Setup/releases/download/v${VERSION}/dtu-sustain-setup-${VERSION}-1.fc44.noarch.rpm"
 sudo zypper install "./dtu-sustain-setup-${VERSION}-1.fc44.noarch.rpm"
 ```
@@ -170,9 +173,9 @@ sudo apt install kde-standard python3 python3-pyqt6 policykit-1
 # Direkte
 sudo make install
 
-# Eller byg DEB-pakke selv
+# Eller byg DEB-pakke selv (versionsnummeret kommer fra VERSION i Makefile)
 make deb
-sudo dpkg -i dtu-sustain-setup_1.3.0_all.deb
+sudo dpkg -i dtu-sustain-setup_*_all.deb
 ```
 
 #### openSUSE Tumbleweed
@@ -183,9 +186,9 @@ sudo zypper install python3-qt6 polkit
 # Direkte
 sudo make install
 
-# Eller byg RPM-pakke selv
+# Eller byg RPM-pakke selv (versionsnummeret kommer fra VERSION i Makefile)
 make rpm
-sudo zypper install ~/rpmbuild/RPMS/noarch/dtu-sustain-setup-1.3.0-1.noarch.rpm
+sudo zypper install ~/rpmbuild/RPMS/noarch/dtu-sustain-setup-*.noarch.rpm
 ```
 
 ---
@@ -215,13 +218,42 @@ sudo $EDITOR /etc/dtu-setup/site.conf
 
 ### DTU-interne profiler
 
-Færdige profiler til **DTU Sustain** og **DTU AIT** med de korrekte interne værdier (`dtu-sustain.env` / `dtu-ait.env`) distribueres ikke offentligt. DTU-medarbejdere kan **anmode om dem hos [@mpark1306](https://github.com/mpark1306)** (Mark Parking, DTU Sustain). Når du har modtaget den rette `.env`-fil:
+Færdige profiler til **DTU Sustain** og **DTU AIT** med de korrekte interne værdier (`dtu-sustain.env` / `dtu-ait.env`) ligger **ikke** i dette repo og distribueres ikke offentligt. DTU-medarbejdere kan **anmode om dem hos [@mpark1306](https://github.com/mpark1306)** (Mark Parking, DTU Sustain). Når du har modtaget den rette `.env`-fil:
 
 ```bash
 sudo install -d /etc/dtu-setup
 sudo install -m 0644 dtu-ait.env /etc/dtu-setup/site.conf   # eller dtu-sustain.env
 echo "ait" | sudo tee /etc/dtu-setup/department             # eller "sustain"
 ```
+
+### Manglende konfiguration stopper modulet
+
+Værdier i `<vinkelparenteser>` i `site.conf.example` er **placeholders, ikke
+defaults**. `load_site_conf()` i [`scripts/common.sh`](scripts/common.sh) tømmer
+dem aktivt, og hvert modul erklærer med `site_require` hvad det har brug for.
+Mangler en påkrævet variabel — eller står den stadig som placeholder — stopper
+modulet med en besked der navngiver variablen, i stedet for at køre videre mod
+en ikke-eksisterende server:
+
+```
+❌ Site configuration is missing or incomplete.
+
+  Loaded: /etc/dtu-setup/site.conf
+  These variables are unset or still hold a template placeholder:
+    • SITE_FILE_SERVER
+```
+
+Hvilke moduler kræver hvad:
+
+| Modul | Påkrævede variabler |
+|---|---|
+| Network Drives, Repair P-Drive | `SITE_FILE_SERVER` |
+| Printers (kun Sustain) | `SITE_PRINT_SERVER` |
+| Microsoft Defender | `SITE_DEFENDER_ONBOARDING_URL` |
+| PolicyKit | `SITE_AD_ADMIN_GROUP` |
+
+Resten (AD-realm, DTUSecure-SSID, WebPrint-URL, helpdesk-links) har rigtige
+defaults der gælder på tværs af DTU.
 
 ---
 
@@ -530,7 +562,6 @@ DTU-Umbrella/
 │   │   ├── polkit.sh
 │   │   ├── followme.sh           # Sustain CUPS / AIT WebPrint
 │   │   ├── wifi.sh
-│   │   ├── onedrive.sh
 │   │   ├── automount.sh
 │   │   ├── software.sh
 │   │   ├── rdp.sh
@@ -543,7 +574,6 @@ DTU-Umbrella/
 │       ├── polkit.sh
 │       ├── followme.sh
 │       ├── wifi.sh
-│       ├── onedrive.sh
 │       ├── automount.sh
 │       └── software.sh
 ├── data/
@@ -584,10 +614,23 @@ make deb   # Ubuntu
 make rpm   # openSUSE
 ```
 
+### Checks
+
+```bash
+make check-version   # Makefile / pyproject.toml / __init__.py skal være enige
+make lint            # shellcheck (severity=warning) + byte-compile af Python
+```
+
+Begge kører automatisk i CI på hvert push og pull request, og build-jobbene
+afhænger af dem. `VERSION` i `Makefile` er eneste sandhedskilde — de to andre
+filer gentager den, fordi de læses af værktøjer der ikke kan se Makefilen, og
+`check-version` gør den gentagelse sikker.
+
 ### Tilføj et nyt modul
 
 1. **Skriv scriptet:** `scripts/ubuntu/mit-modul.sh` (og evt. `scripts/opensuse/mit-modul.sh`)
    - Start med `source "${SCRIPT_DIR}/../common.sh"` og `need_root`
+   - Erklær afhængigheder af site-konfiguration med `site_require SITE_...`
    - Brug `banner`, `ok`, `warn`, `fail` helpers
    - Branch på `$DTU_DEPARTMENT` hvis adfærden afhænger af profilen
 2. **Registrer i GUI:** Tilføj en `ModuleDef` til `MODULES`-listen i [`main_window.py`](src/dtu_sustain_setup/main_window.py)

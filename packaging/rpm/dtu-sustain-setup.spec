@@ -25,10 +25,10 @@ Recommends:     xorgxrdp
 
 %description
 A graphical setup utility for DTU Sustain Linux workstations.
-Provides modules for domain join (WIN.DTU.DK), Q-Drive mapping,
-printer setup (Brother P950NW, FollowMe), Microsoft Defender,
-PolicyKit configuration, OneDrive for Business, and RDP
-(xrdp + KDE Plasma remote desktop).
+Provides modules for domain join (WIN.DTU.DK), network drive mapping,
+printer setup (FollowMe / WebPrint), Microsoft Defender, PolicyKit
+configuration, home-directory sync, and RDP (xrdp + KDE Plasma remote
+desktop).
 
 The application appears in the system application menu for all
 users (including domain users). Admin modules use polkit for
