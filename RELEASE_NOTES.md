@@ -1,3 +1,41 @@
+## v1.5.1 — 24. august 2026
+
+### Rettelser
+
+- **TPM2-modulet afbrød med exit 1 på maskiner der allerede havde en binding.**
+  Linje 164 i `tpm2-enroll.sh` var en bar `read -rp`, og modulet kører fra
+  GUI'en gennem `pkexec bash -s`, hvor scriptet selv er stdin. Når det er læst
+  står stdin på EOF, så `read` returnerer 1 med det samme, og `set -e` tager
+  hele kørslen ned.
+
+  `prompt_secret` havde allerede løst det for LUKS-adgangskoden — env var, så
+  TTY, så zenity, så `systemd-ask-password`. De tre øvrige prompts fik aldrig
+  samme behandling og ville alle fejle på samme måde: valg mellem flere
+  LUKS-partitioner (linje 133), ekstra binding (164) og recovery-nøgle (218).
+
+  De går nu gennem `ask_yes_no`, som respekterer en miljøvariabel, spørger
+  interaktivt hvis der er en TTY, og ellers tager en dokumenteret default og
+  skriver i loggen hvilken den tog. Enhedsvalget kan ikke defaultes forsvarligt
+  og fejler i stedet med navnet på den variabel der skal sættes.
+
+  Default for en ekstra binding er nej — disken låser allerede op fra TPM'en,
+  og endnu en identisk binding bruger blot en keyslot. Default for
+  recovery-nøglen er ja: TPM2-oplåsning holder op med at virke hvis firmware
+  eller Secure Boot-tilstand ændrer sig, og den ekstra nøgle er forskellen på
+  en genstart og en geninstallation.
+
+  `DTU_LUKS_DEVICE`, `DTU_TPM2_REBIND` og `DTU_TPM2_RECOVERY_KEY` genkendes nu
+  af env-indlæseren og sendes videre fra GUI'en, så de kan sættes fra en
+  env-fil.
+
+- **Recovery-nøglen blev skrevet til en uforudsigelig mappe.** Filen gik til
+  `./`, som under `pkexec` fra GUI'en kan være hvad som helst, og den blev
+  oprettet med den gældende umask og først `chmod 600` bagefter — et vindue
+  hvor en ukrypteret disknøgle var læsbar for andre. Den oprettes nu lukket med
+  `install -m 600` i hjemmemappen hos den bruger der startede modulet.
+
+---
+
 ## v1.5.0 — 24. august 2026
 
 ### ⚠️ Brydende ændring: moduler stopper ved manglende site-konfiguration
