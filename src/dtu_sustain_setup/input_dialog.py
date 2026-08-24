@@ -26,6 +26,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from .theme import palette
+
 
 class CredentialDialog(QDialog):
     """Dialog that collects username and password."""
@@ -306,7 +308,9 @@ class SoftwareDialog(QDialog):
         cisco_row.addWidget(cisco_label)
 
         self._cisco_path_edit = QLineEdit()
-        self._cisco_path_edit.setPlaceholderText("Optional – auto-detected from repo root if empty")
+        self._cisco_path_edit.setPlaceholderText(
+            "Optional – auto-detected from /etc/dtu-setup/ or the repo root"
+        )
         cisco_row.addWidget(self._cisco_path_edit)
 
         browse_btn = QPushButton("Browse…")
@@ -325,10 +329,11 @@ class SoftwareDialog(QDialog):
         bottom.addStretch()
 
         install_btn = QPushButton("Save && Install")
+        pal = palette()
         install_btn.setStyleSheet(
-            "QPushButton { background: #990000; color: white; font-weight: bold; "
-            "padding: 8px 16px; border-radius: 6px; }"
-            "QPushButton:hover { background: #7a0000; }"
+            f"QPushButton {{ background: {pal.accent}; color: {pal.accent_fg}; "
+            "font-weight: bold; padding: 8px 16px; border-radius: 6px; }}"
+            f"QPushButton:hover {{ background: {pal.accent_hover}; }}"
         )
         install_btn.clicked.connect(self._save_and_install)
         bottom.addWidget(install_btn)

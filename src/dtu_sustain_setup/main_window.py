@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from PyQt6.QtCore import QProcess, Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QIcon, QPixmap
@@ -14,9 +12,7 @@ from PyQt6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
-    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -29,183 +25,21 @@ from PyQt6.QtWidgets import (
 )
 
 from . import __version__
+from .batch import (
+    DEFERRED_INFO_MESSAGE,
+    BatchQueue,
+    admin_batch_modules,
+    batch_input_type,
+    user_batch_modules,
+)
 from .distro import Distro, detect_distro, distro_display_name, get_scripts_dir
 from .env_loader import KNOWN_VARS, SECRET_VARS, EnvLoadResult, parse_env_file
 from .error_dialog import ErrorDialog
-from .input_dialog import CredentialDialog, DomainJoinDialog, SoftwareDialog, UsernameDialog
+from .input_dialog import DomainJoinDialog
 from .module_runner import ModuleRunner
-
-
-# ─── Module definitions ─────────────────────────────────────────────────────
-
-@dataclass
-class ModuleDef:
-    id: str
-    title: str
-    description: str
-    script_name: str
-    needs_root: bool
-    input_type: str  # "none", "credentials", "username", "domain_join"
-    icon_name: str
-    script_type: str = "admin"  # "admin" or "user"
-    enabled: bool = True
-    common_script: bool = False
-
-
-MODULES: list[ModuleDef] = [
-    ModuleDef(
-        id="domain-join",
-        title="Domain Join",
-        description="Join WIN.DTU.DK domain\n(realmd + SSSD + mkhomedir)",
-        script_name="domain-join.sh",
-        needs_root=True,
-        input_type="domain_join",
-        icon_name="network-server",
-    ),
-    ModuleDef(
-        id="qdrive",
-        title="Network Drives",
-        description="Map department network drives\n(Q+P or O+M via CIFS)",
-        script_name="qdrive.sh",
-        needs_root=True,
-        input_type="credentials",
-        icon_name="folder-remote",
-        script_type="user",
-    ),
-    ModuleDef(
-        id="defender",
-        title="Microsoft Defender",
-        description="Defender for Endpoint\n(install + onboard)",
-        script_name="defender.sh",
-        needs_root=True,
-        input_type="none",
-        icon_name="security-high",
-    ),
-    ModuleDef(
-        id="polkit",
-        title="PolicyKit",
-        description="Domain-user rights\n(USB, WiFi, packages)",
-        script_name="polkit.sh",
-        needs_root=True,
-        input_type="none",
-        icon_name="preferences-system",
-    ),
-    ModuleDef(
-        id="followme",
-        title="Printers",
-        description="FollowMe (Sustain) /\nWebPrint app (AIT)",
-        script_name="followme.sh",
-        needs_root=True,
-        input_type="credentials",
-        icon_name="printer",
-        script_type="user",
-    ),
-    ModuleDef(
-        id="wifi",
-        title="DTUSecure WiFi",
-        description="WPA2-Enterprise\n(PEAP/MSCHAPv2 auto-connect)",
-        script_name="wifi.sh",
-        needs_root=True,
-        input_type="credentials",
-        icon_name="network-wireless",
-    ),
-    ModuleDef(
-        id="software",
-        title="Software",
-        description="Flatpaks, Snaps\n& Cisco VPN",
-        script_name="software.sh",
-        needs_root=True,
-        input_type="software",
-        icon_name="application-x-addon",
-    ),
-    ModuleDef(
-        id="automount",
-        title="Auto-mount",
-        description="USB automount + udev rules\n(no symlinks)",
-        script_name="automount.sh",
-        needs_root=True,
-        input_type="none",
-        icon_name="drive-removable-media",
-    ),
-    ModuleDef(
-        id="sync-homedir",
-        title="Sync Home Dirs",
-        description="Backup Desktop, Documents\n& Pictures to network drive",
-        script_name="setup-sync-homedir.sh",
-        needs_root=True,
-        input_type="none",
-        icon_name="folder-download",
-        script_type="user",
-        common_script=True,
-    ),
-    ModuleDef(
-        id="auto-update-setup",
-        title="Auto Update Setup",
-        description="Install daily automatic updates\n(for DTU Sustain + AIT)",
-        script_name="setup-dtu-auto-update_Version4.sh",
-        needs_root=True,
-        input_type="none",
-        icon_name="system-software-update",
-        common_script=True,
-    ),
-    ModuleDef(
-        id="rdp",
-        title="RDP (xrdp)",
-        description="Remote Desktop\n(KDE Plasma via xrdp)",
-        script_name="rdp.sh",
-        needs_root=True,
-        input_type="none",
-        icon_name="preferences-desktop-remote-desktop",
-    ),
-    ModuleDef(
-        id="tpm2-enroll",
-        title="TPM2 Auto-Unlock",
-        description="LUKS disk auto-unlock\n(TPM2, no passphrase at boot)",
-        script_name="tpm2-enroll.sh",
-        needs_root=True,
-        input_type="none",
-        icon_name="security-high",
-    ),
-    ModuleDef(
-        id="first-login-deploy",
-        title="First-Login Setup",
-        description="Deploy welcome dialog\nfor new domain users",
-        script_name="first-login-deploy.sh",
-        needs_root=True,
-        input_type="none",
-        icon_name="user-new",
-    ),
-    ModuleDef(
-        id="reset-test-user",
-        title="Reset Test User",
-        description="Remove domain user state\n& home dir for re-testing",
-        script_name="reset-test-user.sh",
-        needs_root=True,
-        input_type="username",
-        icon_name="edit-delete",
-        enabled=False,
-        common_script=True,
-    ),
-    ModuleDef(
-        id="repair-folders",
-        title="Repair Home Folders",
-        description="Fix broken Desktop/Documents/Pictures\nfrom earlier installs + dedupe fstab",
-        script_name="repair-user-folders.sh",
-        needs_root=True,
-        input_type="username",
-        icon_name="view-refresh",
-        script_type="user",
-        common_script=True,
-    ),
-]
-
-
-# ─── Colour palette ─────────────────────────────────────────────────────────
-
-DTU_RED = "#990000"
-DTU_RED_DARK = "#7a0000"
-ADMIN_BADGE = "#cc3333"
-USER_BADGE = "#339933"
+from .modules import MODULES, ModuleDef
+from .prompts import collect_batch_credentials, collect_module_env
+from .theme import palette
 
 
 # ─── Main Window ────────────────────────────────────────────────────────────
@@ -217,8 +51,8 @@ class ModuleCard(QFrame):
 
     def __init__(self, mod: ModuleDef):
         super().__init__()
-        self._hover_border = "#98a2b3"
         self._last_result: bool | None = None
+        pal = palette()
 
         self.setObjectName("moduleCard")
         self.setFixedHeight(104)
@@ -235,17 +69,19 @@ class ModuleCard(QFrame):
         title_row.setSpacing(6)
 
         title_label = QLabel(mod.title)
-        title_label.setStyleSheet("color: #1f2937; font-size: 13px; font-weight: 600;")
+        title_label.setStyleSheet(
+            f"color: {pal.text}; font-size: 13px; font-weight: 600;"
+        )
         title_row.addWidget(title_label)
 
         badge = QLabel("ADMIN" if mod.script_type == "admin" else "USER")
         if mod.script_type == "admin":
             badge.setStyleSheet(
-                "QLabel { color: #b42318; font-size: 10px; font-weight: 700; }"
+                f"QLabel {{ color: {pal.badge_admin}; font-size: 10px; font-weight: 700; }}"
             )
         else:
             badge.setStyleSheet(
-                "QLabel { color: #475467; font-size: 10px; font-weight: 700; }"
+                f"QLabel {{ color: {pal.badge_user}; font-size: 10px; font-weight: 700; }}"
             )
         title_row.addWidget(badge)
         title_row.addStretch()
@@ -253,14 +89,17 @@ class ModuleCard(QFrame):
 
         desc_label = QLabel(mod.description)
         desc_label.setWordWrap(True)
-        desc_label.setStyleSheet("color: #667085; font-size: 11px;")
+        desc_label.setStyleSheet(f"color: {pal.text_muted}; font-size: 11px;")
         layout.addWidget(desc_label)
 
     def _apply_default_style(self) -> None:
+        pal = palette()
         self.setStyleSheet(
-            "QFrame { background: #ffffff; border: 1px solid #d0d5dd; border-radius: 8px; }"
+            f"QFrame {{ background: {pal.card_bg}; border: 1px solid {pal.card_border}; "
+            "border-radius: 8px; }"
             "QFrame QLabel { border: none; }"
-            f"QFrame:hover {{ border-color: {self._hover_border}; background: #fcfcfd; }}"
+            f"QFrame:hover {{ border-color: {pal.card_hover_border}; "
+            f"background: {pal.card_hover_bg}; }}"
         )
 
     def set_result(self, success: bool) -> None:
@@ -269,9 +108,10 @@ class ModuleCard(QFrame):
         self._apply_result_style()
 
     def _apply_result_style(self) -> None:
+        pal = palette()
         success = self._last_result
-        border = "#2e8b57" if success else "#d08c8c"
-        bg = "#eaf7ef" if success else "#fdf8f8"
+        border = pal.ok_border if success else pal.err_border
+        bg = pal.ok_bg if success else pal.err_bg
         self.setStyleSheet(
             f"QFrame {{ background: {bg}; border: 2px solid {border}; border-radius: 8px; }}"
             "QFrame QLabel { border: none; }"
@@ -286,8 +126,10 @@ class ModuleCard(QFrame):
             else:
                 self._apply_default_style()
         else:
+            pal = palette()
             self.setStyleSheet(
-                "QFrame { background: #f8f9fb; border: 1px solid #e4e7ec; border-radius: 8px; }"
+                f"QFrame {{ background: {pal.card_disabled_bg}; "
+                f"border: 1px solid {pal.card_disabled_border}; border-radius: 8px; }}"
                 "QFrame QLabel { border: none; }"
             )
 
@@ -300,6 +142,9 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        pal = palette()
+        self._pal = pal
+
         self._distro = detect_distro()
         self._scripts_dir = get_scripts_dir(self._distro)
         self._runner = ModuleRunner(self)
@@ -311,8 +156,7 @@ class MainWindow(QMainWindow):
         # Pre-loaded answers from an env file (see _load_env_file).
         self._env_overrides: dict[str, str] = {}
         self._env_source: Path | None = None
-        self._running_admin_batch = False
-        self._admin_batch_cancelled = False
+        self._batch = BatchQueue()
 
         self.setWindowTitle("DTU Linux Setup")
         self.setMinimumSize(800, 700)
@@ -327,7 +171,7 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(central)
         main_layout.setSpacing(14)
         main_layout.setContentsMargins(22, 22, 22, 22)
-        central.setStyleSheet("background: #fafafa;")
+        central.setStyleSheet(f"background: {pal.window_bg};")
 
         # ── Header ──────────────────────────────────────────────────────
         header = QHBoxLayout()
@@ -348,15 +192,15 @@ class MainWindow(QMainWindow):
         title_font.setPointSize(22)
         title_font.setBold(True)
         title_label.setFont(title_font)
-        title_label.setStyleSheet(f"color: {DTU_RED};")
+        title_label.setStyleSheet(f"color: {pal.accent_text};")
         title_block.addWidget(title_label)
 
         distro_label = QLabel(f"Detected: {distro_display_name()}")
-        distro_label.setStyleSheet("color: #666; font-size: 12px;")
+        distro_label.setStyleSheet(f"color: {pal.text_dim}; font-size: 12px;")
         title_block.addWidget(distro_label)
 
         version_label = QLabel(f"Version: {__version__}")
-        version_label.setStyleSheet("color: #666; font-size: 12px;")
+        version_label.setStyleSheet(f"color: {pal.text_dim}; font-size: 12px;")
         title_block.addWidget(version_label)
         header.addLayout(title_block)
 
@@ -370,10 +214,11 @@ class MainWindow(QMainWindow):
             "Download the newest release from GitHub, remove the old installation, and reinstall."
         )
         self._update_btn.setStyleSheet(
-            f"QPushButton {{ background: {DTU_RED}; color: white; font-weight: bold; "
-            "padding: 8px 14px; border-radius: 6px; font-size: 12px; }"
-            f"QPushButton:hover {{ background: {DTU_RED_DARK}; }}"
-            "QPushButton:disabled { background: #ccc; color: #888; }"
+            f"QPushButton {{ background: {pal.accent}; color: {pal.accent_fg}; "
+            "font-weight: bold; padding: 8px 14px; border-radius: 6px; font-size: 12px; }"
+            f"QPushButton:hover {{ background: {pal.accent_hover}; }}"
+            f"QPushButton:disabled {{ background: {pal.btn_disabled_bg}; "
+            f"color: {pal.btn_disabled_fg}; }}"
         )
         self._update_btn.clicked.connect(self._update_latest_version)
         right_block.addWidget(self._update_btn)
@@ -384,11 +229,13 @@ class MainWindow(QMainWindow):
         self._dept_combo.addItem("DTU AIT", "ait")
         self._dept_combo.setMinimumWidth(160)
         self._dept_combo.setStyleSheet(
-            "QComboBox { font-size: 13px; padding: 5px 10px; border: 2px solid #ddd; "
-            "border-radius: 6px; background: white; color: black; } "
-            "QComboBox QAbstractItemView { background: white; color: black; "
-            "selection-background-color: #e0e0e0; selection-color: black; } "
-            f"QComboBox:focus {{ border-color: {DTU_RED}; }}"
+            f"QComboBox {{ font-size: 13px; padding: 5px 10px; "
+            f"border: 2px solid {pal.input_border}; border-radius: 6px; "
+            f"background: {pal.input_bg}; color: {pal.input_text}; }} "
+            f"QComboBox QAbstractItemView {{ background: {pal.input_bg}; "
+            f"color: {pal.input_text}; selection-background-color: {pal.selection_bg}; "
+            f"selection-color: {pal.selection_text}; }} "
+            f"QComboBox:focus {{ border-color: {pal.accent_text}; }}"
         )
         right_block.addWidget(self._dept_combo, alignment=Qt.AlignmentFlag.AlignRight)
         header.addLayout(right_block)
@@ -402,26 +249,29 @@ class MainWindow(QMainWindow):
                 "This tool supports Ubuntu 24.04 and openSUSE Tumbleweed."
             )
             warn_label.setStyleSheet(
-                "background: #fff3cd; color: #856404; padding: 8px; "
-                "border: 1px solid #ffc107; border-radius: 4px;"
+                f"background: {pal.warn_bg}; color: {pal.warn_fg}; padding: 8px; "
+                f"border: 1px solid {pal.warn_border}; border-radius: 4px;"
             )
             warn_label.setWordWrap(True)
             main_layout.addWidget(warn_label)
 
         section_label = QLabel("Modules")
         section_label.setStyleSheet(
-            f"color: {DTU_RED}; font-size: 15px; font-weight: 700; margin-top: 4px;"
+            f"color: {pal.accent_text}; font-size: 15px; font-weight: 700; margin-top: 4px;"
         )
         main_layout.addWidget(section_label)
 
         # ── Module grid tabs ────────────────────────────────────────────
         self._module_tabs = QTabWidget()
         self._module_tabs.setStyleSheet(
-            "QTabWidget::pane { border: 1px solid #d0d7e2; border-radius: 8px; background: #fff; }"
-            "QTabBar::tab { background: #f3f4f6; color: #374151; padding: 7px 14px; "
-            "border: 1px solid #d0d7e2; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; font-weight: 500; }"
-            f"QTabBar::tab:selected {{ background: #ffffff; color: {DTU_RED}; font-weight: 600; }}"
-            "QTabBar::tab:!selected:hover { background: #eceff3; }"
+            f"QTabWidget::pane {{ border: 1px solid {pal.tab_border}; border-radius: 8px; "
+            f"background: {pal.panel_bg}; }}"
+            f"QTabBar::tab {{ background: {pal.tab_bg}; color: {pal.tab_text}; "
+            f"padding: 7px 14px; border: 1px solid {pal.tab_border}; border-bottom: none; "
+            "border-top-left-radius: 8px; border-top-right-radius: 8px; font-weight: 500; }"
+            f"QTabBar::tab:selected {{ background: {pal.tab_selected_bg}; "
+            f"color: {pal.accent_text}; font-weight: 600; }}"
+            f"QTabBar::tab:!selected:hover {{ background: {pal.tab_hover_bg}; }}"
         )
 
         self._module_containers: dict[str, QWidget] = {}
@@ -464,11 +314,13 @@ class MainWindow(QMainWindow):
 
         run_all_btn = QPushButton("▶  Run All Admin Modules")
         run_all_btn.setStyleSheet(
-            f"QPushButton {{ background: {DTU_RED}; color: white; font-weight: 700; "
-            f"padding: 9px 18px; border-radius: 8px; font-size: 13px; border: 1px solid {DTU_RED_DARK}; }}"
-            f"QPushButton:hover {{ background: {DTU_RED_DARK}; }}"
+            f"QPushButton {{ background: {pal.accent}; color: {pal.accent_fg}; "
+            "font-weight: 700; padding: 9px 18px; border-radius: 8px; font-size: 13px; "
+            f"border: 1px solid {pal.accent_hover}; }}"
+            f"QPushButton:hover {{ background: {pal.accent_hover}; }}"
             "QPushButton:pressed { padding-top: 11px; padding-bottom: 9px; }"
-            f"QPushButton:disabled {{ background: #ccc; color: #888; border-color: #bbb; }}"
+            f"QPushButton:disabled {{ background: {pal.btn_disabled_bg}; "
+            f"color: {pal.btn_disabled_fg}; border-color: {pal.btn_disabled_border}; }}"
         )
         run_all_btn.clicked.connect(self._run_all_for_active_tab)
         self._run_all_btn = run_all_btn
@@ -482,8 +334,9 @@ class MainWindow(QMainWindow):
         )
         load_env_btn.setStyleSheet(
             "QPushButton { padding: 9px 14px; border-radius: 8px; font-size: 13px; "
-            "background: #f9fafb; color: #374151; border: 1px solid #d1d5db; font-weight: 600; }"
-            "QPushButton:hover { background: #f3f4f6; }"
+            f"background: {pal.btn_bg}; color: {pal.btn_text}; "
+            f"border: 1px solid {pal.btn_border}; font-weight: 600; }}"
+            f"QPushButton:hover {{ background: {pal.btn_hover_bg}; }}"
             "QPushButton:pressed { padding-top: 11px; padding-bottom: 9px; }"
         )
         load_env_btn.clicked.connect(self._load_env_file)
@@ -495,10 +348,12 @@ class MainWindow(QMainWindow):
         cancel_btn.setEnabled(False)
         cancel_btn.setStyleSheet(
             "QPushButton { padding: 9px 18px; border-radius: 8px; font-size: 13px; "
-            "background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; font-weight: 600; }"
-            "QPushButton:hover { background: #e9edf2; }"
+            f"background: {pal.btn_bg}; color: {pal.btn_text}; "
+            f"border: 1px solid {pal.btn_border}; font-weight: 600; }}"
+            f"QPushButton:hover {{ background: {pal.btn_hover_bg}; }}"
             "QPushButton:pressed { padding-top: 11px; padding-bottom: 9px; }"
-            "QPushButton:disabled { background: #eceff3; color: #98a2b3; border-color: #d8dde6; }"
+            f"QPushButton:disabled {{ background: {pal.btn_disabled_bg}; "
+            f"color: {pal.btn_disabled_fg}; border-color: {pal.btn_disabled_border}; }}"
         )
         cancel_btn.clicked.connect(self._cancel_running)
         self._cancel_btn = cancel_btn
@@ -508,15 +363,17 @@ class MainWindow(QMainWindow):
 
         # ── Log output ──────────────────────────────────────────────────
         log_label = QLabel("Output Log:")
-        log_label.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 8px;")
+        log_label.setStyleSheet(
+            f"color: {pal.text}; font-weight: bold; font-size: 13px; margin-top: 8px;"
+        )
         main_layout.addWidget(log_label)
 
         self._log = QTextEdit()
         self._log.setReadOnly(True)
         self._log.setFont(QFont("Monospace", 10))
         self._log.setStyleSheet(
-            "background: #1e1e2e; color: #cdd6f4; border: 1px solid #45475a; "
-            "border-radius: 6px; padding: 8px;"
+            f"background: {pal.console_bg}; color: {pal.console_fg}; "
+            f"border: 1px solid {pal.console_border}; border-radius: 6px; padding: 8px;"
         )
         self._log.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         main_layout.addWidget(self._log)
@@ -623,95 +480,9 @@ class MainWindow(QMainWindow):
             )
             return
 
-        env_vars: dict[str, str] = {}
-
-        if mod.input_type == "credentials":
-            user = self._env_overrides.get("DTU_USERNAME", "")
-            pw = self._env_overrides.get("DTU_PASSWORD", "")
-            if user and pw:
-                env_vars["DTU_USERNAME"] = user
-                env_vars["DTU_PASSWORD"] = pw
-            else:
-                dlg = CredentialDialog(
-                    self,
-                    title=f"{mod.title} – Credentials",
-                    message=f"Enter your WIN domain credentials for {mod.title}:",
-                )
-                if user:
-                    dlg.username_edit.setText(user)
-                result = dlg.get_credentials()
-                if result is None:
-                    return
-                env_vars["DTU_USERNAME"] = result[0]
-                env_vars["DTU_PASSWORD"] = result[1]
-
-        elif mod.input_type == "domain_join":
-            host = self._env_overrides.get("DTU_HOSTNAME", "")
-            admin = self._env_overrides.get("DTU_ADMIN_USERNAME", "")
-            if host and admin:
-                env_vars["DTU_HOSTNAME"] = host
-                env_vars["DTU_ADMIN_USERNAME"] = admin
-            else:
-                dlg = DomainJoinDialog(self)
-                if host:
-                    dlg.hostname_edit.setText(host)
-                if admin:
-                    dlg.username_edit.setText(admin)
-                result = dlg.get_domain_join_info()
-                if result is None:
-                    return
-                env_vars["DTU_HOSTNAME"] = result[0]
-                env_vars["DTU_ADMIN_USERNAME"] = result[1]
-
-        elif mod.input_type == "username":
-            user = self._env_overrides.get("DTU_USERNAME", "")
-            if user:
-                env_vars["DTU_USERNAME"] = user
-            else:
-                dlg = UsernameDialog(
-                    self,
-                    title=f"{mod.title} – Username",
-                    message=f"Enter the target username for {mod.title}:",
-                )
-                username = dlg.get_username()
-                if username is None:
-                    return
-                env_vars["DTU_USERNAME"] = username
-
-        elif mod.input_type == "software":
-            dlg = SoftwareDialog(self)
-            cisco_pre = self._env_overrides.get("DTU_CISCO_TARBALL", "")
-            if cisco_pre:
-                dlg._cisco_path_edit.setText(cisco_pre)
-            result = dlg.get_software_config()
-            if result is None:
-                return
-            conf_path, cisco_tarball = result
-            env_vars["DTU_SOFTWARE_CONF"] = self._env_overrides.get(
-                "DTU_SOFTWARE_CONF", str(conf_path)
-            )
-            if cisco_tarball:
-                env_vars["DTU_CISCO_TARBALL"] = cisco_tarball
-
-        if mod.id == "tpm2-enroll":
-            luks_passphrase = self._env_overrides.get("DTU_LUKS_PASSPHRASE", "")
-            if not luks_passphrase:
-                luks_passphrase, ok = QInputDialog.getText(
-                    self,
-                    "TPM2 Auto-Unlock",
-                    "Enter your existing LUKS passphrase:",
-                    QLineEdit.EchoMode.Password,
-                )
-                if not ok:
-                    return
-            if not luks_passphrase:
-                QMessageBox.warning(
-                    self,
-                    "Missing passphrase",
-                    "A LUKS passphrase is required to continue TPM2 enrollment.",
-                )
-                return
-            env_vars["DTU_LUKS_PASSPHRASE"] = luks_passphrase
+        env_vars = collect_module_env(self, mod, self._env_overrides)
+        if env_vars is None:
+            return
 
         env_vars["DTU_DEPARTMENT"] = self._dept_combo.currentData()
         self._set_running(True)
@@ -759,19 +530,11 @@ class MainWindow(QMainWindow):
     def _run_all_admin(self) -> None:
         """Queue all admin modules (runs them sequentially).
 
-        User-credential modules (Q-Drive, FollowMe) are skipped — those
-        are handled by the first-login welcome dialog when the domain
-        user logs in for the first time.
+        Which modules are deferred, and why, lives in batch.py.
         """
         if self._runner.is_running():
             QMessageBox.warning(self, "Busy", "A module is already running.")
             return
-
-        # Modules that require the end-user's domain credentials are
-        # deferred to first login. TPM2 is intentionally excluded from
-        # bulk runs because it changes disk-unlock behavior and should
-        # only be executed when explicitly requested.
-        DEFERRED_MODULES = {"qdrive", "followme", "onedrive", "wifi", "tpm2-enroll"}
 
         # Collect admin info for Domain Join
         host = self._env_overrides.get("DTU_HOSTNAME", "")
@@ -788,30 +551,19 @@ class MainWindow(QMainWindow):
             if admin_result is None:
                 return
 
-        self._queued_modules = [
-            m
-            for m in MODULES
-            if m.enabled and m.script_type == "admin" and m.id not in DEFERRED_MODULES
-        ]
-        self._running_admin_batch = True
-        self._admin_batch_cancelled = False
-        self._shared_env = {
-            "DTU_HOSTNAME": admin_result[0],
-            "DTU_ADMIN_USERNAME": admin_result[1],
-            "DTU_DEPARTMENT": self._dept_combo.currentData(),
-        }
-
-        info_msg = (
-            "The following modules will be skipped and run automatically\n"
-            "when the domain user logs in for the first time:\n\n"
-            "  \u2022 Q-Drive / O-Drive\n"
-            "  \u2022 FollowMe Printers\n"
-            "  \u2022 DTUSecure WiFi\n\n"
-            "Optional security modules skipped in Run All:\n\n"
-            "  \u2022 TPM2 Auto-Unlock (run manually if needed)\n\n"
-            "Make sure 'First-Login Setup' is included in the run."
+        self._batch.start(
+            admin_batch_modules(MODULES),
+            {
+                "DTU_HOSTNAME": admin_result[0],
+                "DTU_ADMIN_USERNAME": admin_result[1],
+                "DTU_DEPARTMENT": self._dept_combo.currentData(),
+            },
+            is_admin_run=True,
         )
-        QMessageBox.information(self, "Admin Run – Deferred Modules", info_msg)
+
+        QMessageBox.information(
+            self, "Admin Run – Deferred Modules", DEFERRED_INFO_MESSAGE
+        )
 
         self._run_next_queued()
 
@@ -821,67 +573,46 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Busy", "A module is already running.")
             return
 
-        user_modules = [m for m in MODULES if m.enabled and m.script_type == "user"]
+        user_modules = user_batch_modules(MODULES)
         if not user_modules:
             QMessageBox.information(self, "No user scripts", "No enabled user scripts found.")
             return
 
         shared_env: dict[str, str] = {"DTU_DEPARTMENT": self._dept_combo.currentData()}
 
-        needs_credentials = any(m.input_type == "credentials" for m in user_modules)
-        if needs_credentials:
-            user = self._env_overrides.get("DTU_USERNAME", "")
-            pw = self._env_overrides.get("DTU_PASSWORD", "")
-            if not (user and pw):
-                dlg = CredentialDialog(
-                    self,
-                    title="User Scripts – Credentials",
-                    message=(
-                        "Enter your WIN domain credentials for User Scripts "
-                        "(Network Drives / Printers)."
-                    ),
-                )
-                if user:
-                    dlg.username_edit.setText(user)
-                result = dlg.get_credentials()
-                if result is None:
-                    return
-                user, pw = result
-            shared_env["DTU_USERNAME"] = user
-            shared_env["DTU_PASSWORD"] = pw
-        elif any(m.input_type == "username" for m in user_modules):
-            user = self._env_overrides.get("DTU_USERNAME", "")
-            if not user:
-                dlg = UsernameDialog(
-                    self,
-                    title="User Scripts – Username",
-                    message="Enter the target username for User Scripts (e.g. Repair Home Folders):",
-                )
-                username = dlg.get_username()
-                if username is None:
-                    return
-                user = username
-            shared_env["DTU_USERNAME"] = user
+        needed = batch_input_type(user_modules)
+        collected = collect_batch_credentials(
+            self,
+            needed,
+            self._env_overrides,
+            message=(
+                "Enter your WIN domain credentials for User Scripts "
+                "(Network Drives / Printers)."
+                if needed == "credentials"
+                else "Enter the target username for User Scripts "
+                "(e.g. Repair Home Folders):"
+            ),
+        )
+        if collected is None:
+            return
+        shared_env.update(collected)
 
-        self._queued_modules = user_modules
-        self._running_admin_batch = False
-        self._admin_batch_cancelled = False
-        self._shared_env = shared_env
+        self._batch.start(user_modules, shared_env, is_admin_run=False)
         self._run_next_queued()
 
     def _run_next_queued(self) -> None:
         """Run the next module in the queue."""
-        if not hasattr(self, "_queued_modules") or not self._queued_modules:
+        mod = self._batch.pop_next()
+        if mod is None:
             self._set_running(False)
             self.statusBar().showMessage("All modules completed.")
             self._append_log("\n═══ All modules completed ═══\n")
-            if self._running_admin_batch and not self._admin_batch_cancelled:
+            prompt_reboot = self._batch.should_prompt_reboot()
+            self._batch.reset()
+            if prompt_reboot:
                 self._prompt_reboot_after_admin_run()
-            self._running_admin_batch = False
-            self._admin_batch_cancelled = False
             return
 
-        mod = self._queued_modules.pop(0)
         script = self._resolve_script_path(mod)
         if not script.exists():
             self._append_log(f"⚠ Skipping {mod.title}: script not found\n")
@@ -891,7 +622,7 @@ class MainWindow(QMainWindow):
         self._set_running(True)
         self.statusBar().showMessage(f"Running: {mod.title}...")
         self._runner.run(
-            script, mod.id, needs_root=mod.needs_root, env_vars=self._shared_env
+            script, mod.id, needs_root=mod.needs_root, env_vars=self._batch.shared_env
         )
 
     def _on_module_finished(self, success: bool, module_id: str) -> None:
@@ -901,7 +632,7 @@ class MainWindow(QMainWindow):
             btn.set_result(success)
 
         # If we have queued modules, run the next one
-        if hasattr(self, "_queued_modules") and self._queued_modules:
+        if self._batch.has_pending():
             self._run_next_queued()
         else:
             self._set_running(False)
@@ -925,10 +656,7 @@ class MainWindow(QMainWindow):
 
     def _cancel_running(self) -> None:
         """Cancel the running module."""
-        if self._running_admin_batch:
-            self._admin_batch_cancelled = True
-        if hasattr(self, "_queued_modules"):
-            self._queued_modules.clear()
+        self._batch.cancel()
         self._runner.cancel()
         self._set_running(False)
         self.statusBar().showMessage("Cancelled.")

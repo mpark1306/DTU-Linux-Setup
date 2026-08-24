@@ -26,6 +26,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from .theme import palette
+
 
 # ─── Helpdesk contact info (read from /etc/dtu-setup/site.conf) ────────────
 
@@ -91,7 +93,8 @@ ERROR_PATTERNS: list[ErrorPattern] = [
         "Kan ikke nå serveren",
         "Maskinen kan ikke nå netværksserveren.\n"
         "• Tjek at du er på DTU-netværket eller har DTU VPN aktiveret.\n"
-        "• Test forbindelse: ping <fileserver>.win.dtu.dk\n"
+        "• Test forbindelse: ping <filserver>\n"
+        "  (filserveren står i SITE_FILE_SERVER i /etc/dtu-setup/site.conf)\n"
         "• Hvis du er hjemmefra: start GlobalProtect / VPN først.",
     ),
     ErrorPattern(
@@ -116,7 +119,8 @@ ERROR_PATTERNS: list[ErrorPattern] = [
         "DNS-opslag fejlede",
         "Maskinen kan ikke slå hostnames op via DNS.\n"
         "• Tjek netværksforbindelse: ip addr / nmcli device status\n"
-        "• Test DNS: nslookup <fileserver>.win.dtu.dk\n"
+        "• Test DNS: nslookup <filserver>\n"
+        "  (filserveren står i SITE_FILE_SERVER i /etc/dtu-setup/site.conf)\n"
         "• Hvis du er på DTUSecure: vent et øjeblik på at WiFi forbinder.",
     ),
     ErrorPattern(
@@ -264,7 +268,8 @@ ERROR_PATTERNS: list[ErrorPattern] = [
         "SMB-host svarer ikke",
         "Filserveren svarer ikke på SMB-protokollen.\n"
         "• Vent et øjeblik – serveren kan være under genstart.\n"
-        "• Test fra terminalen: smbclient -L //<fileserver>/ -U <bruger>\n"
+        "• Test fra terminalen: smbclient -L //<filserver>/ -U <bruger>\n"
+        "  (filserveren står i SITE_FILE_SERVER i /etc/dtu-setup/site.conf)\n"
         "• Hvis du er på VPN: tjek at SMB-port (445) ikke blokeres.",
     ),
     ErrorPattern(
@@ -602,6 +607,7 @@ class ErrorDialog(QDialog):
         self._output = output
         self._diagnosis_title, self._fix_text = _classify(output)
 
+        pal = palette()
         layout = QVBoxLayout(self)
 
         # Header
@@ -625,8 +631,8 @@ class ErrorDialog(QDialog):
         fix_view.setPlainText(self._fix_text)
         fix_view.setMaximumHeight(140)
         fix_view.setStyleSheet(
-            "QPlainTextEdit { background: #fff8dc; border: 1px solid #d4a017; "
-            "padding: 6px; }"
+            f"QPlainTextEdit {{ background: {pal.hint_bg}; color: {pal.hint_fg}; "
+            f"border: 1px solid {pal.hint_border}; padding: 6px; }}"
         )
         layout.addWidget(fix_view)
 
@@ -641,8 +647,8 @@ class ErrorDialog(QDialog):
         mono.setStyleHint(QFont.StyleHint.TypeWriter)
         out_view.setFont(mono)
         out_view.setStyleSheet(
-            "QPlainTextEdit { background: #1e1e1e; color: #f0f0f0; "
-            "border: 1px solid #555; padding: 6px; }"
+            f"QPlainTextEdit {{ background: {pal.console_bg}; color: {pal.console_fg}; "
+            f"border: 1px solid {pal.console_border}; padding: 6px; }}"
         )
         layout.addWidget(out_view, stretch=1)
 
@@ -652,7 +658,9 @@ class ErrorDialog(QDialog):
             f" &nbsp;·&nbsp; <a href='mailto:{_HELPDESK_EMAIL}'>{_HELPDESK_EMAIL}</a>"
         )
         helpdesk_label.setOpenExternalLinks(True)
-        helpdesk_label.setStyleSheet("font-size: 11px; color: #555; margin-top: 4px;")
+        helpdesk_label.setStyleSheet(
+            f"font-size: 11px; color: {pal.text_dim}; margin-top: 4px;"
+        )
         layout.addWidget(helpdesk_label)
 
         # Buttons
@@ -660,8 +668,8 @@ class ErrorDialog(QDialog):
         copy_btn = QPushButton("📋  Copy Error Message and Fix")
         copy_btn.setStyleSheet(
             "QPushButton { padding: 8px 16px; font-weight: bold; "
-            "background: #0d6efd; color: white; border-radius: 4px; }"
-            "QPushButton:hover { background: #0b5ed7; }"
+            f"background: {pal.info_bg}; color: {pal.info_fg}; border-radius: 4px; }}"
+            f"QPushButton:hover {{ background: {pal.info_hover_bg}; }}"
         )
         copy_btn.clicked.connect(self._copy_to_clipboard)
         self._copy_btn = copy_btn
