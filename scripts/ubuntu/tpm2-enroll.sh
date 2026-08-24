@@ -22,7 +22,7 @@ err()  { fail "$*"; }
 
 PCR_IDS="${PCR_IDS:-7}"
 PCR_BANK="${PCR_BANK:-sha256}"
-DEVICE_ARG="${1:-}"
+DEVICE_ARG="${1:-${DTU_LUKS_DEVICE:-}}"
 EXISTING_PASSPHRASE_FILE=""
 
 die() {
@@ -35,6 +35,48 @@ cleanup_secret_files() {
     shred -u "$EXISTING_PASSPHRASE_FILE" 2>/dev/null || rm -f "$EXISTING_PASSPHRASE_FILE"
     EXISTING_PASSPHRASE_FILE=""
   fi
+}
+
+# Yes/no der også virker uden terminal.
+#
+# Modulet startes fra GUI'en med "pkexec bash -s", hvor scriptet selv er stdin.
+# Når det er læst står stdin på EOF, så "read" returnerer 1 med det samme — og
+# med set -e afbryder det hele kørslen. Det var netop fejlen på linje 164.
+#
+# prompt_secret nedenfor havde allerede løst det for adgangskoden; de øvrige
+# prompts fik bare aldrig samme behandling.
+#
+# ask_yes_no <spørgsmål> <default: y|n> <miljøvariabel>
+ask_yes_no() {
+  local question="$1" default="$2" envvar="$3"
+  local override="${!envvar:-}"
+
+  if [[ -n "$override" ]]; then
+    case "$override" in
+      1|y|Y|yes|YES|true)  return 0 ;;
+      0|n|N|no|NO|false)   return 1 ;;
+      *) die "$envvar='$override' — forventet 1/0, yes/no." ;;
+    esac
+  fi
+
+  if [[ -t 0 ]]; then
+    local ans
+    read -rp "$question [$([[ $default == y ]] && echo 'Y/n' || echo 'y/N')] " ans
+    if [[ -z "$ans" ]]; then
+      [[ "$default" == y ]]
+    else
+      [[ "$ans" =~ ^[YyJj]$ ]]
+    fi
+    return
+  fi
+
+  # Ingen terminal: brug default og sig det højt, så valget står i modul-loggen.
+  if [[ "$default" == y ]]; then
+    info "$question — ingen terminal, vælger JA (sæt $envvar=0 for at undlade)."
+    return 0
+  fi
+  info "$question — ingen terminal, vælger NEJ (sæt $envvar=1 for at gøre det)."
+  return 1
 }
 
 prompt_secret() {
@@ -129,6 +171,12 @@ detect_luks_device() {
       echo "  $i) $c"
       ((i++))
     done
+    if [[ ! -t 0 ]]; then
+      die "Flere LUKS-partitioner fundet, og der er ingen terminal at spørge i.
+       Angiv enheden eksplicit:
+         DTU_LUKS_DEVICE=${candidates[0]} (fra GUI'en: sæt den i env-filen)
+         sudo $0 ${candidates[0]}         (fra terminal)"
+    fi
     local choice
     read -rp "Select number: " choice
     [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#candidates[@]} )) \
@@ -161,8 +209,10 @@ bind_clevis() {
   if already_bound "$dev"; then
     warn "$dev already has a TPM2 clevis binding:"
     clevis luks list -d "$dev" || true
-    read -rp "Add another binding anyway? [y/N] " ans
-    [[ "$ans" =~ ^[Yy]$ ]] || { info "Skipping additional binding."; return; }
+    # Default nej: en ekstra identisk TPM2-binding gør ingen forskel og
+    # bruger en LUKS-keyslot. Disken låser allerede op fra TPM'en.
+    ask_yes_no "Tilføj endnu en binding alligevel?" n DTU_TPM2_REBIND \
+      || { info "Springer ekstra binding over — disken er allerede bundet."; return; }
   fi
 
   info "Binding $dev to TPM2 (PCR ${PCR_IDS}, bank ${PCR_BANK})."
@@ -215,9 +265,11 @@ format_recovery_key() {
 
 offer_recovery_key() {
   local dev="$1"
-  read -rp "Generate a recovery key and export it to a local txt file? [Y/n] " ans
-  if [[ "$ans" =~ ^[Nn]$ ]]; then
-    info "Skipping recovery-key generation."
+  # Default ja: TPM2-oplåsning holder op med at virke hvis firmware eller
+  # Secure Boot-tilstand ændrer sig, og så er en ekstra nøgle forskellen på
+  # en genstart og en geninstallation.
+  if ! ask_yes_no "Generér en recovery-nøgle og gem den i en txt-fil?" y DTU_TPM2_RECOVERY_KEY; then
+    info "Springer recovery-nøgle over."
     return
   fi
 
@@ -243,7 +295,22 @@ offer_recovery_key() {
   fi
   shred -u "$keyfile" 2>/dev/null || rm -f "$keyfile"
 
-  outfile="./LUKS-recovery-key-$(hostname)-$(date +%Y%m%d-%H%M%S).txt"
+  # Filen indeholder en ukrypteret disknøgle. To ting var galt her:
+  #
+  #   "./" er den aktuelle mappe, som under pkexec fra GUI'en er uforudsigelig
+  #   — nøglen kunne lande hvor som helst. Og filen blev oprettet med den
+  #   gældende umask og først chmod'et bagefter, så der var et vindue hvor den
+  #   var læsbar for andre.
+  #
+  # Den lægges nu hos den bruger der startede modulet, og oprettes lukket.
+  local target_home target_uid
+  target_uid="${PKEXEC_UID:-${SUDO_UID:-0}}"
+  target_home="$(getent passwd "$target_uid" | cut -d: -f6)"
+  [[ -d "$target_home" ]] || target_home="/root"
+
+  outfile="${target_home}/LUKS-recovery-key-$(hostname)-$(date +%Y%m%d-%H%M%S).txt"
+  install -m 600 /dev/null "$outfile" || die "Kunne ikke oprette $outfile."
+  [[ "$target_uid" != "0" ]] && chown "$target_uid" "$outfile" 2>/dev/null || true
   {
     echo "LUKS recovery key"
     echo "Host:      $(hostname)"

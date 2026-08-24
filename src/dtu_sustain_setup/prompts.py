@@ -124,6 +124,13 @@ def collect_module_env(
             return Cancelled
         env["DTU_LUKS_PASSPHRASE"] = passphrase
 
+        # Modulets øvrige valg har ingen dialog: der er ingen terminal bag
+        # pkexec, så det bruger sine defaults medmindre en env-fil siger andet.
+        # Uden dem videresendt kan brugeren ikke styre dem overhovedet.
+        for key in ("DTU_LUKS_DEVICE", "DTU_TPM2_REBIND", "DTU_TPM2_RECOVERY_KEY"):
+            if overrides.get(key):
+                env[key] = overrides[key]
+
     return env
 
 
