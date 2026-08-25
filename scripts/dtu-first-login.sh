@@ -212,7 +212,7 @@ WRAPEOF
     FOLLOWME_RC=$?
 
     if [[ $FOLLOWME_RC -eq 0 ]]; then
-        show_message "FollowMe" "FollowMe printere er konfigureret!\n\n  • FollowMe-MFP-PCL\n  • FollowMe-Plot-PS"
+        show_message "Printere" "Printere er konfigureret!\n\n  • FollowMe-MFP-PCL\n  • BYG-PHP03-PCL (plotter)"
     else
         show_error "FollowMe fejl" "FollowMe opsætning fejlede.\n\nSe log: $FOLLOWME_LOG\n\nKontakt IT-support."
     fi

@@ -57,6 +57,11 @@ SITE_AIT_O_SHARE="2adm$/AIT"                     # fixed shared dept O-Drive
 
 # ─── Printing ────────────────────────────────────────────────────────────────
 SITE_PRINT_SERVER="<print-server>"               # CUPS/SMB FollowMe (Sustain)
+
+# Storformatplotter hos Sustain. Værtsnavn eller IP på selve enheden — der
+# spooles direkte til dens JetDirect-port (9100), ikke gennem en printserver,
+# så der er hverken share-navn eller login involveret.
+SITE_SUSTAIN_PLOT_SERVER="<plot-server>"         # HP DesignJet (Sustain)
 SITE_WEBPRINT_URL="https://webprint.dtu.dk"      # WebPrint webapp (AIT)
 
 # ─── WiFi (DTUSecure / WPA2-Enterprise) ──────────────────────────────────────

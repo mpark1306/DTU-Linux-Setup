@@ -139,6 +139,10 @@ load_site_conf() {
   : "${SITE_MDRIVE_SERVER:=${SITE_FILE_SERVER}}"
   : "${SITE_AIT_O_SHARE:=}"
   : "${SITE_PRINT_SERVER:=}"
+  # Direkte plotter hos Sustain. Ikke en printserver: der spooles til enhedens
+  # egen JetDirect-port, ikke gennem en SMB-kø. Derfor et selvstændigt
+  # værtsnavn og ingen default.
+  : "${SITE_SUSTAIN_PLOT_SERVER:=}"
   : "${SITE_DEFENDER_ONBOARDING_URL:=}"
   # Share names on the Qumulo backend. They differ from the DFS paths above
   # and are site-specific, so they get no default either.
@@ -151,6 +155,7 @@ load_site_conf() {
   local v
   for v in SITE_AD_ADMIN_GROUP SITE_FILE_SERVER SITE_FILE_SERVER_QUMULO \
            SITE_MDRIVE_SERVER SITE_AIT_O_SHARE SITE_PRINT_SERVER \
+         SITE_SUSTAIN_PLOT_SERVER \
            SITE_DEFENDER_ONBOARDING_URL SITE_SUSTAIN_Q_SHARE_QUMULO \
            SITE_SUSTAIN_P_SUBPATH_QUMULO; do
     if site_is_placeholder "${!v-}"; then
@@ -164,7 +169,7 @@ load_site_conf() {
   export SITE_SUSTAIN_Q_SHARE SITE_SUSTAIN_P_SUBPATH SITE_AIT_O_SHARE
   export SITE_SUSTAIN_Q_SHARE_QUMULO SITE_SUSTAIN_P_SUBPATH_QUMULO
   export SITE_MDRIVE_SERVER SITE_MDRIVE_BASE
-  export SITE_PRINT_SERVER SITE_WEBPRINT_URL
+  export SITE_PRINT_SERVER SITE_SUSTAIN_PLOT_SERVER SITE_WEBPRINT_URL
   export SITE_WIFI_SSID SITE_WIFI_IDENTITY_SUFFIX
   export SITE_DEFENDER_ONBOARDING_URL
   export SITE_HELPDESK_URL SITE_HELPDESK_EMAIL

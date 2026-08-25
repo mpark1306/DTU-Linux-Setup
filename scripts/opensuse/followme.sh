@@ -2,7 +2,8 @@
 ###############################################################################
 # DTU – openSUSE Tumbleweed – Module: Printers
 #
-#   Sustain → CUPS FollowMe queues (MFP-PCL + Plot-PS via SMB)
+#   Sustain → CUPS FollowMe-kø (MFP-PCL via SMB) + plotter (BYG-PHP03-PCL
+#             direkte via JetDirect)
 #   AIT     → WebPrint desktop webapp (https://webprint.dtu.dk)
 #
 # Env: DTU_DEPARTMENT (sustain|ait)
@@ -130,6 +131,14 @@ if [[ ! -f "$PPD_FILE" ]]; then
   exit 1
 fi
 
+# Plotteren har sin egen PPD. Den bruger ikke Konica-driveren ovenfor: der
+# spooles direkte til enheden, så det er PPD'en her der bestemmer hvad der
+# faktisk kommer ud af printeren — rullestørrelser, medietyper og trimmeren.
+PLOT_PPD_FILE="${SCRIPT_DIR}/../../data/hp-designjet-Z9dr-44in-ps.ppd"
+if [[ ! -f "$PLOT_PPD_FILE" ]]; then
+  PLOT_PPD_FILE="/opt/dtu-sustain-setup/data/hp-designjet-Z9dr-44in-ps.ppd"
+fi
+
 # The Sustain queues point at a site-specific print server — refuse to create
 # CUPS queues against a placeholder host.
 site_require SITE_PRINT_SERVER
@@ -201,7 +210,11 @@ rm -f "${CUPS_BACKEND_DIR}/smb-auth" 2>/dev/null || true
 
 echo "[6/8] Removing old queues..."
 lpadmin -x FollowMe-MFP-PCL 2>/dev/null || true
+# FollowMe-Plot-PS er afløst af BYG-PHP03-PCL. Den fjernes stadig her, så
+# maskiner der har været sat op tidligere ikke står med en kø der peger på en
+# SMB-share der ikke længere bruges.
 lpadmin -x FollowMe-Plot-PS  2>/dev/null || true
+lpadmin -x BYG-PHP03-PCL     2>/dev/null || true
 
 
 echo "[7/8] Adding FollowMe printers..."
@@ -211,17 +224,37 @@ lpadmin -p FollowMe-MFP-PCL -E \
   "${COMMON_DEFAULTS[@]}" \
   -o job-sheets=none,none
 
-lpadmin -p FollowMe-Plot-PS -E \
-  -v "smbspool-auth://${PRINT_SERVER}/FollowMe-Plot-PS" \
-  -P "$PPD_FILE" \
-  "${COMMON_DEFAULTS[@]}" \
-  -o job-sheets=none,none
+# ── Storformatplotter ────────────────────────────────────────────────────
+#
+# Denne er ikke en FollowMe-kø. byg-php03 er selve plotteren, ikke en
+# printserver: den har ingen SMB-tjeneste, men lytter på JetDirect (9100).
+# Derfor socket:// og ingen credentials — og derfor heller ingen
+# brugerbaseret afregning som på FollowMe-køerne.
+#
+# COMMON_DEFAULTS bruges bevidst IKKE her. De er Konica-specifikke
+# (KMDuplex, TextPureBlack, GlossyMode …) og findes ikke i HP'ens PPD;
+# lpadmin ville afvise dem. Den gamle Plot-PS-kø arvede dem alligevel,
+# hvilket den slap af sted med fordi FollowMe-serveren renderede jobbet.
+if [[ -z "${SITE_SUSTAIN_PLOT_SERVER:-}" ]]; then
+  warn "SITE_SUSTAIN_PLOT_SERVER er ikke sat — springer BYG-PHP03-PCL over."
+elif [[ ! -f "$PLOT_PPD_FILE" ]]; then
+  fail "hp-designjet-Z9dr-44in-ps.ppd blev ikke fundet — kan ikke oprette BYG-PHP03-PCL."
+else
+  lpadmin -p BYG-PHP03-PCL -E \
+    -v "socket://${SITE_SUSTAIN_PLOT_SERVER}:9100" \
+    -P "$PLOT_PPD_FILE" \
+    -D "BYG-PHP03-PCL (HP DesignJet Z9dr 44in)" \
+    -L "BYG" \
+    -o PageSize=A4 \
+    -o job-sheets=none,none
+  ok "BYG-PHP03-PCL tilføjet (${SITE_SUSTAIN_PLOT_SERVER}:9100)."
+fi
 
 systemctl restart cups
 
 echo "[8/8] Verifying..."
 lpstat -p FollowMe-MFP-PCL || true
-lpstat -p FollowMe-Plot-PS  || true
+lpstat -p BYG-PHP03-PCL     2>/dev/null || true
 
 ok "FollowMe printers configured."
 echo "    Check with: lpstat -W completed | head"
