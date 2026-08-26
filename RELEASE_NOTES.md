@@ -1,3 +1,23 @@
+## Ikke udgivet endnu
+
+### Ændringer
+
+- **TPM2-modulet laver ikke længere en recovery-nøgle.** Det tilføjede en ny
+  LUKS-keyslot og skrev en ukrypteret disknøgle til en fil. Modulet rører nu
+  ikke ved de eksisterende nøgler: den adgangskode disken blev krypteret med
+  ved installationen er uændret og fortsat gyldig, og den dækker allerede det
+  behov en recovery-nøgle skulle dække — hvis TPM2-oplåsningen holder op med at
+  virke efter en firmwareændring, taster man sin adgangskode og kører modulet
+  igen.
+
+  Auto-unlock virker uændret. Clevis tilføjer stadig sin egen keyslot med den
+  TPM-forseglede nøgle — det er den mekanisme oplåsningen bygger på — men intet
+  eksisterende nøglemateriale ændres eller erstattes.
+
+  `DTU_TPM2_RECOVERY_KEY` er dermed væk; den styrer ikke længere noget.
+
+---
+
 ## v1.5.1 — 24. august 2026
 
 ### Ny funktionalitet

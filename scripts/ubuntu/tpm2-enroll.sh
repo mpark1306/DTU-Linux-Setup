@@ -257,86 +257,6 @@ verify_binding() {
   cryptsetup luksDump "$1" || true
 }
 
-generate_recovery_hex() {
-  if command -v openssl >/dev/null 2>&1; then
-    openssl rand -hex 32
-  else
-    head -c32 /dev/urandom | od -An -tx1 | tr -d ' \n'
-  fi
-}
-
-format_recovery_key() {
-  fold -w8 <<< "$1" | paste -sd'-'
-}
-
-offer_recovery_key() {
-  local dev="$1"
-  # Default ja: TPM2-oplåsning holder op med at virke hvis firmware eller
-  # Secure Boot-tilstand ændrer sig, og så er en ekstra nøgle forskellen på
-  # en genstart og en geninstallation.
-  if ! ask_yes_no "Generér en recovery-nøgle og gem den i en txt-fil?" y DTU_TPM2_RECOVERY_KEY; then
-    info "Springer recovery-nøgle over."
-    return
-  fi
-
-  local raw formatted keyfile outfile
-  raw="$(generate_recovery_hex)"
-  formatted="$(format_recovery_key "$raw")"
-
-  keyfile="$(mktemp)"
-  printf '%s' "$formatted" > "$keyfile"
-  chmod 600 "$keyfile"
-
-  info "Adding recovery key as a new LUKS keyslot."
-  ensure_existing_passphrase_file "$dev"
-  if ! cryptsetup luksAddKey --key-file "$EXISTING_PASSPHRASE_FILE" "$dev" "$keyfile"; then
-    shred -u "$keyfile" 2>/dev/null || rm -f "$keyfile"
-    die "Could not add recovery key to $dev."
-  fi
-
-  if cryptsetup luksOpen --test-passphrase --key-file "$keyfile" "$dev" 2>/dev/null; then
-    ok "Recovery key verified successfully."
-  else
-    warn "Automatic recovery key verification failed; inspect keyslots manually."
-  fi
-  shred -u "$keyfile" 2>/dev/null || rm -f "$keyfile"
-
-  # Filen indeholder en ukrypteret disknøgle. To ting var galt her:
-  #
-  #   "./" er den aktuelle mappe, som under pkexec fra GUI'en er uforudsigelig
-  #   — nøglen kunne lande hvor som helst. Og filen blev oprettet med den
-  #   gældende umask og først chmod'et bagefter, så der var et vindue hvor den
-  #   var læsbar for andre.
-  #
-  # Den lægges nu hos den bruger der startede modulet, og oprettes lukket.
-  local target_home target_uid
-  target_uid="${PKEXEC_UID:-${SUDO_UID:-0}}"
-  target_home="$(getent passwd "$target_uid" | cut -d: -f6)"
-  [[ -d "$target_home" ]] || target_home="/root"
-
-  outfile="${target_home}/LUKS-recovery-key-$(hostname)-$(date +%Y%m%d-%H%M%S).txt"
-  install -m 600 /dev/null "$outfile" || die "Kunne ikke oprette $outfile."
-  [[ "$target_uid" != "0" ]] && chown "$target_uid" "$outfile" 2>/dev/null || true
-  {
-    echo "LUKS recovery key"
-    echo "Host:      $(hostname)"
-    echo "Device:    $dev"
-    echo "Generated: $(date -Iseconds)"
-    echo
-    echo "$formatted"
-    echo
-    echo "This key (including dashes) can be entered at boot unlock prompt."
-  } > "$outfile"
-  chmod 600 "$outfile"
-
-  echo
-  warn "RECOVERY KEY (shown once):"
-  echo "  $formatted"
-  echo
-  warn "Saved to: $(readlink -f "$outfile")"
-  warn "File contains an unencrypted disk key. Copy it to a secure location, then delete local copy: shred -u \"$outfile\""
-}
-
 # ── Parathedskontrol ────────────────────────────────────────────────────────
 #
 # Kører kun læsninger og ændrer intet. Udskriver én linje pr. punkt i formatet
@@ -522,7 +442,6 @@ main() {
   rebuild_initramfs
   verify_clevis_in_initramfs
   verify_binding "$device"
-  offer_recovery_key "$device"
 
   echo
   ok "Done. Reboot and verify auto-unlock."

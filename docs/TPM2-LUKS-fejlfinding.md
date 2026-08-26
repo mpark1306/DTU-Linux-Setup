@@ -56,14 +56,19 @@ Løsning:
 1. Boot med normal passphrase.
 2. Koer TPM2 modulet igen for at re-binde clevis token.
 
-### 5) Recovery-key mangler
+### 5) Kan ikke laase op efter BIOS- eller Secure Boot-aendring
 
-Anbefaling:
-- Generer altid recovery-key i modulet og opbevar den sikkert.
-- Slet lokal, ukrypteret kopi efter sikker overfoersel:
-  ```bash
-  shred -u ./LUKS-recovery-key-*.txt
-  ```
+Modulet roerer ikke ved dine eksisterende noegler. Den adgangskode disken blev
+krypteret med ved installationen virker uaendret, og den er din vej ind hvis
+TPM2-oplaasningen holder op med at virke.
+
+Sker det:
+1. Indtast den normale adgangskode ved boot-prompten.
+2. Koer modulet igen. Det binder mod den nye PCR-tilstand.
+
+Modulet genererer **ikke** en recovery-noegle. Det ville tilfoeje en ny
+LUKS-keyslot og skrive en ukrypteret disknoegle til en fil, og den eksisterende
+adgangskode daekker allerede samme behov.
 
 ### 6) Ingen passphrase-prompt vises
 

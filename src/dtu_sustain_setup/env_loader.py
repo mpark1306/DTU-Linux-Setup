@@ -29,10 +29,9 @@ KNOWN_VARS: tuple[str, ...] = (
     "DTU_SOFTWARE_CONF",
     "DTU_CISCO_TARBALL",
     # TPM2-modulet spørger ikke om noget når det køres fra GUI'en — der er
-    # ingen terminal. Disse tre er dets ikke-interaktive svar.
+    # ingen terminal. Disse to er dets ikke-interaktive svar.
     "DTU_LUKS_DEVICE",
     "DTU_TPM2_REBIND",
-    "DTU_TPM2_RECOVERY_KEY",
 )
 
 # Variables that should never be displayed in their entirety.
