@@ -1,6 +1,60 @@
 ## Ikke udgivet endnu
 
+### Ny funktionalitet
+
+- **Domain Join gør nu login markant hurtigere.** Indholdet af det løse
+  `Speedup_Login.sh` er flyttet ind i modulet, hvor det hører til: så gælder
+  det også for maskiner der ikke er kommet fra imaget, og det kan ikke længere
+  komme i karambolage med resten.
+
+  Det løse script kunne ikke bare køres som det var. Det skrev
+  `services = nss, pam` tilbage i `sssd.conf` — netop den linje der blev
+  fjernet i v1.4.0, fordi SSSD's monitor på 24.04 kappes med systemd om nss-
+  og pam-socket'en og crash-looper. Kørte man Speedup efter Domain Join, var
+  fejlen tilbage. Den linje fjernes stadig.
+
+  **Kerberos.** Uden en KDC-liste slår klienten realmet op via DNS SRV ved
+  hver billet. Er `SITE_AD_KDCS` sat i `site.conf`, skrives KDC'erne ind i
+  `krb5.conf`, og `dns_lookup_kdc`/`dns_lookup_realm` slås fra sammen med
+  `rdns`. De to ting hænger uløseligt sammen: slås opslaget fra uden
+  kdc-linjer, kan klienten ikke finde en KDC overhovedet, og hvert login
+  fejler. Er variablen tom, røres `krb5.conf` ikke.
+
+  **SSSD.** `ad_enable_gc=False`, `ldap_use_tokengroups=False`,
+  `ldap_group_nesting_level=0` og `enumerate=False` stopper den fulde
+  gruppetræ-gennemgang ved hvert login, som var der de flersekunders-pauser
+  kom fra. `ignore_group_members=True` i `[nss]` sparer opslag af hvert enkelt
+  medlem af de store AD-grupper. `ad_gpo_access_control=permissive` henter
+  ikke længere GPO'er ved hvert login og nægter adgang når de ikke kan læses.
+
+  **Cachen tømmes** ved omkonfiguration. Ellers slår de nye indstillinger
+  først igennem efterhånden som gamle poster udløber — hvilket ved fire timer
+  ikke er noget nogen sidder og venter på.
+
+- **`SITE_AD_KDCS`** og **`SITE_AD_ACCESS_PROVIDER`** er nye, valgfrie
+  variabler i `site.conf`. Begge er tomme som default.
+
 ### Ændringer
+
+- **`entry_cache_timeout` er hævet fra 300 til 14400 sekunder** (5 minutter →
+  4 timer), sammen med `entry_cache_user_timeout` og
+  `entry_cache_group_timeout`. Et login på en varm cache laver dermed ingen
+  LDAP-rundtur.
+
+  Prisen skal kendes: en ændring i AD — især et gruppemedlemskab, og det er
+  gruppemedlemskab der giver sudo og polkit-rettigheder — kan tage op til fire
+  timer om at nå maskinen. `sudo sss_cache -E` tømmer cachen med det samme.
+
+- **`access_provider` sættes ikke.** `Speedup_Login.sh` satte `permit`, som
+  lader enhver domænebruger logge ind. Det er en adgangsbeslutning, ikke en
+  hastighedsindstilling, så den skal skrives eksplicit i `site.conf` som
+  `SITE_AD_ACCESS_PROVIDER="permit"` for at gælde.
+
+- **`ldap_id_mapping` overskrives ikke længere**, hvis den allerede står i
+  `sssd.conf`. Den afgør om UID'er beregnes ud fra AD-SID'en eller læses fra
+  POSIX-attributter; ændres den på en maskine der allerede er joinet,
+  omnummereres hver eneste domænebruger, og deres hjemmemapper bliver
+  forældreløse.
 
 - **TPM2-modulet laver ikke længere en recovery-nøgle.** Det tilføjede en ny
   LUKS-keyslot og skrev en ukrypteret disknøgle til en fil. Modulet rører nu

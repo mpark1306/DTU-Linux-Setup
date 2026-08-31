@@ -255,6 +255,13 @@ Hvilke moduler kræver hvad:
 Resten (AD-realm, DTUSecure-SSID, WebPrint-URL, helpdesk-links) har rigtige
 defaults der gælder på tværs af DTU.
 
+To variabler er valgfrie og bruges kun af Domain Join:
+
+| Variabel | Virkning hvis sat |
+|---|---|
+| `SITE_AD_KDCS` | Domænecontrollere, mellemrumsadskilt. Skrives ind i `krb5.conf`, og DNS SRV-opslaget slås fra. Er den tom, røres `krb5.conf` ikke — opslaget bliver ved, hvilket virker, men er den langsomste del af et koldt login. |
+| `SITE_AD_ACCESS_PROVIDER` | `access_provider` i `sssd.conf`. Tom betyder "rør den ikke". `permit` lader **enhver** domænebruger logge ind på maskinen — en adgangsbeslutning, ikke en hastighedsindstilling, og derfor aldrig en default. |
+
 ---
 
 ## Brug

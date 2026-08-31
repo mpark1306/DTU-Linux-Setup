@@ -39,6 +39,10 @@ APPROVED_VALUES=(
   "Users" 'Users$'
   "Qdrev/SUS" "Qdrev/SUS/Personal"
   '2adm$/AIT'
+  # SSSD-nøgleord, ikke DTU-infrastruktur. SITE_AD_ACCESS_PROVIDER tager en af
+  # SSSD's egne access_provider-værdier; de står i sssd.conf(5) og siger intet
+  # om hvordan DTU er sat op.
+  "permit" "deny" "simple" "ad" "ldap"
 )
 
 # Hostnames DTU advertises publicly.

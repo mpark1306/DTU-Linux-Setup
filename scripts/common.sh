@@ -144,6 +144,16 @@ load_site_conf() {
   # værtsnavn og ingen default.
   : "${SITE_SUSTAIN_PLOT_SERVER:=}"
   : "${SITE_DEFENDER_ONBOARDING_URL:=}"
+  # Domænecontrollere for Kerberos, mellemrumsadskilt. Navngives de, slipper
+  # klienten for et DNS SRV-opslag ved hver billet — det er dét der gør det
+  # første login langsomt på en kold cache. Ingen default: det er konkret
+  # infrastruktur, og domain-join.sh lader krb5.conf være hvis den er tom.
+  : "${SITE_AD_KDCS:=}"
+  # access_provider i sssd.conf. Tom betyder "rør den ikke" — så står det
+  # realm join skrev. Sættes den til fx "permit", må enhver domænebruger logge
+  # ind på maskinen. Det er en adgangsbeslutning, ikke en hastighedsindstilling,
+  # og derfor et bevidst valg i site.conf frem for en default.
+  : "${SITE_AD_ACCESS_PROVIDER:=}"
   # Share names on the Qumulo backend. They differ from the DFS paths above
   # and are site-specific, so they get no default either.
   : "${SITE_SUSTAIN_Q_SHARE_QUMULO:=}"
@@ -157,6 +167,7 @@ load_site_conf() {
            SITE_MDRIVE_SERVER SITE_AIT_O_SHARE SITE_PRINT_SERVER \
          SITE_SUSTAIN_PLOT_SERVER \
            SITE_DEFENDER_ONBOARDING_URL SITE_SUSTAIN_Q_SHARE_QUMULO \
+           SITE_AD_KDCS SITE_AD_ACCESS_PROVIDER \
            SITE_SUSTAIN_P_SUBPATH_QUMULO; do
     if site_is_placeholder "${!v-}"; then
       printf -v "$v" '%s' ""
@@ -165,6 +176,7 @@ load_site_conf() {
 
   export SITE_CONF_LOADED
   export SITE_AD_DOMAIN SITE_AD_REALM SITE_AD_ADMIN_GROUP
+  export SITE_AD_KDCS SITE_AD_ACCESS_PROVIDER
   export SITE_FILE_SERVER SITE_FILE_SERVER_QUMULO SITE_USERS_BASE
   export SITE_SUSTAIN_Q_SHARE SITE_SUSTAIN_P_SUBPATH SITE_AIT_O_SHARE
   export SITE_SUSTAIN_Q_SHARE_QUMULO SITE_SUSTAIN_P_SUBPATH_QUMULO

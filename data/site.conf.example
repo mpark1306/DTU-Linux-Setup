@@ -29,6 +29,17 @@ SITE_AD_DOMAIN="WIN.DTU.DK"          # uppercase realm
 SITE_AD_REALM="win.dtu.dk"           # lowercase, used as UPN suffix
 SITE_AD_ADMIN_GROUP="<ad-admin-group>"   # AD group granted full sudo + polkit
 
+# Kerberos KDCs, space separated. Naming them lets domain-join.sh turn off the
+# DNS SRV lookup that runs on every ticket request — the single biggest cost in
+# a cold-cache login. Leave empty to keep DNS discovery (slower, but works
+# anywhere). The first host is also used as admin_server.
+SITE_AD_KDCS="<ad-kdc-1> <ad-kdc-2>"
+
+# access_provider for sssd.conf. Empty leaves whatever realm join wrote.
+# "permit" lets every domain user log in — an access decision, not a speed
+# setting, so it is never applied unless it is spelled out here.
+SITE_AD_ACCESS_PROVIDER=""
+
 # ─── File servers ────────────────────────────────────────────────────────────
 SITE_FILE_SERVER="<fileserver>"                              # primary CIFS host
 SITE_FILE_SERVER_QUMULO="<qumulo-server>"         # openSUSE DFS bypass
