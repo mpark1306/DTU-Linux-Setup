@@ -30,9 +30,24 @@
 #   --print-server VÆRT
 #   --plot-server VÆRT  (tom streng springer plotteren over)
 #   --no-plotter       spring plotteren over
+#   --keep-other-printers
+#                      fjern kun DTU-køerne, ikke alle andre printere
 #   --no-site-conf     ignorér /etc/dtu-setup/ helt, også hvis den findes
 #   --show-values      vis værtsnavne i klartekst (ellers maskeres de)
 #   -h, --help
+#
+# ── Kan køres igen ───────────────────────────────────────────────────────────
+#
+# Scriptet konvergerer mod en kendt tilstand frem for at antage en tom
+# maskine. Det fjerner eksisterende køer først (som standard ALLE — brug
+# --keep-other-printers hvis maskinen har en lokal printer der skal blive),
+# opretter køerne igen, og kontrollerer til sidst at de findes, peger det
+# rigtige sted hen, er slået til og tager imod jobs. En kø der står disabled
+# eller reject bliver rettet.
+#
+# Fejl afbryder ikke undervejs. De samles op og rapporteres til sidst, så en
+# fejlende plotter ikke koster dig FollowMe-køen. Exitkoden er 1 hvis noget
+# står tilbage.
 #
 # ── Værdier vises ikke på skærmen ────────────────────────────────────────────
 #
@@ -79,7 +94,7 @@ warn()   { printf '%s⚠️  %s%s\n' "$YELLOW" "$1" "$NC"; }
 fail()   { printf '%s❌ %s%s\n' "$RED" "$1" "$NC"; }
 
 usage() {
-    sed -n '3,58p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '3,75p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -90,6 +105,7 @@ ARG_PLOT_SERVER=""
 PLOT_EXPLICITLY_OFF=0
 USE_SITE_CONF=1
 SHOW_VALUES=0
+KEEP_OTHERS=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -107,6 +123,7 @@ while [[ $# -gt 0 ]]; do
             echo "   Alt på kommandolinjen kan læses med 'ps' af enhver bruger"
             echo "   på maskinen. Brug DTU_PASSWORD=… eller lad scriptet spørge."
             exit 1 ;;
+        --keep-other-printers) KEEP_OTHERS=1; shift ;;
         --no-site-conf) USE_SITE_CONF=0; shift ;;
         --show-values)  SHOW_VALUES=1; shift ;;
         -h|--help)      usage 0 ;;
@@ -275,33 +292,140 @@ COMMON_DEFAULTS=(
 )
 
 echo ""
-echo "[1/7] Installerer pakker..."
+# ─────────────────────────────────────────────────────────────────────────────
+# Herfra og ned konvergerer scriptet mod en kendt tilstand. Det er ikke en
+# engangsopsætning: det skal kunne køres igen på en maskine der allerede er
+# sat op, på en der er halvt sat op, og på en hvor nogen har rodet i CUPS —
+# og give samme resultat hver gang.
+#
+# Derfor: `set -e` slås fra i denne del. Et enkelt fejlende lpadmin-kald må
+# ikke efterlade maskinen halvfærdig uden at nogen får det at vide. Fejl
+# samles op i PROBLEMS og rapporteres til sidst.
+# ─────────────────────────────────────────────────────────────────────────────
+set +e
+
+PROBLEMS=()
+problem() { PROBLEMS+=("$1"); fail "$1"; }
+
+# Kun køer der faktisk blev oprettet, verificeres. Ellers rapporteres samme
+# årsag to gange — én gang som "kunne ikke oprette", og én gang som "findes
+# ikke efter opsætning" — og listen til sidst bliver længere end problemet.
+MFP_CREATED=0
+PLOT_CREATED=0
+
+echo "[1/8] Pakker..."
 export DEBIAN_FRONTEND=noninteractive
-for _ in $(seq 1 30); do
-    fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
-    echo "      venter på at en anden apt-kørsel bliver færdig..."
-    sleep 5
+NEEDED=()
+for pkg in cups smbclient openprinting-ppds samba-common-bin; do
+    dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed" \
+        || NEEDED+=("$pkg")
 done
-apt-get update -qq || warn "apt-get update meldte fejl (ofte et tredjeparts-repo); fortsætter."
-apt-get install -y cups smbclient openprinting-ppds samba-common-bin
+if [[ ${#NEEDED[@]} -eq 0 ]]; then
+    echo "      alt er installeret"
+else
+    for _ in $(seq 1 30); do
+        fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+        echo "      venter på en anden apt-kørsel..."
+        sleep 5
+    done
+    apt-get update -qq || warn "apt-get update meldte fejl; fortsætter med det der er cachet."
+    if ! apt-get install -y "${NEEDED[@]}"; then
+        # Manglende cups er fatalt. Resten kan undværes til en genkørsel.
+        if ! command -v lpadmin >/dev/null 2>&1; then
+            fail "Kunne ikke installere CUPS, og det er ikke installeret i forvejen."
+            echo "   Uden netværk kan scriptet ikke komme videre. Prøv igen når"
+            echo "   maskinen har forbindelse."
+            exit 1
+        fi
+        warn "Kunne ikke installere: ${NEEDED[*]} — fortsætter med det der er."
+    fi
+fi
 
-echo "[2/7] Slår CUPS til..."
-systemctl enable --now cups
+echo "[2/8] CUPS..."
+# reset-failed først: står cups i failed efter et tidligere forsøg, nægter
+# systemctl start at gøre noget, og resten af scriptet ville løbe videre mod
+# en død dæmon.
+systemctl reset-failed cups.service cups.socket 2>/dev/null
+systemctl enable --now cups >/dev/null 2>&1
+for _ in $(seq 1 10); do
+    lpstat -r >/dev/null 2>&1 && break
+    sleep 1
+done
+if ! lpstat -r >/dev/null 2>&1; then
+    problem "CUPS svarer ikke. Se: systemctl status cups"
+    echo "   Uden en kørende dæmon kan køerne ikke oprettes."
+    exit 1
+fi
+echo "      kører"
 
-echo "[3/7] Slår cups-browsed fra (hvis den findes)..."
-systemctl disable --now cups-browsed 2>/dev/null || true
+# cups-browsed opdager netværksprintere selv og genopretter køer bag ryggen
+# på os. At stoppe den er ikke nok — den starter igen ved næste boot eller
+# når en anden pakke trækker den op. Den maskeres.
+if systemctl list-unit-files cups-browsed.service >/dev/null 2>&1; then
+    systemctl disable --now cups-browsed >/dev/null 2>&1
+    systemctl mask cups-browsed >/dev/null 2>&1
+    echo "      cups-browsed slået fra og maskeret"
+fi
 
-echo "[4/7] Skriver credentials..."
-umask 077
-cat > "${CREDS_FILE}" <<CREDS
+echo "[3/8] Fjerner eksisterende køer..."
+mapfile -t EXISTING < <(lpstat -p 2>/dev/null | awk '/^printer /{print $2}')
+if [[ ${#EXISTING[@]} -eq 0 ]]; then
+    echo "      ingen køer i forvejen"
+else
+    if [[ "$KEEP_OTHERS" -eq 1 ]]; then
+        KILL=()
+        for q in "${EXISTING[@]}"; do
+            case "$q" in
+                FollowMe-MFP-PCL|FollowMe-Plot-PS|BYG-PHP03-PCL) KILL+=("$q") ;;
+            esac
+        done
+    else
+        KILL=("${EXISTING[@]}")
+    fi
+    if [[ ${#KILL[@]} -eq 0 ]]; then
+        echo "      beholder ${#EXISTING[@]} kø(er) (--keep-other-printers)"
+    else
+        for q in "${KILL[@]}"; do
+            cupsreject "$q" >/dev/null 2>&1
+            cupsdisable "$q" >/dev/null 2>&1
+            cancel -a "$q" >/dev/null 2>&1        # hængende jobs blokerer sletning
+            if lpadmin -x "$q" >/dev/null 2>&1; then
+                echo "      fjernet: $q"
+            else
+                problem "Kunne ikke fjerne køen '$q'."
+            fi
+        done
+    fi
+fi
+# En kø der stod i printers.conf men ikke i lpstat efterlader en forældet PPD.
+rm -f /etc/cups/ppd/FollowMe-MFP-PCL.ppd /etc/cups/ppd/FollowMe-Plot-PS.ppd \
+      /etc/cups/ppd/BYG-PHP03-PCL.ppd 2>/dev/null
+
+echo "[4/8] Credentials..."
+# umask her, ikke chmod bagefter: filen må ikke findes læsbar for andre i
+# vinduet mellem oprettelse og rettelse. Den indeholder et domænekodeord.
+( umask 077
+  cat > "${CREDS_FILE}" <<CREDS
 username=${DOMAIN}\\${U}
 password=${P}
 CREDS
-chown root:lp "${CREDS_FILE}"
+)
+chown root:lp "${CREDS_FILE}" 2>/dev/null || problem "Kunne ikke sætte ejerskab på ${CREDS_FILE}."
 chmod 640 "${CREDS_FILE}"
+[[ "$(stat -c '%U:%G %a' "$CREDS_FILE" 2>/dev/null)" == "root:lp 640" ]] \
+    || problem "${CREDS_FILE} har ikke root:lp 640."
+echo "      skrevet (root:lp 640)"
 
-echo "[5/7] Installerer smbspool-auth-backend..."
-cat > /usr/lib/cups/backend/smbspool-auth <<'BACKEND'
+echo "[5/8] smbspool-auth-backend..."
+BACKEND_PATH=/usr/lib/cups/backend/smbspool-auth
+if [[ ! -x /usr/bin/smbspool ]]; then
+    problem "/usr/bin/smbspool mangler — FollowMe-køen kan ikke spoole."
+    echo "   Installér samba-common-bin / smbclient."
+fi
+# Skriv til en midlertidig fil og flyt på plads. Afbrydes scriptet midt i,
+# står der ellers en halv backend tilbage, og CUPS fejler hvert job med en
+# fejl der ikke peger nogen steder hen.
+cat > "${BACKEND_PATH}.new" <<'BACKEND'
 #!/usr/bin/env bash
 set -euo pipefail
 if [ $# -eq 0 ]; then exit 0; fi
@@ -313,25 +437,50 @@ URI="${DEVICE_URI#smbspool-auth://}"
 export DEVICE_URI="smb://${DOMAIN}/${UNAME}:${PASS_LINE}@${URI}"
 exec /usr/bin/smbspool "$@"
 BACKEND
-sed -i "3i CREDS=\"${CREDS_FILE}\"" /usr/lib/cups/backend/smbspool-auth
-chmod 755 /usr/lib/cups/backend/smbspool-auth
-rm -f /usr/lib/cups/backend/smb-auth 2>/dev/null || true
+sed -i "3i CREDS=\"${CREDS_FILE}\"" "${BACKEND_PATH}.new"
+chown root:root "${BACKEND_PATH}.new"
+chmod 755 "${BACKEND_PATH}.new"
+mv -f "${BACKEND_PATH}.new" "${BACKEND_PATH}"
+rm -f /usr/lib/cups/backend/smb-auth 2>/dev/null
+# CUPS nægter at køre en backend der er skrivbar for andre end root.
+if [[ "$(stat -c '%U %a' "$BACKEND_PATH")" != "root 755" ]]; then
+    problem "Backend'en har forkerte rettigheder — CUPS vil ikke køre den."
+fi
+echo "      installeret"
 
-echo "[6/7] Fjerner gamle køer..."
-lpadmin -x FollowMe-MFP-PCL 2>/dev/null || true
-# FollowMe-Plot-PS er afløst af BYG-PHP03-PCL. Den fjernes stadig, så maskiner
-# der har været sat op tidligere ikke står med en kø mod en share der ikke
-# længere bruges.
-lpadmin -x FollowMe-Plot-PS 2>/dev/null || true
-lpadmin -x BYG-PHP03-PCL    2>/dev/null || true
+echo "[6/8] Kan serverne nås..."
+# Uden det her bliver en uopnåelig server til en kø der ser fin ud i lpstat
+# og taber hvert job i stilhed.
+reachable() {   # reachable VÆRT PORT
+    timeout 4 bash -c "exec 3<>/dev/tcp/$1/$2" 2>/dev/null
+}
+if reachable "$PRINT_SERVER" 445; then
+    echo "      FollowMe-server svarer på 445 (SMB)"
+else
+    warn "FollowMe-serveren svarer ikke på port 445."
+    echo "      Køen oprettes alligevel, men jobs vil ikke gå igennem før"
+    echo "      maskinen kan nå den — typisk VPN eller kabel."
+fi
+if [[ -n "$PLOT_SERVER" ]]; then
+    if reachable "$PLOT_SERVER" 9100; then
+        echo "      plotteren svarer på 9100 (JetDirect)"
+    else
+        warn "Plotteren svarer ikke på port 9100."
+        echo "      Den skal kunne nås direkte — den ligger ikke bag FollowMe."
+    fi
+fi
 
-echo "[7/7] Opretter køer..."
-lpadmin -p FollowMe-MFP-PCL -E \
-  -v "smbspool-auth://${PRINT_SERVER}/FollowMe-MFP-PCL" \
-  -P "$PPD_FILE" \
-  "${COMMON_DEFAULTS[@]}" \
-  -o job-sheets=none,none
-ok "FollowMe-MFP-PCL oprettet."
+echo "[7/8] Opretter køer..."
+if lpadmin -p FollowMe-MFP-PCL -E \
+      -v "smbspool-auth://${PRINT_SERVER}/FollowMe-MFP-PCL" \
+      -P "$PPD_FILE" \
+      "${COMMON_DEFAULTS[@]}" \
+      -o job-sheets=none,none 2>/tmp/lpadmin.err; then
+    echo "      FollowMe-MFP-PCL oprettet"
+    MFP_CREATED=1
+else
+    problem "Kunne ikke oprette FollowMe-MFP-PCL: $(tr -d '\n' < /tmp/lpadmin.err)"
+fi
 
 # Plotteren er ikke en FollowMe-kø. Den har ingen SMB-tjeneste, men lytter på
 # JetDirect (9100) — derfor socket:// og ingen credentials.
@@ -340,27 +489,81 @@ ok "FollowMe-MFP-PCL oprettet."
 # TextPureBlack, GlossyMode …) og findes ikke i HP'ens PPD; lpadmin ville
 # afvise dem.
 if [[ -z "$PLOT_SERVER" ]]; then
-    warn "Ingen plotteradresse angivet — BYG-PHP03-PCL springes over."
+    echo "      plotteren sprunget over (ingen adresse)"
 elif [[ -z "$PLOT_PPD_FILE" ]]; then
-    fail "hp-designjet-Z9dr-44in-ps.ppd blev ikke fundet — BYG-PHP03-PCL springes over."
+    problem "hp-designjet-Z9dr-44in-ps.ppd blev ikke fundet — plotteren sprunget over."
+elif lpadmin -p BYG-PHP03-PCL -E \
+        -v "socket://${PLOT_SERVER}:9100" \
+        -P "$PLOT_PPD_FILE" \
+        -D "BYG-PHP03-PCL (HP DesignJet Z9dr 44in)" \
+        -L "BYG" \
+        -o PageSize=A4 \
+        -o job-sheets=none,none 2>/tmp/lpadmin.err; then
+    echo "      BYG-PHP03-PCL oprettet"
+    PLOT_CREATED=1
 else
-    lpadmin -p BYG-PHP03-PCL -E \
-      -v "socket://${PLOT_SERVER}:9100" \
-      -P "$PLOT_PPD_FILE" \
-      -D "BYG-PHP03-PCL (HP DesignJet Z9dr 44in)" \
-      -L "BYG" \
-      -o PageSize=A4 \
-      -o job-sheets=none,none
-    ok "BYG-PHP03-PCL oprettet ($(mask "$PLOT_SERVER"), JetDirect 9100)."
+    problem "Kunne ikke oprette BYG-PHP03-PCL: $(tr -d '\n' < /tmp/lpadmin.err)"
 fi
+rm -f /tmp/lpadmin.err
 
-systemctl restart cups
+lpadmin -d FollowMe-MFP-PCL 2>/dev/null   # standardprinter
+systemctl restart cups >/dev/null 2>&1
+for _ in $(seq 1 10); do lpstat -r >/dev/null 2>&1 && break; sleep 1; done
 
-apt-get install -y print-manager 2>/dev/null || true
+echo "[8/8] Verificerer..."
+# lpadmin -E slår køen til ved oprettelse, men en kø der blev stoppet af en
+# fejl tidligere kan stadig stå disabled eller reject efter genstart. Det er
+# den hyppigste grund til at "printeren er der, men der sker ingenting".
+verify_queue() {   # verify_queue NAVN FORVENTET_URI_PRÆFIKS
+    local q="$1" want="$2" state uri
+    if ! lpstat -p "$q" >/dev/null 2>&1; then
+        problem "Køen '$q' findes ikke efter opsætning."
+        return 1
+    fi
+    uri="$(lpstat -v "$q" 2>/dev/null | sed 's/.*: //')"
+    if [[ "$uri" != "$want"* ]]; then
+        problem "'$q' peger et forkert sted hen."
+        return 1
+    fi
+    state="$(lpstat -p "$q" 2>/dev/null | head -1)"
+    if [[ "$state" == *disabled* ]]; then
+        cupsenable "$q" >/dev/null 2>&1
+        if lpstat -p "$q" 2>/dev/null | head -1 | grep -q disabled; then
+            problem "'$q' er disabled og kunne ikke slås til."
+            return 1
+        fi
+        warn "'$q' var disabled — slået til igen."
+    fi
+    if lpstat -a "$q" 2>/dev/null | grep -q "not accepting"; then
+        cupsaccept "$q" >/dev/null 2>&1
+        if lpstat -a "$q" 2>/dev/null | grep -q "not accepting"; then
+            problem "'$q' afviser jobs og kunne ikke rettes."
+            return 1
+        fi
+        warn "'$q' afviste jobs — rettet."
+    fi
+    ok "$q: klar"
+    return 0
+}
 
-banner "Færdig"
-lpstat -p 2>/dev/null || true
+[[ "$MFP_CREATED" -eq 1 ]] && verify_queue FollowMe-MFP-PCL "smbspool-auth://"
+[[ "$PLOT_CREATED" -eq 1 ]] && verify_queue BYG-PHP03-PCL "socket://"
+
+apt-get install -y print-manager >/dev/null 2>&1
+
+banner "Resultat"
+lpstat -p 2>/dev/null
 echo ""
-echo "Testside:  lp -d FollowMe-MFP-PCL /usr/share/cups/data/testprint"
-echo "Status:    lpstat -p"
-echo "Jobkø:     lpstat -o"
+if [[ ${#PROBLEMS[@]} -eq 0 ]]; then
+    ok "Alt er på plads. Scriptet kan køres igen når som helst."
+    echo ""
+    echo "  Testside:  lp -d FollowMe-MFP-PCL /usr/share/cups/data/testprint"
+    echo "  Jobkø:     lpstat -o"
+    exit 0
+fi
+fail "${#PROBLEMS[@]} problem(er) tilbage:"
+for pr in "${PROBLEMS[@]}"; do echo "    • $pr"; done
+echo ""
+echo "  Logfil:    sudo tail -50 /var/log/cups/error_log"
+echo "  Kør igen:  sudo $0"
+exit 1
