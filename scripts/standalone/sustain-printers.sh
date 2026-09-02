@@ -30,7 +30,23 @@
 #   --print-server VÆRT
 #   --plot-server VÆRT  (tom streng springer plotteren over)
 #   --no-plotter       spring plotteren over
+#   --no-site-conf     ignorér /etc/dtu-setup/ helt, også hvis den findes
+#   --show-values      vis værtsnavne i klartekst (ellers maskeres de)
 #   -h, --help
+#
+# ── Værdier vises ikke på skærmen ────────────────────────────────────────────
+#
+# Værtsnavne og kodeord skrives aldrig ud. Indtastning sker uden ekko, og
+# kvitteringen viser kun længden. Scriptet køres typisk på en andens maskine
+# med nogen kigge med, og et terminaludklip ender let i en supportsag.
+# --show-values slår maskeringen fra når man fejlsøger alene.
+#
+# ── Uafhængighed af DTU Linux Setup ──────────────────────────────────────────
+#
+# Scriptet kræver intet fra DTU Linux Setup: ingen common.sh, ingen site.conf,
+# ingen installeret pakke. Findes /etc/dtu-setup/ bruges den som en bekvem
+# kilde til serveradresser — men --no-site-conf slår også det fra, så det kan
+# køres helt udenom på en maskine hvor værktøjet ER installeret.
 #
 # ── Serveradresser ───────────────────────────────────────────────────────────
 #
@@ -63,7 +79,7 @@ warn()   { printf '%s⚠️  %s%s\n' "$YELLOW" "$1" "$NC"; }
 fail()   { printf '%s❌ %s%s\n' "$RED" "$1" "$NC"; }
 
 usage() {
-    sed -n '3,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '3,58p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -72,6 +88,8 @@ ARG_DOMAIN=""
 ARG_PRINT_SERVER=""
 ARG_PLOT_SERVER=""
 PLOT_EXPLICITLY_OFF=0
+USE_SITE_CONF=1
+SHOW_VALUES=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -89,6 +107,8 @@ while [[ $# -gt 0 ]]; do
             echo "   Alt på kommandolinjen kan læses med 'ps' af enhver bruger"
             echo "   på maskinen. Brug DTU_PASSWORD=… eller lad scriptet spørge."
             exit 1 ;;
+        --no-site-conf) USE_SITE_CONF=0; shift ;;
+        --show-values)  SHOW_VALUES=1; shift ;;
         -h|--help)      usage 0 ;;
         *)              fail "Ukendt tilvalg: $1"; usage 1 ;;
     esac
@@ -104,6 +124,27 @@ banner "DTU Sustain – printeropsætning"
 
 # ── Serveradresser ───────────────────────────────────────────────────────────
 
+# Værdierne herunder er interne værtsnavne. De skrives aldrig på skærmen:
+# en tekniker kører det her på en andens maskine, tit med nogen kigge med,
+# og et terminaludklip ender let i en supportsag eller et skærmbillede.
+# Kør med --show-values hvis du fejlsøger alene og vil se dem.
+mask() {
+    local v="$1"
+    [[ -z "$v" ]] && { printf '(ikke sat)'; return; }
+    if [[ "${SHOW_VALUES:-0}" -eq 1 ]]; then printf '%s' "$v"
+    else printf '(sat, %d tegn)' "${#v}"; fi
+}
+
+# Indtastning uden ekko, med maskeret kvittering så en slåfejl kan ses på
+# længden uden at værdien står på skærmen.
+read_hidden() {   # read_hidden PROMPT VARIABELNAVN
+    local prompt="$1" name="$2" value
+    read -rsp "$prompt" value
+    echo ""
+    printf -v "$name" '%s' "$value"
+    [[ -n "$value" ]] && echo "      → $(mask "$value")"
+}
+
 read_var() {   # read_var FIL VARIABEL
     [[ -r "$1" ]] || return 1
     local v
@@ -112,12 +153,26 @@ read_var() {   # read_var FIL VARIABEL
     printf '%s' "$v"
 }
 
-find_var() {   # find_var VARIABEL
-    local f
-    for f in "$SCRIPT_DIR/print.conf" /etc/dtu-setup/site.conf \
-             /etc/dtu-setup/dtu-sustain.env; do
+# find_var sætter FOUND_VALUE og FOUND_IN i den kaldende shell frem for at
+# skrive værdien ud. Kaldes den i en kommandosubstitution, sker tildelingen i
+# en subshell og FOUND_IN er tom igen bagefter — kilden blev aldrig vist.
+FOUND_VALUE=""
+FOUND_IN=""
+
+find_var() {   # find_var VARIABEL → FOUND_VALUE, FOUND_IN
+    FOUND_VALUE=""
+    FOUND_IN=""
+    local f v sources=("$SCRIPT_DIR/print.conf")
+    # /etc/dtu-setup/ hører til DTU Linux Setup. Den bruges hvis den er der,
+    # men scriptet kræver den ikke — og --no-site-conf slår den fra, så det
+    # kan køres helt udenom på en maskine hvor værktøjet ER installeret.
+    if [[ "${USE_SITE_CONF:-1}" -eq 1 ]]; then
+        sources+=(/etc/dtu-setup/site.conf /etc/dtu-setup/dtu-sustain.env)
+    fi
+    for f in "${sources[@]}"; do
         if v="$(read_var "$f" "$1")"; then
-            printf '%s' "$v"
+            FOUND_VALUE="$v"
+            FOUND_IN="$(basename "$f")"
             return 0
         fi
     done
@@ -126,21 +181,24 @@ find_var() {   # find_var VARIABEL
 
 if [[ -n "$ARG_PRINT_SERVER" ]]; then
     PRINT_SERVER="$ARG_PRINT_SERVER"
-    echo "  FollowMe-server: $PRINT_SERVER  (--print-server)"
-elif PRINT_SERVER="$(find_var SITE_PRINT_SERVER)"; then
-    echo "  FollowMe-server: $PRINT_SERVER"
+    echo "  FollowMe-server: $(mask "$PRINT_SERVER")  fra --print-server"
+elif find_var SITE_PRINT_SERVER; then
+    PRINT_SERVER="$FOUND_VALUE"
+    echo "  FollowMe-server: $(mask "$PRINT_SERVER")  fra ${FOUND_IN}"
 else
-    read -rp "  FollowMe-printserverens værtsnavn: " PRINT_SERVER
+    read_hidden "  FollowMe-printserverens værtsnavn: " PRINT_SERVER
     [[ -n "$PRINT_SERVER" ]] || { fail "Uden printserver kan FollowMe-køen ikke oprettes."; exit 1; }
 fi
 
 if [[ "$PLOT_EXPLICITLY_OFF" -eq 1 ]]; then
     PLOT_SERVER="$ARG_PLOT_SERVER"
-    [[ -n "$PLOT_SERVER" ]] && echo "  Plotter:         $PLOT_SERVER  (--plot-server)"
-elif PLOT_SERVER="$(find_var SITE_SUSTAIN_PLOT_SERVER)"; then
-    echo "  Plotter:         $PLOT_SERVER"
+    [[ -n "$PLOT_SERVER" ]] && echo "  Plotter:         $(mask "$PLOT_SERVER")  fra --plot-server"
+elif find_var SITE_SUSTAIN_PLOT_SERVER; then
+    PLOT_SERVER="$FOUND_VALUE"
+    echo "  Plotter:         $(mask "$PLOT_SERVER")  fra ${FOUND_IN}"
 else
-    read -rp "  Plotterens værtsnavn (blank = spring plotteren over): " PLOT_SERVER
+    echo "  Plotterens værtsnavn (tryk Enter for at springe plotteren over):"
+    read_hidden "    " PLOT_SERVER
 fi
 
 # ── PPD-filer ────────────────────────────────────────────────────────────────
@@ -293,7 +351,7 @@ else
       -L "BYG" \
       -o PageSize=A4 \
       -o job-sheets=none,none
-    ok "BYG-PHP03-PCL oprettet (${PLOT_SERVER}:9100)."
+    ok "BYG-PHP03-PCL oprettet ($(mask "$PLOT_SERVER"), JetDirect 9100)."
 fi
 
 systemctl restart cups
