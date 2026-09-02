@@ -166,7 +166,14 @@ read_hidden() {   # read_hidden PROMPT VARIABELNAVN
     read -rsp "$prompt" value
     echo ""
     printf -v "$name" '%s' "$value"
-    [[ -n "$value" ]] && echo "      → $(mask "$value")"
+    if [[ -n "$value" ]]; then
+        echo "      → $(mask "$value")"
+    fi
+    # Eksplicit. Var den sidste sætning en &&-liste, returnerede funktionen 1
+    # når feltet var tomt — og med set -e døde hele scriptet tavst dér.
+    # Symptomet var at man trykkede Enter for at springe plotteren over, og
+    # så skete der ikke mere.
+    return 0
 }
 
 read_var() {   # read_var FIL VARIABEL
@@ -203,6 +210,50 @@ find_var() {   # find_var VARIABEL → FOUND_VALUE, FOUND_IN
     return 1
 }
 
+# ── Domænebruger ─────────────────────────────────────────────────────────────
+#
+# Først, fordi det er hele pointen. FollowMe-køen spooler som en navngiven
+# bruger — serveren kan ikke afregne et job eller frigive det ved
+# kopimaskinen uden at vide hvem det tilhører. Alt andet herunder er
+# valgfrit; det her er ikke.
+#
+# Rækkefølge: flag, så miljø, så prompt. Samme variabelnavne som modulet i
+# DTU Linux Setup, så en env-fil derfra virker uændret.
+U="${ARG_USER:-${DTU_USERNAME:-}}"
+P="${DTU_PASSWORD:-}"
+DOMAIN="${ARG_DOMAIN:-${DTU_AD_NETBIOS:-WIN}}"
+
+if [[ -z "$U" || -z "$P" ]]; then
+    echo "Køen printer som en navngiven bruger — det er sådan FollowMe ved"
+    echo "hvem jobbet tilhører, og hvem der kan frigive det ved maskinen."
+    echo "Sidder du ved en andens computer, er det DERES login der skal ind."
+    echo ""
+fi
+
+if [[ -z "$U" ]]; then
+    read -rp "  WIN-brugernavn (fx mpark): " U
+fi
+[[ -n "$U" ]] || { fail "Brugernavn er påkrævet."; exit 1; }
+
+if [[ -z "$P" ]]; then
+    if [[ ! -t 0 ]]; then
+        fail "Intet kodeord, og der er ingen terminal at spørge på."
+        echo "   Sæt DTU_PASSWORD, eller kør scriptet fra en terminal."
+        exit 1
+    fi
+    read -rsp "  Kodeord for ${DOMAIN}\\${U} (vises ikke): " P
+    echo ""
+fi
+[[ -n "$P" ]] || { fail "Kodeord er påkrævet."; exit 1; }
+
+echo "  Køen spooler som:  ${DOMAIN}\\${U}"
+echo ""
+
+# ── Serveradresser ───────────────────────────────────────────────────────────
+#
+# Værdierne skrives ikke på skærmen bagefter, men indtastes synligt: at taste
+# et værtsnavn i blinde uden ekko og uden at kunne se en slåfejl er værre end
+# det beskytter imod. Kodeordet ovenfor er den del der skal være skjult.
 if [[ -n "$ARG_PRINT_SERVER" ]]; then
     PRINT_SERVER="$ARG_PRINT_SERVER"
     echo "  FollowMe-server: $(mask "$PRINT_SERVER")  fra --print-server"
@@ -210,20 +261,37 @@ elif find_var SITE_PRINT_SERVER; then
     PRINT_SERVER="$FOUND_VALUE"
     echo "  FollowMe-server: $(mask "$PRINT_SERVER")  fra ${FOUND_IN}"
 else
-    read_hidden "  FollowMe-printserverens værtsnavn: " PRINT_SERVER
+    echo "FollowMe-printserverens værtsnavn."
+    echo ""
+    echo "  Det er den Windows-printserver Sustains kopimaskiner hænger på —"
+    echo "  et navn i stil med <navn>.win.dtu.dk. Det er IKKE kopimaskinens"
+    echo "  eget navn og ikke en IP-adresse."
+    echo ""
+    echo "  Står den i /etc/dtu-setup/site.conf på en maskine der virker,"
+    echo "  finder scriptet den selv:"
+    echo "      grep SITE_PRINT_SERVER /etc/dtu-setup/*.conf /etc/dtu-setup/*.env"
+    echo ""
+    read -rp "  Værtsnavn: " PRINT_SERVER
     [[ -n "$PRINT_SERVER" ]] || { fail "Uden printserver kan FollowMe-køen ikke oprettes."; exit 1; }
 fi
 
 if [[ "$PLOT_EXPLICITLY_OFF" -eq 1 ]]; then
     PLOT_SERVER="$ARG_PLOT_SERVER"
-    [[ -n "$PLOT_SERVER" ]] && echo "  Plotter:         $(mask "$PLOT_SERVER")  fra --plot-server"
+    if [[ -n "$PLOT_SERVER" ]]; then
+        echo "  Plotter:         $(mask "$PLOT_SERVER")  fra --plot-server"
+    fi
 elif find_var SITE_SUSTAIN_PLOT_SERVER; then
     PLOT_SERVER="$FOUND_VALUE"
     echo "  Plotter:         $(mask "$PLOT_SERVER")  fra ${FOUND_IN}"
 else
-    echo "  Plotterens værtsnavn (tryk Enter for at springe plotteren over):"
-    read_hidden "    " PLOT_SERVER
+    echo ""
+    echo "Storformatplotteren i BYG (valgfri)."
+    echo "  Enhedens eget værtsnavn — den har ingen printserver foran sig."
+    echo "  Tryk Enter for at springe den over; FollowMe oprettes alligevel."
+    echo ""
+    read -rp "  Værtsnavn, eller Enter: " PLOT_SERVER
 fi
+echo ""
 
 # ── PPD-filer ────────────────────────────────────────────────────────────────
 #
@@ -244,34 +312,6 @@ if ! PPD_FILE="$(find_ppd KOC751iUX.ppd)"; then
     exit 1
 fi
 PLOT_PPD_FILE="$(find_ppd hp-designjet-Z9dr-44in-ps.ppd || true)"
-
-# ── Domænebruger ─────────────────────────────────────────────────────────────
-#
-# FollowMe-køen spooler som brugeren, så kodeordet skal med. Her er der en
-# TTY — modulet i GUI'en kan ikke spørge, og får værdierne som miljøvariabler.
-# Rækkefølge: flag, så miljø, så prompt. Samme variabelnavne som modulet i
-# DTU Linux Setup, så en env-fil derfra virker uændret.
-U="${ARG_USER:-${DTU_USERNAME:-}}"
-P="${DTU_PASSWORD:-}"
-DOMAIN="${ARG_DOMAIN:-${DTU_AD_NETBIOS:-WIN}}"
-
-if [[ -z "$U" ]]; then
-    read -rp "  WIN-brugernavn (fx mpark): " U
-fi
-[[ -n "$U" ]] || { fail "Brugernavn er påkrævet."; exit 1; }
-
-if [[ -z "$P" ]]; then
-    if [[ ! -t 0 ]]; then
-        fail "Intet kodeord, og der er ingen terminal at spørge på."
-        echo "   Sæt DTU_PASSWORD, eller kør scriptet fra en terminal."
-        exit 1
-    fi
-    read -rsp "  Kodeord for ${DOMAIN}\\${U}: " P
-    echo ""
-fi
-[[ -n "$P" ]] || { fail "Kodeord er påkrævet."; exit 1; }
-
-echo "  Køen spooler som:  ${DOMAIN}\\${U}"
 
 CREDS_FILE="/etc/cups/print-sustain.creds"
 
