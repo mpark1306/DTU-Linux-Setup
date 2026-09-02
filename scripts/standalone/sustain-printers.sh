@@ -30,8 +30,8 @@
 #   --print-server VÆRT
 #   --plot-server VÆRT  (tom streng springer plotteren over)
 #   --no-plotter       spring plotteren over
-#   --keep-other-printers
-#                      fjern kun DTU-køerne, ikke alle andre printere
+#   --remove-all-printers
+#                      fjern ALLE køer, også lokale printere maskinen selv har
 #   --no-site-conf     ignorér /etc/dtu-setup/ helt, også hvis den findes
 #   --show-values      vis værtsnavne i klartekst (ellers maskeres de)
 #   -h, --help
@@ -39,11 +39,15 @@
 # ── Kan køres igen ───────────────────────────────────────────────────────────
 #
 # Scriptet konvergerer mod en kendt tilstand frem for at antage en tom
-# maskine. Det fjerner eksisterende køer først (som standard ALLE — brug
-# --keep-other-printers hvis maskinen har en lokal printer der skal blive),
-# opretter køerne igen, og kontrollerer til sidst at de findes, peger det
-# rigtige sted hen, er slået til og tager imod jobs. En kø der står disabled
-# eller reject bliver rettet.
+# maskine. Det fjerner sine egne køer først — dem der hedder FollowMe-* eller
+# BYG-PHP03-*, og dem der peger på FollowMe-serveren eller plotteren uanset
+# hvad de hedder. Andre printere på maskinen røres ikke: en Brother på
+# skrivebordet er ikke vores at fjerne. --remove-all-printers rydder alt, hvis
+# det er det man vil.
+#
+# Derefter oprettes køerne igen, og til sidst kontrolleres at de findes, peger
+# det rigtige sted hen, er slået til og tager imod jobs. En kø der står
+# disabled eller reject bliver rettet.
 #
 # Fejl afbryder ikke undervejs. De samles op og rapporteres til sidst, så en
 # fejlende plotter ikke koster dig FollowMe-køen. Exitkoden er 1 hvis noget
@@ -105,7 +109,7 @@ ARG_PLOT_SERVER=""
 PLOT_EXPLICITLY_OFF=0
 USE_SITE_CONF=1
 SHOW_VALUES=0
-KEEP_OTHERS=0
+REMOVE_ALL=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -123,7 +127,10 @@ while [[ $# -gt 0 ]]; do
             echo "   Alt på kommandolinjen kan læses med 'ps' af enhver bruger"
             echo "   på maskinen. Brug DTU_PASSWORD=… eller lad scriptet spørge."
             exit 1 ;;
-        --keep-other-printers) KEEP_OTHERS=1; shift ;;
+        --remove-all-printers) REMOVE_ALL=1; shift ;;
+        # Var et flag før standarden blev vendt. Accepteres stadig, så en
+        # nedskrevet instruktion ikke pludselig fejler.
+        --keep-other-printers) shift ;;
         --no-site-conf) USE_SITE_CONF=0; shift ;;
         --show-values)  SHOW_VALUES=1; shift ;;
         -h|--help)      usage 0 ;;
@@ -372,18 +379,34 @@ mapfile -t EXISTING < <(lpstat -p 2>/dev/null | awk '/^printer /{print $2}')
 if [[ ${#EXISTING[@]} -eq 0 ]]; then
     echo "      ingen køer i forvejen"
 else
-    if [[ "$KEEP_OTHERS" -eq 1 ]]; then
-        KILL=()
-        for q in "${EXISTING[@]}"; do
-            case "$q" in
-                FollowMe-MFP-PCL|FollowMe-Plot-PS|BYG-PHP03-PCL) KILL+=("$q") ;;
-            esac
-        done
-    else
-        KILL=("${EXISTING[@]}")
+    # Kun de køer scriptet selv ejer. En Brother på skrivebordet eller en
+    # USB-printer i et lokale er ikke vores at fjerne.
+    #
+    # Der matches på to ting. Navnet fanger vores egne køer og de forældede
+    # varianter. Device-URI'en fanger det navnet ikke kan: en kø nogen har
+    # kaldt "Printer-1" men som peger på FollowMe-serveren eller plotteren
+    # er en dublet der stjæler jobs, uanset hvad den hedder.
+    ours() {   # ours NAVN
+        local q="$1" uri
+        case "$q" in
+            FollowMe-*|BYG-PHP03-*) return 0 ;;
+        esac
+        uri="$(lpstat -v "$q" 2>/dev/null | sed 's/.*: //')"
+        [[ "$uri" == smbspool-auth://* ]] && return 0
+        [[ -n "$PRINT_SERVER" && "$uri" == *"$PRINT_SERVER"* ]] && return 0
+        [[ -n "$PLOT_SERVER"  && "$uri" == *"$PLOT_SERVER"*  ]] && return 0
+        return 1
+    }
+
+    KILL=(); KEPT=()
+    for q in "${EXISTING[@]}"; do
+        if [[ "$REMOVE_ALL" -eq 1 ]] || ours "$q"; then KILL+=("$q"); else KEPT+=("$q"); fi
+    done
+    if [[ ${#KEPT[@]} -gt 0 ]]; then
+        echo "      beholder ${#KEPT[@]} kø(er) der ikke er vores: ${KEPT[*]}"
     fi
     if [[ ${#KILL[@]} -eq 0 ]]; then
-        echo "      beholder ${#EXISTING[@]} kø(er) (--keep-other-printers)"
+        echo "      ingen DTU-køer at fjerne"
     else
         for q in "${KILL[@]}"; do
             cupsreject "$q" >/dev/null 2>&1
