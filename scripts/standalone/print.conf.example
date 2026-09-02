@@ -1,0 +1,8 @@
+# Serveradresser til sustain-printers.sh.
+#
+# Kopiér til print.conf ved siden af scriptet og udfyld. Har maskinen allerede
+# /etc/dtu-setup/site.conf eller dtu-sustain.env, kan filen her udelades —
+# scriptet finder værdierne der.
+
+SITE_PRINT_SERVER="<followme-printserver>"
+SITE_SUSTAIN_PLOT_SERVER="<plotter-hostname>"
