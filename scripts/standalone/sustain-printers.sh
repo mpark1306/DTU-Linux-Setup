@@ -231,9 +231,20 @@ if [[ -z "$U" || -z "$P" ]]; then
 fi
 
 if [[ -z "$U" ]]; then
-    read -rp "  WIN-brugernavn (fx mpark): " U
+    read -rp "  WIN-brugernavn, kun kortnavnet (fx mpark): " U
 fi
 [[ -n "$U" ]] || { fail "Brugernavn er påkrævet."; exit 1; }
+
+# Folk skriver domænet med. Det er en rimelig ting at gøre, og alle tre
+# former er "rigtige" andre steder — men credentials-filen skal have
+# WIN\brugernavn, så WIN\WIN\mpark eller WIN\mpark@dtu.dk fejler
+# godkendelsen uden at sige hvorfor. Jobbet lander i køen og forsvinder.
+U_RAW="$U"
+U="${U##*\\}"            # WIN\mpark  →  mpark
+U="${U%%@*}"             # mpark@dtu.dk → mpark
+if [[ "$U" != "$U_RAW" ]]; then
+    echo "      (bruger '$U' — domænet sættes på automatisk)"
+fi
 
 if [[ -z "$P" ]]; then
     if [[ ! -t 0 ]]; then
