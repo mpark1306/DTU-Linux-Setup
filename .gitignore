@@ -37,3 +37,7 @@ site.conf
 
 # Cisco redistributables (proprietary — never commit)
 cisco-secure-client*
+
+# Udfyldt print.conf til det frittstående printerscript. Indeholder
+# interne værtsnavne — kun print.conf.example hører i repoet.
+scripts/standalone/print.conf
