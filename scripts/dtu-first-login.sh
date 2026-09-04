@@ -10,7 +10,12 @@
 set -euo pipefail
 
 MARKER="$HOME/.config/dtu-sustain-setup-done"
-AUTOSTART_ENTRY="$HOME/.config/autostart/dtu-first-login.desktop"
+
+# Rester fra dengang autostart-posten blev lagt i /etc/skel og kopieret ind i
+# hver ny hjemmemappe. Den ligger nu i /etc/xdg/autostart og gælder alle
+# sessioner; en per-bruger-kopi ville køre dialogen to gange.
+STALE_USER_ENTRY="$HOME/.config/autostart/dtu-first-login.desktop"
+rm -f "$STALE_USER_ENTRY" 2>/dev/null || true
 
 # ── Read department config (written by qdrive.sh during admin setup) ─────────
 DEPARTMENT="sustain"
@@ -21,6 +26,22 @@ export DTU_DEPARTMENT="$DEPARTMENT"
 
 # ── Already completed? ───────────────────────────────────────────────────────
 if [[ -f "$MARKER" ]]; then
+    exit 0
+fi
+
+# ── Only for domain users ────────────────────────────────────────────────────
+#
+# Autostart-posten ligger systemvidt, så den udløses også for den lokale
+# admin-konto der satte maskinen op. Opsætningen her henter netværksdrev og
+# printere for en WIN-konto og giver ingen mening for en lokal bruger — og
+# skrev den en markør, ville den rigtige bruger aldrig få dialogen.
+#
+# En domænebruger findes i getent, men ikke i /etc/passwd: den kommer fra
+# SSSD. Det er den skelnen der tæller her, ikke UID-intervallet.
+if grep -q "^${USER}:" /etc/passwd 2>/dev/null; then
+    exit 0
+fi
+if ! getent passwd "$USER" >/dev/null 2>&1; then
     exit 0
 fi
 
@@ -250,10 +271,11 @@ fi
 
 # ── Mark as done ─────────────────────────────────────────────────────────────
 mkdir -p "$(dirname "$MARKER")"
+# Markøren skrives her og kun her — efter at alt ovenfor er gået igennem.
+# Er der afbrudt undervejs, findes den ikke, og dialogen kommer igen ved
+# næste login. Det er med vilje: en halv opsætning skal ikke se færdig ud.
+mkdir -p "$(dirname "$MARKER")"
 date '+%F %T' > "$MARKER"
-
-# Remove autostart so it won't run again
-rm -f "$AUTOSTART_ENTRY"
 
 show_message "${DEPT_LABEL} – Færdig" \
     "Opsætningen er fuldført!

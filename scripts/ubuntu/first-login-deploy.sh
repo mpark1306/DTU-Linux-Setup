@@ -29,6 +29,19 @@ fi
 
 INSTALL_DIR="/usr/local/bin"
 INSTALL_PATH="${INSTALL_DIR}/dtu-first-login.sh"
+
+# Systemvidt, ikke /etc/skel.
+#
+# /etc/skel kopieres ind i en hjemmemappe når kontoen OPRETTES. For en
+# domænebruger sker det ved første login, via pam_mkhomedir. Køres dette
+# modul bagefter — og det gør det altid, for admin skal jo være logget ind
+# for at køre det — er hjemmemappen allerede lavet, og posten kommer aldrig.
+# Det er derfor dialogen "aldrig dukker op og ikke findes i Autostart".
+#
+# /etc/xdg/autostart gælder alle sessioner, også dem der allerede findes.
+# Selve scriptet afgør så om den skal køre: kun for domænebrugere, og kun
+# indtil den er kørt færdig én gang.
+XDG_AUTOSTART="/etc/xdg/autostart"
 SKEL_AUTOSTART="/etc/skel/.config/autostart"
 
 echo "[1/4] Installing first-login script to ${INSTALL_PATH}..."
@@ -36,20 +49,40 @@ cp "$FIRST_LOGIN_SRC" "$INSTALL_PATH"
 chmod 0755 "$INSTALL_PATH"
 ok "Script installed."
 
-echo "[2/4] Creating skel autostart entry..."
-mkdir -p "$SKEL_AUTOSTART"
-cat > "${SKEL_AUTOSTART}/dtu-first-login.desktop" <<'DESKTOP'
+echo "[2/4] Creating system-wide autostart entry..."
+mkdir -p "$XDG_AUTOSTART"
+cat > "${XDG_AUTOSTART}/dtu-first-login.desktop" <<'DESKTOP'
 [Desktop Entry]
 Type=Application
-Name=DTU Sustain First-Login Setup
+Name=DTU First-Login Setup
+Name[da]=DTU Førstegangsopsætning
 Comment=Configure network drives and printers on first login
+Comment[da]=Opsætter netværksdrev og printere ved første login
 Exec=/usr/local/bin/dtu-first-login.sh
 Terminal=false
 X-KDE-autostart-phase=2
 X-GNOME-Autostart-enabled=true
 DESKTOP
-chmod 0644 "${SKEL_AUTOSTART}/dtu-first-login.desktop"
-ok "Autostart entry created in /etc/skel."
+chmod 0644 "${XDG_AUTOSTART}/dtu-first-login.desktop"
+ok "Autostart entry created in ${XDG_AUTOSTART}."
+
+# Den gamle skel-post fjernes. Lå begge, ville en ny bruger få dialogen to
+# gange, og den per-bruger-kopi kan brugeren ikke selv rydde op i.
+if [[ -f "${SKEL_AUTOSTART}/dtu-first-login.desktop" ]]; then
+    rm -f "${SKEL_AUTOSTART}/dtu-first-login.desktop"
+    ok "Removed the old /etc/skel entry (superseded by ${XDG_AUTOSTART})."
+fi
+
+# Og de kopier der allerede er landet i eksisterende hjemmemapper.
+removed=0
+for home in /home/*; do
+    entry="${home}/.config/autostart/dtu-first-login.desktop"
+    if [[ -f "$entry" ]]; then
+        rm -f "$entry"
+        removed=$((removed + 1))
+    fi
+done
+[[ "$removed" -gt 0 ]] && ok "Removed ${removed} stale per-user autostart entr(ies)."
 
 echo "[3/4] Configuring default KDE X11 session for new users..."
 # GDM reads ~/.dmrc to pick the default session for a user who hasn't logged

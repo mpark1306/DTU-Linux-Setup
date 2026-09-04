@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Refresh Network Drives
+Name[da]=Genopfrisk netværksdrev
+Comment=Reconnect Q/P or O/M drives after a network change
+Comment[da]=Forbind Q/P- eller O/M-drevene igen efter et netværksskift
+Exec=pkexec /usr/local/bin/dtu-drives-reselect.sh
+Icon=network-workgroup
+Terminal=false
+Categories=Qt;KDE;System;
+Keywords=DTU;drev;drive;netværk;network;mount;

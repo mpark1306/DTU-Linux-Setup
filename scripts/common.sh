@@ -247,7 +247,16 @@ apt_wait() {
 #   • vers=3.0/ntlmssp/nodfs options that avoid the kernel DFS-referral bug
 #   • systemd automount with nofail + idle-timeout so boot never hangs
 CIFS_MOUNT_OPTS="vers=3.0,sec=ntlmssp,nosharesock,nodfs,iocharset=utf8,serverino"
-CIFS_SYSTEMD_OPTS="_netdev,nofail,x-systemd.automount,x-systemd.idle-timeout=600,x-systemd.mount-timeout=30"
+# mount-timeout er det der afgør hvor længe skrivebordet står stille når
+# serveren ikke kan nås. En automount afbryder ENHVER adgang til stien —
+# Dolphins Places-panel, df, tab-completion, en shell hvis cwd ligger under
+# — og kalderen sover uafbrydeligt indtil monteringen lykkes eller timer ud.
+#
+# Den stod på 30s, og systemd's default er 90s. Begge føles som en frossen
+# maskine, og med idle-timeout bliver mountet droppet og forsøgt igen, så
+# det gentager sig. 10s er stadig rigeligt til en server der svarer, og kort
+# nok til at ligne en langsom mappe frem for et nedbrud.
+CIFS_SYSTEMD_OPTS="_netdev,nofail,x-systemd.automount,x-systemd.idle-timeout=600,x-systemd.mount-timeout=10"
 
 # ─── CIFS credentials file ──────────────────────────────────────────────────
 # The Sustain profile keeps ONE credentials file per user, shared by Q-Drive
@@ -379,8 +388,8 @@ sustain_write_fstab() {
   chown "$uid:$gid" "$mp" "$p_mp"
   chmod 0770 "$mp" "$p_mp"
 
-  local q_line="//${SERVER}/${Q_SHARE_PATH}  ${mp}  cifs  credentials=${creds},iocharset=utf8,uid=${uid},gid=${gid},dir_mode=0770,file_mode=0660,${CIFS_OPTS},_netdev,x-systemd.automount  0  0"
-  local p_line="//${SERVER}/${P_SHARE_PATH}  ${p_mp}  cifs  credentials=${creds},iocharset=utf8,uid=${uid},gid=${gid},dir_mode=0770,file_mode=0660,${CIFS_OPTS},_netdev,x-systemd.automount  0  0"
+  local q_line="//${SERVER}/${Q_SHARE_PATH}  ${mp}  cifs  credentials=${creds},iocharset=utf8,uid=${uid},gid=${gid},dir_mode=0770,file_mode=0660,${CIFS_OPTS},${CIFS_SYSTEMD_OPTS}  0  0"
+  local p_line="//${SERVER}/${P_SHARE_PATH}  ${p_mp}  cifs  credentials=${creds},iocharset=utf8,uid=${uid},gid=${gid},dir_mode=0770,file_mode=0660,${CIFS_OPTS},${CIFS_SYSTEMD_OPTS}  0  0"
 
   sed -i "\|[[:space:]]${mp}[[:space:]].*cifs|d" "$fstab" 2>/dev/null || true
   sed -i "\|[[:space:]]${p_mp}[[:space:]].*cifs|d" "$fstab" 2>/dev/null || true

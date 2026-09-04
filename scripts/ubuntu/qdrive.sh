@@ -135,6 +135,22 @@ DCONF
   [[ -n "$O_SHARE" ]] && echo "    O-Drive: //${SERVER}/${O_SHARE} → ${O_MOUNTPOINT}"
   echo "    Local home folders (Desktop, Documents etc.) are NOT symlinked."
   echo "    sync-homedir.sh syncs them to M-Drive when the drive is reachable."
+
+  # Netværksskift-hook'en lå efter denne grens exit 0 og gjaldt derfor kun
+  # Sustain. AIT havde ingen: skiftede maskinen mellem kabel, DTUSecure og
+  # VPN, blev drevene ved med at pege på et mål der ikke kunne nås, og hver
+  # adgang til /mnt blokerede indtil mount-timeouten. Det er den frysning
+  # der er meldt ind.
+  "${SCRIPT_DIR}/../deploy-drives-autoswitch.sh"
+
+  cat > "${DTU_SETUP_DIR:-/etc/dtu-setup}/drives.conf" <<DCONF
+DEPARTMENT=ait
+USERNAME=${USERNAME}
+TARGET=ait-direct
+MOUNT_POINT=${M_MOUNTPOINT}
+REMOTE_BASE=${M_MOUNTPOINT}
+DCONF
+  chmod 644 "${DTU_SETUP_DIR:-/etc/dtu-setup}/drives.conf"
   exit 0
 fi
 
@@ -209,7 +225,7 @@ chmod 600 "$CREDS_FILE"
 cifs_creds_drop_legacy "$USERNAME"
 
 echo "[4/8] Ensuring /etc/fstab entry for Q-Drive..."
-FSTAB_LINE="//${SERVER}/${SHARE_PATH}  ${MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,${CIFS_OPTS},_netdev,x-systemd.automount  0  0"
+FSTAB_LINE="//${SERVER}/${SHARE_PATH}  ${MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,${CIFS_OPTS},${CIFS_SYSTEMD_OPTS}  0  0"
 
 # Remove any prior entry for this mountpoint or for the legacy DFS path.
 sed -i "\|[[:space:]]${MOUNTPOINT}[[:space:]].*cifs|d" "$FSTAB_FILE" 2>/dev/null || true
@@ -222,7 +238,7 @@ if mount | grep -qE "[[:space:]]${MOUNTPOINT}[[:space:]]"; then
 fi
 
 echo "[5/8] Ensuring /etc/fstab entry for P-Drive..."
-P_FSTAB_LINE="//${SERVER}/${P_SHARE_PATH}  ${P_MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,${CIFS_OPTS},_netdev,x-systemd.automount  0  0"
+P_FSTAB_LINE="//${SERVER}/${P_SHARE_PATH}  ${P_MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,${CIFS_OPTS},${CIFS_SYSTEMD_OPTS}  0  0"
 
 sed -i "\|[[:space:]]${P_MOUNTPOINT}[[:space:]].*cifs|d" "$FSTAB_FILE" 2>/dev/null || true
 sed -i "\|//${SITE_FILE_SERVER}/${SITE_SUSTAIN_P_SUBPATH}/|d" "$FSTAB_FILE" 2>/dev/null || true
