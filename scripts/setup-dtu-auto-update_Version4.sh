@@ -18,6 +18,15 @@
 ###############################################################################
 set -euo pipefail
 
+# Scriptet skriver /etc/default/dtu-auto-update og systemd-units. Kørt som
+# almindelig bruger fejlede det først halvvejs nede, med en
+# permission-fejl per linje og en halv opsætning tilbage.
+if [[ $EUID -ne 0 ]]; then
+    echo "FEJL: dette script skal køres som root." >&2
+    echo "      sudo $0 $*" >&2
+    exit 1
+fi
+
 TOTAL=11
 BLUE='\033[1;34m'; GREEN='\033[1;32m'; RED='\033[1;31m'; NC='\033[0m'
 step() { echo -e "\n${BLUE}[TRIN $1/${TOTAL}]${NC} $2"; }

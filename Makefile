@@ -50,6 +50,9 @@ test:
 	@echo "── Bash: site configuration ─────────────────────────────────"
 	bash tests/test_site_conf.sh
 	@echo ""
+	@echo "── Shell: scripts (statisk + adfærd) ───────────────────────"
+	PYTHONPATH=src python3 -m unittest tests.test_scripts -v 2>&1 | tail -5
+	@echo ""
 	@echo "── Python: env loader ───────────────────────────────────────"
 	PYTHONPATH=src python3 -m unittest discover -s tests -v
 

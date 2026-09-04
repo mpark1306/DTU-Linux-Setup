@@ -204,11 +204,11 @@ fi
 sed -i "\|[[:space:]]${MOUNTPOINT}[[:space:]].*cifs|d" "$FSTAB_FILE" 2>/dev/null || true
 sed -i "\|//${SITE_FILE_SERVER}/${SITE_SUSTAIN_Q_SHARE}[[:space:]]|d" "$FSTAB_FILE" 2>/dev/null || true
 
-FSTAB_LINE="//${SERVER}/${Q_SHARE_PATH}  ${MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,${CIFS_OPTS},_netdev,x-systemd.automount  0  0"
+FSTAB_LINE="//${SERVER}/${Q_SHARE_PATH}  ${MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,${CIFS_OPTS},${CIFS_SYSTEMD_OPTS}  0  0"
 echo "$FSTAB_LINE" >> "$FSTAB_FILE"
 
 echo "[5/7] Ensuring /etc/fstab entry for P-Drive..."
-P_FSTAB_LINE="//${SERVER}/${P_SHARE_PATH}  ${P_MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,${CIFS_OPTS},_netdev,x-systemd.automount  0  0"
+P_FSTAB_LINE="//${SERVER}/${P_SHARE_PATH}  ${P_MOUNTPOINT}  cifs  credentials=${CREDS_FILE},iocharset=utf8,uid=${UID_NUM},gid=${GID_NUM},dir_mode=0770,file_mode=0660,${CIFS_OPTS},${CIFS_SYSTEMD_OPTS}  0  0"
 sed -i "\|[[:space:]]${P_MOUNTPOINT}[[:space:]].*cifs|d" "$FSTAB_FILE" 2>/dev/null || true
 sed -i "\|//${SITE_FILE_SERVER}/${SITE_SUSTAIN_P_SUBPATH}/|d" "$FSTAB_FILE" 2>/dev/null || true
 echo "$P_FSTAB_LINE" >> "$FSTAB_FILE"
