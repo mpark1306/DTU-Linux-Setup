@@ -93,7 +93,6 @@ colour cannot creep back in unnoticed.
 
 1. Fork → feature branch
 2. `bash -n` all changed scripts
-3. Test on at least one of: Ubuntu 24.04 LTS, openSUSE Tumbleweed
 4. Open a PR against `main` describing what changed and why
 
 ## Reporting bugs

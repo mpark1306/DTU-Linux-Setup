@@ -32,8 +32,6 @@ for cmd in tar make; do
     if command -v apt-get >/dev/null 2>&1; then
       apt-get update -qq
       apt-get install -y "$cmd"
-    elif command -v zypper >/dev/null 2>&1; then
-      zypper --non-interactive install "$cmd"
     else
       echo "ERROR: '${cmd}' not found and cannot be auto-installed." >&2
       exit 1

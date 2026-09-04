@@ -19,7 +19,6 @@ help:
 	@echo "  make install        Install to $(PREFIX) (run as root)"
 	@echo "  make uninstall      Remove installation"
 	@echo "  make deb            Build DEB package (Ubuntu)"
-	@echo "  make rpm            Build RPM package (openSUSE)"
 	@echo "  make run            Run from source (development)"
 	@echo "  make check-version  Verify all version strings agree"
 	@echo "  make lint           shellcheck all scripts + byte-compile Python"
@@ -60,7 +59,6 @@ lint:
 	@echo "Running shellcheck..."
 	@command -v shellcheck >/dev/null || { echo "shellcheck not installed: sudo apt install shellcheck"; exit 1; }
 	shellcheck --severity=warning --external-sources \
-		bin/*.sh scripts/*.sh scripts/ubuntu/*.sh scripts/opensuse/*.sh
 	@echo "Byte-compiling Python..."
 	python3 -m compileall -q src/dtu_sustain_setup
 	@echo "✅ Lint passed."
@@ -127,7 +125,6 @@ run:
 
 deb:
 	@echo "Building DEB package with dpkg-deb..."
-	@command -v dpkg-deb >/dev/null || { echo "Install dpkg first: sudo zypper install dpkg"; exit 1; }
 	$(eval DEB_ROOT := /tmp/dtu-sustain-setup-deb)
 	rm -rf $(DEB_ROOT)
 

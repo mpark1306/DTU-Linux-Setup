@@ -34,8 +34,6 @@ if ! command -v git >/dev/null 2>&1 || ! command -v make >/dev/null 2>&1; then
   if command -v apt-get >/dev/null 2>&1; then
     apt-get update -qq || true
     apt-get install -y git make
-  elif command -v zypper >/dev/null 2>&1; then
-    zypper --non-interactive install git make
   else
     echo "ERROR: install git + make manually." >&2
     exit 1

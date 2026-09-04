@@ -3,7 +3,7 @@
 # setup-dtu-auto-update.sh (v3)
 #
 # Opsætter daglig automatisk opdatering af:
-#   - Systempakker (zypper dup på openSUSE, apt dist-upgrade på Debian/Ubuntu)
+#   - Systempakker (apt dist-upgrade)
 #   - Firmware (fwupd)
 #   - Flatpak (system + pr. bruger)
 #   - Snap (hvis installeret)
@@ -39,19 +39,16 @@ step 1 "Tjekker forudsætninger og distribution"
 [ "$(id -u)" -eq 0 ] || fail "Scriptet skal køres som root (sudo)."
 
 . /etc/os-release
-FAMILY=""
 case "${ID:-}" in
-  ubuntu|debian) FAMILY="debian" ;;
-  opensuse-tumbleweed|opensuse*|sles|sled) FAMILY="suse" ;;
+  ubuntu|debian) ;;
   *)
     case "${ID_LIKE:-}" in
-      *debian*|*ubuntu*) FAMILY="debian" ;;
-      *suse*) FAMILY="suse" ;;
-      *) fail "Ukendt distribution: ${ID:-?}" ;;
+      *debian*|*ubuntu*) ;;
+      *) fail "Kun Debian/Ubuntu understøttes. Fandt: ${ID:-?}" ;;
     esac
     ;;
 esac
-ok "Distribution: ${PRETTY_NAME:-$ID} (familie: $FAMILY)"
+ok "Distribution: ${PRETTY_NAME:-$ID}"
 
 command -v systemctl >/dev/null || fail "systemd er påkrævet."
 ok "systemd fundet"
@@ -59,18 +56,17 @@ ok "systemd fundet"
 ###############################################################################
 step 2 "Installerer afhængigheder"
 ###############################################################################
-if [ "$FAMILY" = "debian" ]; then
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -qq
-  apt-get install -y -qq fwupd util-linux >/dev/null
-  if ! command -v kdialog >/dev/null && ! command -v zenity >/dev/null; then
-    apt-get install -y -qq zenity >/dev/null
-  fi
-else
-  zypper --non-interactive install --no-recommends fwupd util-linux >/dev/null || true
-  if ! command -v kdialog >/dev/null && ! command -v zenity >/dev/null; then
-    zypper --non-interactive install --no-recommends zenity >/dev/null || true
-  fi
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq || warn "apt-get update meldte fejl; fortsætter."
+apt-get install -y -qq fwupd util-linux >/dev/null || \
+  warn "Kunne ikke installere fwupd/util-linux — firmwaredelen springes over."
+
+# En dialog-binær bruges til at varsle om genstart. Kubuntu har kdialog;
+# det her er kun en sikkerhed, og den må ikke vælte opsætningen på en
+# maskine uden net.
+if ! command -v kdialog >/dev/null && ! command -v zenity >/dev/null; then
+  apt-get install -y -qq zenity >/dev/null || \
+    warn "Hverken kdialog eller zenity findes — genstartsvarsler vises ikke."
 fi
 ok "Afhængigheder installeret/verificeret"
 
@@ -165,7 +161,7 @@ section "Netvaerkstjek"
 NET_OK=0
 for i in $(seq 1 10); do
   if ping -c1 -W3 1.1.1.1 >/dev/null 2>&1 || ping -c1 -W3 8.8.8.8 >/dev/null 2>&1; then
-    if getent hosts download.opensuse.org >/dev/null 2>&1 || getent hosts archive.ubuntu.com >/dev/null 2>&1; then
+    if getent hosts archive.ubuntu.com >/dev/null 2>&1; then
       NET_OK=1
       break
     fi
@@ -180,21 +176,14 @@ if [ "$NET_OK" -ne 1 ]; then
 fi
 
 . /etc/os-release
-FAMILY="debian"
-case "${ID:-}${ID_LIKE:-}" in *suse*) FAMILY="suse" ;; esac
 log "Distribution: ${PRETTY_NAME:-$ID}"
 
-if [ "$FAMILY" = "debian" ]; then
-  APT_OPTS=(-o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
-  run "0" "APT update" apt-get "${APT_OPTS[@]}" update
-  run "0" "APT dist-upgrade" apt-get "${APT_OPTS[@]}" -y dist-upgrade
-  run "0" "APT autoremove" apt-get "${APT_OPTS[@]}" -y autoremove --purge
-  if command -v ubuntu-drivers >/dev/null; then
-    run "0" "ubuntu-drivers install" ubuntu-drivers install
-  fi
-else
-  run "0" "Zypper refresh" zypper --non-interactive refresh
-  run "0 102" "Zypper dup" zypper --non-interactive dup --auto-agree-with-licenses
+APT_OPTS=(-o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+run "0" "APT update" apt-get "${APT_OPTS[@]}" update
+run "0" "APT dist-upgrade" apt-get "${APT_OPTS[@]}" -y dist-upgrade
+run "0" "APT autoremove" apt-get "${APT_OPTS[@]}" -y autoremove --purge
+if command -v ubuntu-drivers >/dev/null; then
+  run "0" "ubuntu-drivers install" ubuntu-drivers install
 fi
 
 if command -v fwupdmgr >/dev/null; then
@@ -225,21 +214,9 @@ else
 fi
 
 REBOOT_NEEDED=0
-if [ "$FAMILY" = "debian" ]; then
-  if [ -f /run/reboot-required ]; then
-    REBOOT_NEEDED=1
-    [ -f /run/reboot-required.pkgs ] && { section "Pakker der kræver reboot"; cat /run/reboot-required.pkgs >> "$REPORT"; }
-  fi
-else
-  if command -v zypper >/dev/null; then
-    zypper needs-rebooting >/dev/null 2>&1
-    zrc=$?
-    case "$zrc" in
-      0) REBOOT_NEEDED=0; log "zypper needs-rebooting=0 (ingen reboot nødvendig)" ;;
-      102) REBOOT_NEEDED=1; log "zypper needs-rebooting=102 (reboot nødvendig)" ;;
-      *) REBOOT_NEEDED=0; log "zypper needs-rebooting=$zrc (ukendt), antager ingen tvungen reboot" ;;
-    esac
-  fi
+if [ -f /run/reboot-required ]; then
+  REBOOT_NEEDED=1
+  [ -f /run/reboot-required.pkgs ] && { section "Pakker der kræver reboot"; cat /run/reboot-required.pkgs >> "$REPORT"; }
 fi
 
 section "OPSUMMERING"
@@ -300,10 +277,6 @@ plog() {
 
 NEEDED=0
 if [ -f /run/reboot-required ]; then NEEDED=1; fi
-if command -v zypper >/dev/null; then
-  zypper needs-rebooting >/dev/null 2>&1
-  [ $? -eq 102 ] && NEEDED=1
-fi
 if [ "$NEEDED" -eq 0 ]; then
   plog "Reboot ikke længere nødvendig."
   rm -f "$DEFER_FILE"
@@ -445,7 +418,7 @@ systemctl reset-failed dtu-ns-test.service 2>/dev/null || true
 if [ "$HARDENING" = "full" ]; then
 cat > /etc/systemd/system/dtu-auto-update.service <<'SVC_EOF'
 [Unit]
-Description=DTU daglig automatisk opdatering (apt/zypper, fwupd, flatpak, snap)
+Description=DTU daglig automatisk opdatering (apt, fwupd, flatpak, snap)
 Wants=network-online.target
 After=network-online.target
 
@@ -465,7 +438,6 @@ ProtectHome=read-only
 ReadWritePaths=/var/log/dtu-auto-update /var/lib/dtu-auto-update /run \
                /usr /boot /etc \
                /var/cache /var/lib/dpkg /var/lib/apt /var/log/apt /var/log/dpkg.log \
-               /var/cache/zypp /var/lib/zypp \
                /var/lib/flatpak \
                /var/lib/fwupd /var/cache/fwupd \
                /var/lib/snapd /var/snap /snap \
@@ -474,7 +446,7 @@ SVC_EOF
 else
 cat > /etc/systemd/system/dtu-auto-update.service <<'SVC_EOF'
 [Unit]
-Description=DTU daglig automatisk opdatering (apt/zypper, fwupd, flatpak, snap)
+Description=DTU daglig automatisk opdatering (apt, fwupd, flatpak, snap)
 Wants=network-online.target
 After=network-online.target
 
@@ -581,65 +553,47 @@ step 11 "Verificerer system og fikser eventuelle problemer"
 ###############################################################################
 NEEDS_RERUN=0
 
-if [ "$FAMILY" = "debian" ]; then
-  # --- Fix 1: dpkg afbrudt tilstand ---
-  if dpkg --audit 2>&1 | grep -q .; then
-    echo -e "  ${RED}[!]${NC} dpkg har afbrudte pakker - fikser..."
-    dpkg --configure -a 2>&1 | tail -5
-    ok "dpkg --configure -a kørt"
-    NEEDS_RERUN=1
-  else
-    ok "dpkg: ingen afbrudte pakker"
-  fi
-
-  # --- Fix 2: ødelagte afhængigheder ---
-  if ! apt-get check 2>&1 | tail -1 | grep -q "^0 "; then
-    echo -e "  ${RED}[!]${NC} Ødelagte afhængigheder fundet - fikser..."
-    apt-get -o DPkg::Lock::Timeout=300 -y -f install 2>&1 | tail -5
-    ok "apt-get -f install kørt"
-    NEEDS_RERUN=1
-  else
-    ok "apt: ingen ødelagte afhængigheder"
-  fi
-
-  # --- Fix 3: afventende opdateringer ---
-  apt-get -o DPkg::Lock::Timeout=300 update -qq 2>/dev/null
-  PENDING=$(apt list --upgradable 2>/dev/null | grep -c 'upgradable' || echo 0)
-  if [ "$PENDING" -gt 0 ]; then
-    echo -e "  ${RED}[!]${NC} $PENDING pakker afventer stadig opdatering - kører dist-upgrade direkte..."
-    APT_FIX_OPTS=(-o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
-    apt-get "${APT_FIX_OPTS[@]}" -y dist-upgrade 2>&1 | tail -20
-    apt-get "${APT_FIX_OPTS[@]}" -y autoremove --purge 2>/dev/null
-    # Tjek igen
-    STILL_PENDING=$(apt list --upgradable 2>/dev/null | grep -c 'upgradable' || echo 0)
-    if [ "$STILL_PENDING" -gt 0 ]; then
-      echo -e "  ${RED}[ADVARSEL]${NC} $STILL_PENDING pakker kunne stadig ikke opdateres."
-      echo "  Mulige årsager: held-back pakker, PPA-konflikter, eller phased updates."
-      echo "  Tjek manuelt: apt list --upgradable"
-    else
-      ok "Alle afventende pakker er nu installeret."
-    fi
-  else
-    ok "Ingen afventende systempakker."
-  fi
-
+# --- Fix 1: dpkg afbrudt tilstand ---
+if dpkg --audit 2>&1 | grep -q .; then
+  echo -e "  ${RED}[!]${NC} dpkg har afbrudte pakker - fikser..."
+  dpkg --configure -a 2>&1 | tail -5
+  ok "dpkg --configure -a kørt"
+  NEEDS_RERUN=1
 else
-  # --- openSUSE: zypper med force-resolution ---
-  PENDING_SUSE=$(zypper --non-interactive lu 2>/dev/null | grep -c '^v ' || echo 0)
-  if [ "$PENDING_SUSE" -gt 0 ]; then
-    echo -e "  ${RED}[!]${NC} $PENDING_SUSE pakker afventer opdatering - kører zypper dup --force-resolution..."
-    zypper --non-interactive dup --auto-agree-with-licenses --force-resolution 2>&1 | tail -20
-    STILL_PENDING_SUSE=$(zypper --non-interactive lu 2>/dev/null | grep -c '^v ' || echo 0)
-    if [ "$STILL_PENDING_SUSE" -gt 0 ]; then
-      echo -e "  ${RED}[ADVARSEL]${NC} $STILL_PENDING_SUSE pakker kunne stadig ikke opdateres."
-      echo "  Tjek manuelt: zypper lu"
-    else
-      ok "Alle afventende pakker er nu installeret."
-    fi
-  else
-    ok "Ingen afventende systempakker (zypper)."
-  fi
+  ok "dpkg: ingen afbrudte pakker"
 fi
+
+# --- Fix 2: ødelagte afhængigheder ---
+if ! apt-get check 2>&1 | tail -1 | grep -q "^0 "; then
+  echo -e "  ${RED}[!]${NC} Ødelagte afhængigheder fundet - fikser..."
+  apt-get -o DPkg::Lock::Timeout=300 -y -f install 2>&1 | tail -5
+  ok "apt-get -f install kørt"
+  NEEDS_RERUN=1
+else
+  ok "apt: ingen ødelagte afhængigheder"
+fi
+
+# --- Fix 3: afventende opdateringer ---
+apt-get -o DPkg::Lock::Timeout=300 update -qq 2>/dev/null
+PENDING=$(apt list --upgradable 2>/dev/null | grep -c 'upgradable' || echo 0)
+if [ "$PENDING" -gt 0 ]; then
+  echo -e "  ${RED}[!]${NC} $PENDING pakker afventer stadig opdatering - kører dist-upgrade direkte..."
+  APT_FIX_OPTS=(-o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+  apt-get "${APT_FIX_OPTS[@]}" -y dist-upgrade 2>&1 | tail -20
+  apt-get "${APT_FIX_OPTS[@]}" -y autoremove --purge 2>/dev/null
+  # Tjek igen
+  STILL_PENDING=$(apt list --upgradable 2>/dev/null | grep -c 'upgradable' || echo 0)
+  if [ "$STILL_PENDING" -gt 0 ]; then
+    echo -e "  ${RED}[ADVARSEL]${NC} $STILL_PENDING pakker kunne stadig ikke opdateres."
+    echo "  Mulige årsager: held-back pakker, PPA-konflikter, eller phased updates."
+    echo "  Tjek manuelt: apt list --upgradable"
+  else
+    ok "Alle afventende pakker er nu installeret."
+  fi
+else
+  ok "Ingen afventende systempakker."
+fi
+
 
 # --- Flatpak ---
 if command -v flatpak >/dev/null; then

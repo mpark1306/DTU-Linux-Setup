@@ -142,15 +142,6 @@ ERROR_PATTERNS: list[ErrorPattern] = [
         "• Verificér at /etc/apt/sources.list peger på korrekte repos.",
     ),
     ErrorPattern(
-        r"(zypper.*System management is locked|zypp.*PackageKit is running|"
-        r"another instance of zypper)",
-        "Zypper er låst af en anden proces",
-        "Pakkesystemet er optaget.\n"
-        "• Vent på at PackageKit/automatiske opdateringer afslutter.\n"
-        "• Tjek: ps aux | grep -E 'zypper|packagekit'\n"
-        "• Hvis nødvendigt: sudo killall packagekitd && sudo zypper refresh",
-    ),
-    ErrorPattern(
         r"(nmcli.*Error.*Connection activation failed|Secrets were required|"
         r"802-1x.*EAP authentication failed)",
         "WiFi-forbindelse fejlede",
@@ -172,7 +163,7 @@ ERROR_PATTERNS: list[ErrorPattern] = [
         "Manglende kommando eller script",
         "En påkrævet kommando eller script-fil mangler på systemet.\n"
         "• Kontrollér at alle DTU-setup pakker er installeret.\n"
-        "• Hvis det er et eksternt værktøj: installer det med apt/zypper.\n"
+        "• Hvis det er et eksternt værktøj: installer det med apt.\n"
         "• Kør modulets script direkte i terminalen for fuld output.",
     ),
     ErrorPattern(
@@ -180,7 +171,7 @@ ERROR_PATTERNS: list[ErrorPattern] = [
         "Disken er fuld",
         "Der er ikke plads tilbage på filsystemet.\n"
         "• Tjek diskplads: df -h\n"
-        "• Ryd cache: sudo apt-get clean / sudo zypper clean -a\n"
+        "• Ryd cache: sudo apt-get clean\n"
         "• Tøm gamle journaler: sudo journalctl --vacuum-time=7d",
     ),
 
@@ -257,7 +248,6 @@ ERROR_PATTERNS: list[ErrorPattern] = [
         "TLS/SSL certifikat-fejl",
         "En TLS-forbindelse blev afvist pga. certifikat.\n"
         "• Opdater root-certifikater: sudo update-ca-certificates  (Ubuntu)\n"
-        "  eller: sudo update-ca-certificates -f  (openSUSE)\n"
         "• Tjek systemtid (forkert tid → ugyldigt certifikat).\n"
         "• Hvis bag corporate proxy: importér intern CA i /usr/local/share/ca-certificates/",
     ),
@@ -286,14 +276,12 @@ ERROR_PATTERNS: list[ErrorPattern] = [
         "cifs-utils mangler",
         "CIFS-pakken er ikke installeret.\n"
         "• Ubuntu: sudo apt-get install -y cifs-utils\n"
-        "• openSUSE: sudo zypper install -y cifs-utils",
     ),
     ErrorPattern(
         r"(smbclient.*command not found|samba-client.*not installed)",
         "Samba-client mangler",
         "smbclient er ikke installeret – kræves til AIT M-drev opslag.\n"
         "• Ubuntu: sudo apt-get install -y smbclient\n"
-        "• openSUSE: sudo zypper install -y samba-client",
     ),
     ErrorPattern(
         r"(target is busy|umount.*device is busy)",
@@ -343,7 +331,7 @@ ERROR_PATTERNS: list[ErrorPattern] = [
         r"is not in the sudoers file)",
         "Sudo-rettigheder mangler",
         "Brugeren er ikke i sudoers eller indtastede forkert kodeord.\n"
-        "• IT-admin: tilføj brugeren til 'sudo' (Ubuntu) eller 'wheel' (openSUSE).\n"
+        "• IT-admin: tilføj brugeren til 'sudo'-gruppen.\n"
         "• Kør: sudo usermod -aG sudo <bruger>",
     ),
 
@@ -355,7 +343,7 @@ ERROR_PATTERNS: list[ErrorPattern] = [
         "PackageKit-daemonen returnerede en fejl.\n"
         "• Restart: sudo systemctl restart packagekit\n"
         "• Tjek log: journalctl -u packagekit -n 50\n"
-        "• Som fallback: brug apt/zypper direkte i terminalen.",
+        "• Som fallback: brug apt direkte i terminalen.",
     ),
     ErrorPattern(
         r"(flatpak.*error|Could not find ref.*flatpak|No remote refs found)",
@@ -389,7 +377,6 @@ ERROR_PATTERNS: list[ErrorPattern] = [
         "Pakke-repository er ikke betroet pga. manglende GPG-nøgle.\n"
         "• Ubuntu: sudo apt-key adv --recv-keys <KEY_ID>  (ældre)\n"
         "  eller importer nøglen til /etc/apt/keyrings/.\n"
-        "• openSUSE: sudo rpm --import <key-url>",
     ),
     ErrorPattern(
         r"(Conflicting requests|file conflicts|nothing provides|"
@@ -397,8 +384,7 @@ ERROR_PATTERNS: list[ErrorPattern] = [
         "Pakke-afhængighedskonflikt",
         "Pakke-løseren kunne ikke finde en gyldig kombination.\n"
         "• Ubuntu: sudo apt-get -f install   (fix broken)\n"
-        "• openSUSE: sudo zypper verify   (find/fix konflikter)\n"
-        "• Som sidste udvej: sudo zypper dup --force-resolution",
+        "• Som sidste udvej: sudo apt-get dist-upgrade --fix-broken",
     ),
 
     # ─── Microsoft Defender ──────────────────────────────────────────
@@ -538,7 +524,6 @@ ERROR_PATTERNS: list[ErrorPattern] = [
         "Mangler dialog-værktøj",
         "Hverken kdialog eller zenity er installeret – nødvendigt for første login.\n"
         "• Ubuntu: sudo apt-get install -y zenity   (GNOME) eller kdialog (KDE)\n"
-        "• openSUSE: sudo zypper install -y zenity",
     ),
 
     # ─── Generic catch-alls (lowest priority – ordered last) ─────────

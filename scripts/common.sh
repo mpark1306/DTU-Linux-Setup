@@ -242,7 +242,7 @@ apt_wait() {
 # ─── CIFS mount helpers ─────────────────────────────────────────────────────
 # Shared logic for the personal M-Drive (Users0..9 auto-discovery) and any
 # fixed CIFS share, used by both the AIT and Sustain profiles on Ubuntu and
-# openSUSE. Mirrors the proven approach from mount-mdrive-kubuntu.sh:
+# Mirrors the proven approach from mount-mdrive-kubuntu.sh:
 #   • real short-lived test-mounts to locate/verify a share (not smbclient ls)
 #   • vers=3.0/ntlmssp/nodfs options that avoid the kernel DFS-referral bug
 #   • systemd automount with nofail + idle-timeout so boot never hangs

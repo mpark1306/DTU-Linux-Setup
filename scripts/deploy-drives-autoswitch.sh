@@ -8,8 +8,8 @@
 # switches between the direct Qumulo target and the DFS root depending on
 # which one the current network (wired / DTUSecure WiFi / VPN) can reach.
 #
-# Called automatically at the end of scripts/ubuntu/qdrive.sh and
-# scripts/opensuse/qdrive.sh. Safe to re-run.
+# Called automatically at the end of scripts/ubuntu/qdrive.sh, in both
+# department branches. Safe to re-run.
 ###############################################################################
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

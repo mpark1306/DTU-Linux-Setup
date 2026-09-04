@@ -27,11 +27,9 @@ if [[ -f /etc/os-release ]]; then
     . /etc/os-release
     case "${ID,,}" in
         ubuntu)                DISTRO="ubuntu" ;;
-        opensuse-tumbleweed)   DISTRO="opensuse" ;;
         *)
             case "${ID_LIKE,,}" in
                 *ubuntu*) DISTRO="ubuntu" ;;
-                *suse*)   DISTRO="opensuse" ;;
             esac
             ;;
     esac
@@ -40,7 +38,7 @@ fi
 banner "DTU Manual Software Installation (${DISTRO})"
 
 if [[ "$DISTRO" == "unknown" ]]; then
-    fail "Unsupported distribution. Only Ubuntu and openSUSE Tumbleweed are supported."
+    fail "Unsupported distribution. Only Ubuntu is supported."
     exit 1
 fi
 
@@ -58,8 +56,6 @@ pkg_install() {
     if [[ "$DISTRO" == "ubuntu" ]]; then
         apt_wait
         DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
-    else
-        zypper --non-interactive install -y "$@" 2>/dev/null || true
     fi
 }
 
@@ -99,8 +95,6 @@ if [[ "$DISTRO" == "ubuntu" ]]; then
     apt_wait
     apt-get update -y
     apt-get install -y flatpak xdg-desktop-portal xdg-desktop-portal-gtk
-else
-    zypper --non-interactive install -y flatpak 2>/dev/null || true
 fi
 
 if ! flatpak remote-list --columns=name 2>/dev/null | grep -qw flathub; then
@@ -131,13 +125,6 @@ if (( ${#SNAP_APPS[@]} > 0 )); then
     STEP=$((STEP + 1))
     echo "[${STEP}/${TOTAL_STEPS}] Installing Snap packages..."
 
-    if [[ "$DISTRO" == "opensuse" ]] && ! command -v snap &>/dev/null; then
-        echo "    Installing snapd..."
-        zypper --non-interactive install -y snapd || true
-        systemctl enable --now snapd 2>/dev/null || true
-        systemctl enable --now snapd.apparmor 2>/dev/null || true
-        sleep 5
-    fi
 
     if command -v snap &>/dev/null; then
         for app in "${SNAP_APPS[@]}"; do

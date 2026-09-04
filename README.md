@@ -1,7 +1,6 @@
 # DTU Linux Setup
 
 Et grafisk opsætningsværktøj der bringer DTU's Linux-arbejdsstationer i drift med ét klik per opgave.
-Værktøjet understøtter to institut-profiler — **Sustain** og **AIT** — og kører på både **Ubuntu 24.04 LTS** og **openSUSE Tumbleweed**.
 
 <p align="center">
   <img src="data/dtu-sustain-setup.svg" alt="DTU Linux Setup" width="128">
@@ -71,7 +70,6 @@ Ved første start (eller via dropdown'en i toppen af GUI'en) vælges den institu
 Modulerne er fordelt på to faner i GUI'en: **Admin Scripts** (kører uden
 brugerens egne credentials) og **User Scripts** (kræver brugerens DTU-login).
 
-| # | Modul | Hvad det gør | Ubuntu | openSUSE |
 |---|---|---|:-:|:-:|
 | 1 | **Domain Join** | Join WIN.DTU.DK (realmd + SSSD + mkhomedir) | ✅ | ✅ |
 | 2 | **Network Drives** | Mount institut-drev via CIFS (Q+P eller O+M) | ✅ | ✅ |
@@ -89,7 +87,6 @@ brugerens egne credentials) og **User Scripts** (kræver brugerens DTU-login).
 | 14 | **Reset Test User** | (deaktiveret) Fjern domain-user state + home-dir til gen-test | ✅ | ✅ |
 | 15 | **Repair Home Folders** | Ret ødelagte Desktop/Documents/Pictures fra tidligere installationer + fjern fstab-dubletter | ✅ | ✅ |
 
-\* openSUSE Tumbleweed bruger SLES 15-pakker — ikke officielt understøttet af Microsoft.
 
 ---
 
@@ -97,7 +94,6 @@ brugerens egne credentials) og **User Scripts** (kræver brugerens DTU-login).
 
 ### Forudsætninger
 
-|                | Ubuntu 24.04        | openSUSE Tumbleweed |
 |----------------|---------------------|---------------------|
 | **Desktop**    | `kde-standard`      | (KDE preinstalled)  |
 | **Python**     | `python3` (≥ 3.10)  | `python3` (≥ 3.10)  |
@@ -117,7 +113,6 @@ Henter og installerer nyeste version direkte fra GitHub — ingen git eller GitH
 curl -fsSL https://raw.githubusercontent.com/mpark1306/DTU-Linux-Setup/main/bin/dtu-install.sh | sudo bash
 ```
 
-Virker på både Ubuntu og openSUSE — manglende byggeværktøjer (`tar`, `make`) installeres automatisk. Du skal stadig selv installere GUI-afhængighederne (`python3-pyqt6` / `python3-qt6`) hvis de ikke allerede er til stede.
 
 > **Vælg en bestemt branch:** `curl -fsSL <url> | sudo BRANCH=main bash`
 
@@ -128,7 +123,6 @@ Virker på både Ubuntu og openSUSE — manglende byggeværktøjer (`tar`, `make
 Hver release på [GitHub Releases](https://github.com/mpark1306/DTU-Linux-Setup/releases/latest) indeholder færdigbyggede pakker:
 
 - `dtu-sustain-setup_<version>_all.deb` — Ubuntu
-- `dtu-sustain-setup-<version>-1.*.noarch.rpm` — openSUSE/Fedora
 - `sha256sums.txt` — checksums til verifikation
 
 #### Ubuntu 24.04
@@ -144,16 +138,13 @@ curl -fsSLO "https://github.com/mpark1306/DTU-Linux-Setup/releases/download/v${V
 sudo apt install "./dtu-sustain-setup_${VERSION}_all.deb"
 ```
 
-#### openSUSE Tumbleweed
 
 ```bash
 # Installér afhængigheder
-sudo zypper install python3-qt6 polkit
 
 # Slå nyeste version op og installér den
 VERSION=$(curl -fsSL https://api.github.com/repos/mpark1306/DTU-Linux-Setup/releases/latest | grep -oP '"tag_name":\s*"v\K[^"]+')
 curl -fsSLO "https://github.com/mpark1306/DTU-Linux-Setup/releases/download/v${VERSION}/dtu-sustain-setup-${VERSION}-1.fc44.noarch.rpm"
-sudo zypper install "./dtu-sustain-setup-${VERSION}-1.fc44.noarch.rpm"
 ```
 
 > **Tip:** Se seneste versionsnummer og de eksakte asset-navne på [Releases-siden](https://github.com/mpark1306/DTU-Linux-Setup/releases/latest).
@@ -178,17 +169,14 @@ make deb
 sudo dpkg -i dtu-sustain-setup_*_all.deb
 ```
 
-#### openSUSE Tumbleweed
 
 ```bash
-sudo zypper install python3-qt6 polkit
 
 # Direkte
 sudo make install
 
 # Eller byg RPM-pakke selv (versionsnummeret kommer fra VERSION i Makefile)
 make rpm
-sudo zypper install ~/rpmbuild/RPMS/noarch/dtu-sustain-setup-*.noarch.rpm
 ```
 
 ---
@@ -199,7 +187,6 @@ sudo zypper install ~/rpmbuild/RPMS/noarch/dtu-sustain-setup-*.noarch.rpm
 sudo make uninstall
 # eller
 sudo dpkg -r dtu-sustain-setup       # Ubuntu
-sudo zypper remove dtu-sustain-setup # openSUSE
 ```
 
 ---
@@ -360,7 +347,6 @@ CIFS-mount af institut-drev. Profilen styrer hvilke drev der mountes.
 
 **Input:** DTU-brugernavn + adgangskode.
 
-> **openSUSE:** bruger Qumulo-host direkte (konfigureret i `site.conf`) for at omgå en kernel DFS-bug.
 
 Drevene mountes via systemd automount — de aktiveres ved første adgang.
 
@@ -377,7 +363,6 @@ Domænebrugere får UDEN adgangskode lov til:
 - ⏻ Strøm: sluk/genstart/dvale
 - 🖨️ CUPS: admin egne printjobs
 - 🔵 Bluetooth
-- 📦 Pakke-installation (apt/zypper) — hvor det er sikkert
 
 ### 🖨️ Printers
 
@@ -419,7 +404,6 @@ Synkroniserede mapper: `~/Desktop`, `~/Documents`, `~/Pictures`.
 
 ### ⏫ Auto Update Setup
 
-Installerer daglige automatiske opdateringer for både Sustain og AIT (`setup-dtu-auto-update_Version4.sh`, fælles script). Kører distro-passende opdateringsmekanisme (`unattended-upgrades` på Ubuntu / `zypper`-timer på openSUSE).
 
 ### 🖥️ RDP (xrdp) — kun Ubuntu
 
@@ -505,7 +489,6 @@ Installationen kører alle moduler i tarball'en i fast rækkefølge: `vpn → da
                 ┌────────────┼────────────┐
                 │                         │
        ┌────────▼────────┐      ┌────────▼─────────┐
-       │ scripts/ubuntu/ │      │ scripts/opensuse/│
        │ + scripts/      │      │ + scripts/       │
        │   (common)      │      │   (common)       │
        └────────┬────────┘      └────────┬─────────┘
@@ -574,7 +557,6 @@ DTU-Umbrella/
 │   │   ├── rdp.sh
 │   │   ├── tpm2-enroll.sh        # TPM2 LUKS auto-unlock
 │   │   └── first-login-deploy.sh
-│   └── opensuse/                 # openSUSE modul-scripts
 │       ├── domain-join.sh
 │       ├── qdrive.sh
 │       ├── defender.sh
@@ -618,7 +600,6 @@ make run
 
 ```bash
 make deb   # Ubuntu
-make rpm   # openSUSE
 ```
 
 ### Checks
@@ -635,7 +616,6 @@ filer gentager den, fordi de læses af værktøjer der ikke kan se Makefilen, og
 
 ### Tilføj et nyt modul
 
-1. **Skriv scriptet:** `scripts/ubuntu/mit-modul.sh` (og evt. `scripts/opensuse/mit-modul.sh`)
    - Start med `source "${SCRIPT_DIR}/../common.sh"` og `need_root`
    - Erklær afhængigheder af site-konfiguration med `site_require SITE_...`
    - Brug `banner`, `ok`, `warn`, `fail` helpers
@@ -663,7 +643,6 @@ which dtu-sustain-setup
 
 ```bash
 sudo apt install policykit-1   # Ubuntu
-sudo zypper install polkit     # openSUSE
 ```
 
 ### Modul fejler med "Script Missing"
@@ -673,8 +652,6 @@ cat /etc/os-release
 ```
 
 Programmet søger scripts i:
-- Installeret: `/opt/dtu-sustain-setup/scripts/<ubuntu|opensuse>/`
-- Development: `<repo>/scripts/<ubuntu|opensuse>/`
 
 ### Domain Join fejler
 

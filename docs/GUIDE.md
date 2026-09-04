@@ -39,11 +39,8 @@ make deb
 sudo dpkg -i dtu-sustain-setup_1.0.0_all.deb
 ```
 
-**openSUSE Tumbleweed:**
 ```bash
-sudo zypper install python3-qt6 polkit
 make rpm
-sudo zypper install ~/rpmbuild/RPMS/noarch/dtu-sustain-setup-1.0.0-1.noarch.rpm
 ```
 
 ---
@@ -222,11 +219,8 @@ make deb
 sudo dpkg -i dtu-sustain-setup_1.0.0_all.deb
 ```
 
-**openSUSE Tumbleweed:**
 ```bash
-sudo zypper install python3-qt6
 make rpm
-sudo zypper install ~/rpmbuild/RPMS/noarch/dtu-sustain-setup-1.0.0-1.noarch.rpm
 ```
 
 ### Trin 2: Forberedelser
@@ -503,7 +497,6 @@ nano /opt/dtu-sustain-setup/data/software.conf
 | Problem                   | Løsning                                                        |
 |---------------------------|----------------------------------------------------------------|
 | GUI starter ikke          | `python3 -c "from PyQt6.QtWidgets import QApplication"`        |
-| pkexec fejler             | Installer `policykit-1` (Ubuntu) eller `polkit` (openSUSE)     |
 | Forkert distro detekteret | Tjek `/etc/os-release`                                         |
 | Script not found          | Tjek at scripts er i `/opt/dtu-sustain-setup/scripts/<distro>/`|
 

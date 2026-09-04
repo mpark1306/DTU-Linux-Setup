@@ -246,7 +246,6 @@ class MainWindow(QMainWindow):
         if self._distro == Distro.UNKNOWN:
             warn_label = QLabel(
                 "⚠️ Unsupported distribution detected! "
-                "This tool supports Ubuntu 24.04 and openSUSE Tumbleweed."
             )
             warn_label.setStyleSheet(
                 f"background: {pal.warn_bg}; color: {pal.warn_fg}; padding: 8px; "

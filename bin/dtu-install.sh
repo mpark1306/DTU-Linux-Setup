@@ -7,7 +7,6 @@
 #
 # ── Quick install (latest release) ───────────────────────────────────────────
 #
-#   Ubuntu / openSUSE:
 #     curl -fsSL https://raw.githubusercontent.com/mpark1306/DTU-Linux-Setup/main/bin/dtu-install.sh | sudo bash
 #
 # ── Update existing installation ─────────────────────────────────────────────
@@ -104,8 +103,6 @@ for cmd in tar make; do
         echo "▶ Installing missing tool: ${cmd}..."
         if command -v apt-get >/dev/null 2>&1; then
             apt-get install -y "$cmd"
-        elif command -v zypper >/dev/null 2>&1; then
-            zypper --non-interactive install "$cmd"
         else
             echo "ERROR: '${cmd}' not found and cannot be auto-installed." >&2
             echo "       Install it manually and re-run." >&2
@@ -124,7 +121,6 @@ else
     echo "ERROR: Neither curl nor wget found." >&2
     echo "       Install curl first:" >&2
     echo "         Ubuntu  : sudo apt-get install curl" >&2
-    echo "         openSUSE: sudo zypper install curl" >&2
     exit 1
 fi
 
