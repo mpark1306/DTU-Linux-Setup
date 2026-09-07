@@ -1,0 +1,40 @@
+# drives.conf – værdier til ait-drives.sh
+#
+# Kopiér til drives.conf ved siden af scriptet og udfyld. Den udfyldte fil er
+# gitignoreret: den peger på intern DTU-infrastruktur, og repoet er offentligt.
+#
+#   cp drives.conf.example drives.conf && $EDITOR drives.conf
+#
+# Scriptet læser i denne rækkefølge, første fund vinder:
+#   1. denne fil
+#   2. /etc/dtu-setup/site.conf
+#   3. /etc/dtu-setup/dtu-ait.env
+#   4. spørger
+#
+# Findes en af de to andre allerede på maskinen, behøver du ikke denne fil.
+
+# Filserveren begge drev ligger på. Et navn i stil med <navn>.win.dtu.dk.
+SITE_MDRIVE_SERVER=<filserver>
+
+# Afdelingens fælles drev (O-drev), uden servernavn foran.
+# Formen er <share>/<afdeling>.
+SITE_AIT_O_SHARE=<share>/<afdeling>
+
+# ── Personligt drev (M-drev) ────────────────────────────────────────────────
+#
+# Det ligger under en af flere nummererede undermapper på users-sharet, og
+# hvilken en er ikke til at regne ud på forhånd. Scriptet prøver hver enkelt
+# indtil en virker, og husker svaret.
+#
+# Defaults nedenfor passer til Users/users1 … Users/users9. Ret dem kun hvis
+# jeres opsætning ser anderledes ud.
+
+# Selve users-sharet.
+#SITE_MDRIVE_BASE=Users
+
+# Præfiks på de nummererede undermapper.
+#SITE_AIT_USERS_PREFIX=users
+
+# Interval der gennemsøges.
+#SITE_AIT_USERS_FIRST=1
+#SITE_AIT_USERS_LAST=9

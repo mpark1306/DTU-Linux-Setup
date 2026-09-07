@@ -41,3 +41,7 @@ cisco-secure-client*
 # Udfyldt print.conf til det frittstående printerscript. Indeholder
 # interne værtsnavne — kun print.conf.example hører i repoet.
 scripts/standalone/print.conf
+
+# Udfyldt drives.conf til det frittstående AIT-drevscript. Samme grund —
+# kun drives.conf.example hører i repoet.
+scripts/standalone/drives.conf
