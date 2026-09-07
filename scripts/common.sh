@@ -429,6 +429,48 @@ cifs_start_automount() {
   systemctl restart "$unit" 2>/dev/null || systemctl start "$unit" || true
 }
 
+# cifs_automount_active MOUNTPOINT
+# Er automount-enheden for stien slået til lige nu? Bruges til at afgøre om
+# et drev skal genarmeres, uden at gemme tilstand i en fil der kan komme ud
+# af trit med virkeligheden.
+cifs_automount_active() {
+  local unit
+  unit="$(systemd-escape -p --suffix=automount "$1")"
+  systemctl is-active --quiet "$unit"
+}
+
+# cifs_stop_automount MOUNTPOINT
+# Afmonterer stien OG slår automount'en fra.
+#
+# At sænke mount-timeout til 10s gjorde frysningerne kortere, ikke færre. Så
+# længe automount'en er armet mod en server der ikke svarer, blokerer hver
+# eneste adgang til stien i 10 sekunder — og med idle-timeout droppes mountet
+# og forsøges igen, så det gentager sig resten af dagen. Dolphins
+# Places-panel, df, tab-completion og plasmashells egen mappe-overvågning
+# rammer den alle sammen, og en plasmashell der sover uafbrydeligt i kernen
+# er præcis det man ser som "Plasma er crashet".
+#
+# Er målet ikke til at nå, er den rigtige tilstand derfor ingen automount:
+# så er /mnt/... en tom mappe der svarer med det samme. Hook'en armer den
+# igen, næste gang serveren kan nås.
+#
+# umount -l, ikke umount: en CIFS-mount mod en server der ikke svarer kan
+# ikke afmonteres normalt — umount blokerer selv. -l kobler den ud af
+# navnerummet med det samme og rydder op når kernen er færdig.
+cifs_stop_automount() {
+  local mp="$1" amount_unit mount_unit
+  amount_unit="$(systemd-escape -p --suffix=automount "$mp")"
+  mount_unit="$(systemd-escape -p --suffix=mount "$mp")"
+  systemctl stop "$amount_unit" 2>/dev/null || true
+  systemctl stop "$mount_unit" 2>/dev/null || true
+  if mountpoint -q "$mp" 2>/dev/null; then
+    umount -l "$mp" 2>/dev/null || true
+  fi
+  # Eksplicit return: en &&-liste som sidste sætning ville give 1 og tage
+  # kalderen ned under set -e.
+  return 0
+}
+
 # cifs_find_mdrive_subdir SERVER USERS_BASE USERNAME CREDS_FILE UID GID CACHE_FILE
 # Locates the user's personal M-Drive folder by test-mounting
 # USERS_BASE/Users0..Users9/USERNAME, honouring a cache file. Echoes the

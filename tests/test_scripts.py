@@ -285,6 +285,65 @@ class TestDrivesNotification(unittest.TestCase):
         self.assertRegex(self.notify, r"timeout \d+ sudo -u")
 
 
+class TestAutomountIsDisarmedWhenUnreachable(unittest.TestCase):
+    """Sænket mount-timeout gjorde frysningerne kortere, ikke færre.
+
+    Så længe automount'en er armet mod en server der ikke svarer, blokerer
+    hver adgang til stien indtil timeouten — og idle-timeout får den til at
+    gentage sig. Det er symptomet med frossen konsol og Dolphin, og en
+    plasmashell der sover uafbrydeligt i kernen ligner et crash.
+    """
+
+    def setUp(self):
+        self.reselect = strip_comments(read(SCRIPTS / "dtu-drives-reselect.sh"))
+        self.common = strip_comments(read(SCRIPTS / "common.sh"))
+
+    def test_common_has_a_way_to_disarm(self):
+        self.assertIn("cifs_stop_automount()", self.common)
+        self.assertIn("cifs_automount_active()", self.common)
+
+    def test_disarm_uses_lazy_umount(self):
+        """En CIFS-mount mod en død server kan ikke afmonteres normalt —
+        umount blokerer selv, og så har vi flyttet frysningen i stedet for
+        at fjerne den."""
+        body = self.common.split("cifs_stop_automount()")[1].split("\n}")[0]
+        self.assertIn("umount -l", body)
+
+    def test_unreachable_disarms_instead_of_leaving_as_is(self):
+        branch = self.reselect.split("if ! sustain_pick_target")[1].split("fi")[0]
+        self.assertIn("cifs_stop_automount", branch)
+
+    def test_unchanged_target_still_rearms_a_disarmed_mount(self):
+        """Uden dette ville drevene aldrig komme tilbage efter en tur uden
+        netværk: målet er det samme som sidst, så scriptet ville gå hjem."""
+        guard = self.reselect.split("TARGET_LABEL\" == \"$PREV_TARGET")[1].split("fi")[0]
+        self.assertIn("cifs_automount_active", guard)
+
+    def test_ait_is_not_skipped(self):
+        """AIT havde hook'en installeret og fik intet ud af den: scriptet
+        afsluttede for alt andet end sustain, og frysningen blev meldt ind
+        på netop en AIT-maskine."""
+        ait = self.reselect.split('"$DEPARTMENT" == "ait"')
+        self.assertGreater(len(ait), 1, "reselect har ingen AIT-gren")
+        branch = ait[1]
+        self.assertIn("cifs_stop_automount", branch)
+        self.assertIn("cifs_start_automount", branch)
+
+    def test_ait_records_the_server_the_hook_needs(self):
+        """Hook'en spørger om filserveren svarer. Står SERVER ikke i
+        drives.conf, kan den ikke afgøre noget og lader stien blokere."""
+        qdrive = strip_comments(read(SCRIPTS / "ubuntu" / "qdrive.sh"))
+        conf = qdrive.split('echo "ait" >')[1].split("deploy-drives-autoswitch")[0]
+        self.assertIn("SERVER=", conf)
+
+    def test_ait_drives_conf_is_written_before_the_hook_runs(self):
+        """Hook'en læser filen. Skrives den bagefter, kører første kørsel
+        mod en halv fil."""
+        qdrive = strip_comments(read(SCRIPTS / "ubuntu" / "qdrive.sh"))
+        head = qdrive.split("exit 0")[0]
+        self.assertLess(head.index("drives.conf"), head.index("deploy-drives-autoswitch"))
+
+
 class TestDesktopEntries(unittest.TestCase):
     def test_they_validate(self):
         # 127 is what a *shell* returns for a missing command. subprocess.run

@@ -114,12 +114,24 @@ EOF
   DTU_SETUP_DIR="/etc/dtu-setup"
   mkdir -p "$DTU_SETUP_DIR"
   echo "ait" > "${DTU_SETUP_DIR}/department"
-  # Store drive paths for sync-homedir
-  cat > "${DTU_SETUP_DIR}/drives.conf" <<DCONF
-DEPARTMENT=ait
-MOUNT_POINT=${M_MOUNTPOINT}
-REMOTE_BASE=${M_MOUNTPOINT}
-DCONF
+  # drives.conf læses af sync-homedir OG af netværksskift-hook'en. Den skal
+  # derfor være fuldstændig, og den skal være skrevet før hook'en kaldes
+  # nedenfor — ellers kører første kørsel mod en halv fil.
+  #
+  # SERVER er ny og ikke kosmetik: hook'en skal kunne spørge om filserveren
+  # svarer, uden at læse site.conf og uden at gætte. Uden den kunne den ikke
+  # afgøre om automount'en skulle armes eller afvæbnes.
+  {
+    echo "DEPARTMENT=ait"
+    echo "USERNAME=${USERNAME}"
+    echo "SERVER=${SERVER}"
+    echo "TARGET=ait-direct"
+    echo "MOUNT_POINT=${M_MOUNTPOINT}"
+    echo "REMOTE_BASE=${M_MOUNTPOINT}"
+    # if, ikke [[ ]] && echo: en falsk &&-liste som sidste sætning i gruppen
+    # ville give exit 1 og tage scriptet ned på set -e når O-drevet er fravalgt.
+    if [[ -n "$O_SHARE" ]]; then echo "O_MOUNT_POINT=${O_MOUNTPOINT}"; fi
+  } > "${DTU_SETUP_DIR}/drives.conf"
   chmod 644 "${DTU_SETUP_DIR}/drives.conf"
 
   # Trigger the automounts by touching the mountpoints
@@ -143,14 +155,6 @@ DCONF
   # der er meldt ind.
   "${SCRIPT_DIR}/../deploy-drives-autoswitch.sh"
 
-  cat > "${DTU_SETUP_DIR:-/etc/dtu-setup}/drives.conf" <<DCONF
-DEPARTMENT=ait
-USERNAME=${USERNAME}
-TARGET=ait-direct
-MOUNT_POINT=${M_MOUNTPOINT}
-REMOTE_BASE=${M_MOUNTPOINT}
-DCONF
-  chmod 644 "${DTU_SETUP_DIR:-/etc/dtu-setup}/drives.conf"
   exit 0
 fi
 
