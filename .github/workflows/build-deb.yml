@@ -30,6 +30,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck
+          # desktop-file-validate. Uden den skipper TestDesktopEntries, og en
+          # ugyldig .desktop-fil ville nå helt ud på maskinerne.
+          sudo apt-get install -y desktop-file-utils
           # Offscreen Qt for the main-window smoke test. If PyQt6 or these
           # libs are unavailable the test skips itself rather than failing the
           # build, so a broken wheel here never blocks a release.

@@ -9,6 +9,7 @@ scripts say, not at what the comments claim.
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -286,14 +287,18 @@ class TestDrivesNotification(unittest.TestCase):
 
 class TestDesktopEntries(unittest.TestCase):
     def test_they_validate(self):
+        # 127 is what a *shell* returns for a missing command. subprocess.run
+        # execs directly, so an absent desktop-file-validate raises
+        # FileNotFoundError and the test errors instead of skipping — which is
+        # how CI went red on a runner that has no desktop-file-utils.
+        if shutil.which("desktop-file-validate") is None:
+            self.skipTest("desktop-file-validate not installed")
         entries = list(SCRIPTS.rglob("*.desktop"))
         self.assertTrue(entries, "no desktop entries found")
         for entry in entries:
             with self.subTest(entry=entry.name):
                 proc = subprocess.run(["desktop-file-validate", str(entry)],
                                       capture_output=True, text=True)
-                if proc.returncode == 127:
-                    self.skipTest("desktop-file-validate not installed")
                 self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
 
 
