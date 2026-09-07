@@ -1,3 +1,47 @@
+## v1.6.1 — 7. september 2026
+
+To rettelser oven på v1.6.0. Den første er grunden til udgivelsen: den
+rammer hver maskine, hvis filserver ikke altid kan nås.
+
+### Rettelser
+
+- **Automounten afvæbnes nu, når filserveren ikke kan nås.** En kortere
+  timeout gjorde frysningerne kortere, ikke færre: så længe automount'en er
+  armet mod en server der ikke svarer, blokerer hver adgang til stien indtil
+  timeouten, og `idle-timeout` får den til at gentage sig resten af dagen.
+  Det er dét, der opleves som at konsollen og Dolphin fryser — og en
+  plasmashell, der sover uafbrydeligt i kernen mens den overvåger `/mnt`,
+  ligner et Plasma-crash.
+
+  Kan målet ikke nås, stoppes automount- og mount-enheden nu, og et hængende
+  mount kobles ud med `umount -l` (uden `-l` blokerer `umount` selv mod en
+  død server, og så er frysningen bare flyttet). Så er `/mnt/...` en tom
+  mappe, der svarer med det samme. Netværksskift-hook'en armer dem igen, så
+  snart et mål svarer, og brugeren får stadig besked med en "Genopfrisk
+  drev"-knap.
+
+  **AIT var helt udenfor.** Hook'en afsluttede for alt andet end Sustain, så
+  AIT-maskiner havde den installeret og fik intet ud af den — og frysningen
+  blev meldt ind på netop en AIT-maskine. Målskift er fortsat Sustain-only,
+  men arm/afvæbn gælder nu begge afdelinger. AIT's `drives.conf` bærer
+  derfor `SERVER`, så hook'en kan spørge om filserveren svarer.
+
+- **TPM2-modulet melder ikke længere færdigt uden at have testet det.** Der
+  er forskel på at en clevis-binding *findes* og at den *virker*: `bind`
+  forsegler mod PCR-værdierne som de er lige nu, og er de anderledes tidligt
+  i boot — Secure Boot slået fra eller ændret, firmware opdateret, TPM
+  nulstillet — fejler oplåsningen, og maskinen beder om adgangskoden som før.
+
+  Modulet sluttede med "Done. Reboot and verify auto-unlock." uanset. Det
+  eneste, der blev kontrolleret, var at hook-filen lå i initramfs, og at
+  bindingen kunne listes; begge dele kan være i orden på en maskine, der
+  stadig spørger. Nu hentes passphrasen ud af slotten med `clevis luks pass`,
+  som unsealer præcis som boot gør. Output kasseres — det er disknøglen.
+  Fejler den, skriver modulet hvorfor og afslutter med fejl i stedet for en
+  grøn besked.
+
+---
+
 ## v1.6.0 — 7. september 2026
 
 ### Fjernet
@@ -121,20 +165,6 @@
 
   `DTU_TPM2_RECOVERY_KEY` er dermed væk; den styrer ikke længere noget.
 
-- **TPM2-modulet melder ikke længere færdigt uden at have testet det.** Der
-  er forskel på at en clevis-binding *findes* og at den *virker*: `bind`
-  forsegler mod PCR-værdierne som de er lige nu, og er de anderledes tidligt
-  i boot — Secure Boot slået fra eller ændret, firmware opdateret, TPM
-  nulstillet — fejler oplåsningen, og maskinen beder om adgangskoden som før.
-
-  Modulet sluttede med "Done. Reboot and verify auto-unlock." uanset. Det
-  eneste, der blev kontrolleret, var at hook-filen lå i initramfs, og at
-  bindingen kunne listes; begge dele kan være i orden på en maskine, der
-  stadig spørger. Nu hentes passphrasen ud af slotten med `clevis luks pass`,
-  som unsealer præcis som boot gør. Output kasseres — det er disknøglen.
-  Fejler den, skriver modulet hvorfor og afslutter med fejl i stedet for en
-  grøn besked.
-
 - **Sustains `FollowMe-Plot-PS` er erstattet af BYG-plotteren.** Den gamle kø
   pegede på en SMB-kø på FollowMe-serveren. Afløseren er en anden slags ting:
   BYG-plotteren er selve enheden, ikke en printserver. Den har ingen
@@ -185,27 +215,6 @@
   igen og igen. Timeouten er nu 10 sekunder, og Sustain bruger samme
   `CIFS_SYSTEMD_OPTS` som AIT i stedet for sine egne optioner helt uden
   timeout, hvor systemd faldt tilbage på 90 sekunder.
-
-- **Automounten afvæbnes nu, når filserveren ikke kan nås.** En kortere
-  timeout gjorde frysningerne kortere, ikke færre: så længe automount'en er
-  armet mod en server der ikke svarer, blokerer hver adgang til stien indtil
-  timeouten, og `idle-timeout` får den til at gentage sig resten af dagen.
-  Det er dét, der opleves som at konsollen og Dolphin fryser — og en
-  plasmashell, der sover uafbrydeligt i kernen mens den overvåger `/mnt`,
-  ligner et Plasma-crash.
-
-  Kan målet ikke nås, stoppes automount- og mount-enheden nu, og et hængende
-  mount kobles ud med `umount -l` (uden `-l` blokerer `umount` selv mod en
-  død server, og så er frysningen bare flyttet). Så er `/mnt/...` en tom
-  mappe, der svarer med det samme. Netværksskift-hook'en armer dem igen, så
-  snart et mål svarer, og brugeren får stadig besked med en "Genopfrisk
-  drev"-knap.
-
-  **AIT var helt udenfor.** Hook'en afsluttede for alt andet end Sustain, så
-  AIT-maskiner havde den installeret og fik intet ud af den — og frysningen
-  blev meldt ind på netop en AIT-maskine. Målskift er fortsat Sustain-only,
-  men arm/afvæbn gælder nu begge afdelinger. AIT's `drives.conf` bærer
-  derfor `SERVER`, så hook'en kan spørge om filserveren svarer.
 
 - **AIT fik aldrig netværksskift-hook'en.** Kaldet lå efter AIT-grenens
   `exit 0`, så skiftede maskinen mellem kabel, DTUSecure og VPN, blev drevene
@@ -266,6 +275,15 @@
   på `scripts/opensuse/*.sh` og fejlede derfor på hver eneste push, hvilket
   blokerede build og release. Det linter nu `scripts/standalone/` i stedet, som
   ikke var dækket før.
+
+- **En test kunne ikke skippe sig selv.** `TestDesktopEntries` skippede, hvis
+  `desktop-file-validate` returnerede 127. Den kode kan aldrig komme: 127 er
+  hvad en *shell* returnerer for en kommando, den ikke kan finde, og
+  `subprocess.run` exec'er direkte — mangler binæren, kastes
+  `FileNotFoundError`, og testen fejler i stedet for at skippe. Runneren har
+  ikke `desktop-file-utils`, så det var præcis hvad der skete. Skippet
+  afgøres nu af `shutil.which`, og pakken installeres i CI, så testen faktisk
+  kører der i stedet for bare at skippe.
 
 ---
 
