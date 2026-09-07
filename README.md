@@ -366,7 +366,7 @@ Domænebrugere får UDEN adgangskode lov til:
 
 ### 🖨️ Printers
 
-**Sustain (FollowMe):** Tilføjer `FollowMe-MFP-PCL` og `FollowMe-Plot-PS` mod printserveren konfigureret i `site.conf` med tilpasset `smbspool-auth` CUPS-backend.
+**Sustain (FollowMe):** Tilføjer `FollowMe-MFP-PCL` mod printserveren konfigureret i `site.conf` med tilpasset `smbspool-auth` CUPS-backend, og `BYG-PHP03-PCL` direkte mod plotteren over JetDirect 9100 (`socket://`, ingen credentials — enhver der kan nå enheden, kan printe på den).
 
 **AIT (WebPrint):**
 1. Installerer `dtuprint.png` til `/usr/share/pixmaps/dtu-webprint.png`

@@ -42,7 +42,7 @@ jobs:
       - name: shellcheck
         run: |
           shellcheck --severity=warning --external-sources \
-            bin/*.sh scripts/*.sh scripts/ubuntu/*.sh scripts/opensuse/*.sh
+            bin/*.sh scripts/*.sh scripts/ubuntu/*.sh scripts/standalone/*.sh
 
       - name: Byte-compile Python
         run: python3 -m compileall -q src/dtu_sustain_setup

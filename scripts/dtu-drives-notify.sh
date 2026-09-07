@@ -30,6 +30,10 @@ BUS="unix:path=/run/user/${UID_NUM}/bus"
 # Nogle skriveborde leverer notifikationer gennem XDG-portalen, som ikke
 # understøtter knapper. Så vises beskeden uden knap — derfor står den
 # manuelle vej også i teksten, og derfor findes menupunktet.
+# Anførselstegnene i beskeden nedenfor er danske typografiske tegn, ikke en
+# slåfejl: teksten vises i en notifikation på skærmen. SC1111 kan ikke se
+# forskel på det og et fejlindtastet ASCII-citat.
+# shellcheck disable=SC1111
 CHOICE="$(timeout 300 sudo -u "$TARGET_USER" \
     DBUS_SESSION_BUS_ADDRESS="$BUS" \
     notify-send \

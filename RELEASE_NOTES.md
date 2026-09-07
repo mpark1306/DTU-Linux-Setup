@@ -1,4 +1,27 @@
-## Ikke udgivet endnu
+## v1.6.0 — 7. september 2026
+
+### Fjernet
+
+- **openSUSE Tumbleweed understøttes ikke længere.** Der er ikke længere en
+  openSUSE-maskine at teste på, og en utestet kodesti i et værktøj der kører
+  som root er værre end ingen kodesti: den ser vedligeholdt ud.
+
+  `scripts/opensuse/` er væk — otte moduler. Distributionsvalget i
+  `distro.py`, `common.sh`, `install-software-manual.sh`, `update-latest.sh`,
+  `bin/` og auto-updateren er skåret ned til Debian/Ubuntu, og fejldialogens
+  zypper-forslag er erstattet af apt-udgaven.
+
+  `distro.py` er bevaret frem for at blive inlinet. Den er det ene sted der
+  kender svaret, så skal en distribution tilbage, er det den fil der skal
+  rettes og ikke ti andre. Ukendte distributioner får Ubuntu-mappen:
+  modulerne tjekker selv efter apt, realmd og cups og stopper med navnet på
+  det der mangler, hvilket er en bedre fejl end en sti der ikke findes.
+
+  `scripts/ubuntu/polkit.sh` nævner stadig
+  `org.opensuse.cupspkhelper.mechanism.*`. Det er CUPS' egne action-id'er, og
+  de hedder det samme på Ubuntu — et blindt søg-og-erstat ville have brækket
+  printerrettighederne.
+
 
 ### Ny funktionalitet
 
@@ -33,6 +56,34 @@
 
 - **`SITE_AD_KDCS`** og **`SITE_AD_ACCESS_PROVIDER`** er nye, valgfrie
   variabler i `site.conf`. Begge er tomme som default.
+
+- **Sustain-printeropsætningen findes nu som frittstående script.**
+  `scripts/standalone/sustain-printers.sh` gør det samme som Printers-modulet
+  uden at kræve `common.sh`, `site.conf` eller at GUI'en leverer brugernavn og
+  kodeord. Skal en tekniker bare have printerne op på en maskine, er modulet
+  for meget maskineri.
+
+  Der er bevidst intet `--password`-flag: det ville lægge et domænekodeord i
+  process-listen, hvor enhver bruger på maskinen kan læse det med `ps`. Flaget
+  genkendes alligevel — men kun for at afvise det med en forklaring, for
+  ellers prøver folk.
+
+  Serveradresserne står ikke i scriptet. De slås op i `print.conf` ved siden af
+  scriptet, så `site.conf`, så den forældede `dtu-sustain.env` — og spørges,
+  hvis intet findes.
+
+- **Netværksdrev der ikke kan nås, siger det nu selv.** Skifter maskinen
+  netværk, og kan det monterede mål ikke længere nås, får hver indlogget bruger
+  en notifikation med en "Genopfrisk drev"-knap og en kvittering bagefter.
+  Tidligere skete genmonteringen tavst, mens alt der rørte `/mnt` blokerede.
+
+  Nogle skriveborde leverer notifikationer gennem XDG-portalen, som ikke
+  understøtter knapper. Derfor står den manuelle vej også i teksten, og derfor
+  findes menupunktet **Genopfrisk netværksdrev** under *System*. Den vej findes
+  altid.
+
+- **`SITE_SUSTAIN_PLOT_SERVER`** er en ny variabel i `site.conf` til
+  BYG-plotteren.
 
 ### Ændringer
 
@@ -69,6 +120,117 @@
   eksisterende nøglemateriale ændres eller erstattes.
 
   `DTU_TPM2_RECOVERY_KEY` er dermed væk; den styrer ikke længere noget.
+
+- **Sustains `FollowMe-Plot-PS` er erstattet af BYG-plotteren.** Den gamle kø
+  pegede på en SMB-kø på FollowMe-serveren. Afløseren er en anden slags ting:
+  BYG-plotteren er selve enheden, ikke en printserver. Den har ingen
+  SMB-tjeneste — port 445 er lukket — og lytter på JetDirect 9100, så køen
+  oprettes med `socket://` og uden credentials. Værtsnavnet står i
+  `site.conf` som `SITE_SUSTAIN_PLOT_SERVER`, ikke i repoet.
+
+  Det har en konsekvens der skal siges højt: FollowMe-køer godkender og
+  afregner per bruger, og denne gør ikke. Enhver der kan nå enheden på
+  netværket, kan printe på den.
+
+  Køen får sin egen PPD frem for at genbruge `KOC751iUX.ppd`. Den er en Konica
+  Minolta-driver, og indstillingerne ved siden af — `KMDuplex`,
+  `TextPureBlack`, `GlossyMode` — findes ikke i en HP-PPD. Den gamle kø
+  arvede dem alle og slap kun af sted med det, fordi FollowMe-serveren
+  rendererede jobbet.
+
+- **Printerscriptet kan nu køres hver gang, ikke kun på en tom maskine.** Det
+  fjernede tre navngivne køer, oprettede to nye og håbede. Nu konvergerer det:
+  hængende jobs annulleres først, `cups-browsed` maskeres frem for blot at
+  blive stoppet, pakker installeres kun hvis de mangler, serverne kontaktes på
+  445 og 9100 før køerne oprettes, og hver kø verificeres til sidst — findes
+  den, peger den rigtigt, er den slået til, tager den imod jobs.
+
+  Fejl samles og listes til sidst frem for at tage resten af scriptet med sig,
+  så en fejlende plotter ikke koster FollowMe-køen.
+
+- **Kun scriptets egne køer fjernes.** Standarden ryddede alt. På en maskine
+  med en Brother på skrivebordet betød det, at en printeropsætning slettede en
+  printer der ikke fejlede noget, og som scriptet ikke ved hvordan man
+  genskaber. Der matches nu på navn (`FollowMe-*`, `BYG-PHP03-*`) og på
+  device-URI, så en kø nogen har kaldt "Printer-1", men som peger på
+  FollowMe-serveren, stadig fjernes som den dublet den er.
+  `--remove-all-printers` rydder alt, for de tilfælde hvor det er meningen.
+
+- **Serveradresser vises ikke længere på skærmen.** Scriptet køres typisk på
+  en andens maskine med nogen kigge med. Indtastning sker uden ekko, og
+  kvitteringen viser kun længden, så en slåfejl stadig kan ses.
+  `--show-values` slår maskeringen fra, når man fejlsøger alene.
+
+### Rettelser
+
+- **30 sekunders frysninger ved adgang til `/mnt` er væk.** AIT's drev blev
+  monteret med `x-systemd.automount` og `mount-timeout=30`. En automount
+  afbryder enhver adgang til stien, og kalderen sover uafbrydeligt indtil
+  monteringen lykkes eller timer ud — så kunne filserveren ikke nås, stod
+  Dolphins Places-panel, `df` og tab-completion stille i 30 sekunder ad gangen,
+  igen og igen. Timeouten er nu 10 sekunder, og Sustain bruger samme
+  `CIFS_SYSTEMD_OPTS` som AIT i stedet for sine egne optioner helt uden
+  timeout, hvor systemd faldt tilbage på 90 sekunder.
+
+- **AIT fik aldrig netværksskift-hook'en.** Kaldet lå efter AIT-grenens
+  `exit 0`, så skiftede maskinen mellem kabel, DTUSecure og VPN, blev drevene
+  ved med at pege på et mål der ikke kunne nås. Hook'en og `drives.conf`
+  oprettes nu også for AIT.
+
+- **Førstegangsopsætningen dukkede aldrig op.** Autostart-posten blev lagt i
+  `/etc/skel`, som kun kopieres når en konto *oprettes*. Modulet kræver at en
+  admin er logget ind, så hjemmemappen fandtes altid allerede — posten kom
+  derfor aldrig nogen steder hen. Den ligger nu i `/etc/xdg/autostart`, og de
+  kopier der allerede var landet i eksisterende hjemmemapper ryddes op, så
+  dialogen ikke kommer to gange.
+
+  Scriptet afgør selv om det skal køre: kun for domænebrugere, som findes i
+  `getent` men ikke i `/etc/passwd`. Markøren skrives til sidst og kun der —
+  afbrydes opsætningen undervejs, kommer dialogen igen ved næste login. En halv
+  opsætning skal ikke se færdig ud.
+
+- **Printerscriptet døde tavst, når man sprang plotteren over.** En `&&`-liste
+  som sidste sætning i en funktion returnerer 1, når betingelsen er falsk, og
+  med `set -e` tager det hele scriptet ned — uden fejlbesked, fordi der ikke
+  skete noget forkert. Man trykkede Enter, og så skete der ikke mere.
+
+  Bruger og kodeord spørges nu først, med en forklaring: FollowMe-køen spooler
+  som en navngiven bruger, og serveren kan ikke afregne eller frigive et job
+  uden at vide hvem det tilhører. Før lå det bag et valgfrit
+  plotter-spørgsmål, hvilket er hvordan det kunne forsvinde helt.
+
+- **Domænepræfiks i brugernavnet afvises ikke længere.** Prompten beder om et
+  WIN-brugernavn, og folk skriver rimeligvis `WIN\mpark` eller `mpark@dtu.dk`.
+  Credentials-filen skal have præcis `WIN\brugernavn`, så `WIN\WIN\mpark`
+  fejlede godkendelsen uden at sige hvorfor: jobbet landede i køen og forsvandt.
+  Begge former tages nu af, og scriptet siger hvad det endte med at bruge.
+
+- **Auto-updateren krævede ikke root.** Den skriver
+  `/etc/default/dtu-auto-update` og systemd-units; kørt som almindelig bruger
+  fejlede den halvvejs nede med en permission-fejl per linje og en halv
+  opsætning tilbage. Den kræver nu root fra starten. De to apt-kald, der kunne
+  vælte den på en maskine uden netværk, advarer nu i stedet for at afbryde — en
+  manglende `fwupd` må ikke koste hele opdateringsservicen.
+
+### Test og vedligehold
+
+- **`tests/test_scripts.py`** — 25 tests, der kigger på hvad scripts'ene siger
+  frem for hvad kommentarerne påstår. Hver enkelt findes, fordi den fejl den
+  beskriver rent faktisk er sluppet ud: `set -e`-fælden, CIFS-automounts uden
+  mount-timeout, og at AIT får samme behandling som Sustain.
+
+- **`tests/test_domain_join.py`** — 14 tests, der kører de rigtige blokke ud af
+  scriptet, ikke en kopi, mod en `sssd.conf` som `realm join` efterlader den.
+  Den genererede `krb5.conf` læses af MIT's egen parser.
+
+- **En udfyldt `print.conf` kan ikke længere committes.** Filen indeholder
+  interne værtsnavne og hører ikke i et offentligt repo — kun
+  `print.conf.example` med pladsholdere gør.
+
+- **CI lintede en mappe der ikke findes.** `shellcheck`-trinnet pegede stadig
+  på `scripts/opensuse/*.sh` og fejlede derfor på hver eneste push, hvilket
+  blokerede build og release. Det linter nu `scripts/standalone/` i stedet, som
+  ikke var dækket før.
 
 ---
 

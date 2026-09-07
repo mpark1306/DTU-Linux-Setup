@@ -430,7 +430,7 @@ lpstat -p -d
 **Forventet output:**
 ```
 printer FollowMe-MFP-PCL is idle.
-printer FollowMe-Plot-PS is idle.
+printer BYG-PHP03-PCL is idle.
 ```
 
 ---
