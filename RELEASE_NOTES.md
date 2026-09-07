@@ -1,11 +1,11 @@
-## v1.6.1 — 7. september 2026
+## v1.6.2 — 7. september 2026
 
-Tre rettelser oven på v1.6.0. Den første gør v1.6.0 ubrugelig på en
-installeret maskine og er alene grund nok til at opgradere.
+Én rettelse. v1.6.0 og v1.6.1 kan ikke køre et eneste modul på en installeret
+maskine — opgradér direkte hertil.
 
 ### Rettelser
 
-- **Ingen moduler kunne findes i v1.6.0.** `get_scripts_dir` havde indtil
+- **Ingen moduler kunne findes i v1.6.0 og v1.6.1.** `get_scripts_dir` havde indtil
   september 2026 en hardkodet `/opt/dtu-sustain-setup/scripts`-fallback ved
   siden af den repo-relative sti, og det var den fallback, der fik
   installerede maskiner til at virke. Da distributionsvalget blev skåret ned
@@ -16,11 +16,19 @@ installeret maskine og er alene grund nok til at opgradere.
   `/opt/dtu-sustain-setup/scripts/ubuntu`. Symptomet er "Update Script
   Missing", men det rammer ikke kun update-modulet — `_resolve_script_path`
   bruger samme mappe, så **hvert eneste modul** var utilgængeligt på en
-  maskine, der kørte v1.6.0.
+  maskine, der kørte v1.6.0 eller v1.6.1.
 
   Roden findes nu ved at lede efter `scripts/` frem for at skrive stien af.
   Det dækker begge layouts og samtidig en installation under et andet prefix
   end `/opt`, hvilket den gamle hardkodede sti ikke gjorde.
+
+---
+
+## v1.6.1 — 7. september 2026
+
+To rettelser oven på v1.6.0.
+
+### Rettelser
 
 - **Automounten afvæbnes nu, når filserveren ikke kan nås.** En kortere
   timeout gjorde frysningerne kortere, ikke færre: så længe automount'en er
