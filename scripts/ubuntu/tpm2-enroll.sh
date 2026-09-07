@@ -257,6 +257,49 @@ verify_binding() {
   cryptsetup luksDump "$1" || true
 }
 
+# Kan TPM'en rent faktisk låse bindingen op?
+#
+# Det er forskellen på at bindingen FINDES og at den VIRKER. clevis luks bind
+# forsegler mod PCR-værdierne som de er lige nu; om de samme værdier står der
+# tidligt i boot, er et andet spørgsmål. Er de forskellige — typisk fordi
+# Secure Boot er slået fra eller ændret, eller fordi firmwaren er opdateret —
+# fejler unseal ved boot, initramfs falder tilbage til adgangskode-prompten,
+# og intet i opsætningen har sagt fra. Scriptet sagde "Done. Reboot and verify"
+# og lod maskinen om at opdage det.
+#
+# clevis luks pass henter passphrasen ud af slotten ved at unseale præcis som
+# boot ville gøre. Lykkes den, virker bindingen. Output kasseres — det ER
+# disknøglen, og den skal ikke stå i en terminal eller en log.
+verify_can_unseal() {
+  local dev="$1" slot
+  slot="$(clevis luks list -d "$dev" 2>/dev/null | awk -F: '/tpm2/{gsub(/ /,"",$1); print $1; exit}')"
+
+  if [[ -z "$slot" ]]; then
+    warn "Fandt ingen tpm2-binding at teste på $dev."
+    return 1
+  fi
+
+  info "Tester at TPM'en kan låse slot $slot op..."
+  if clevis luks pass -d "$dev" -s "$slot" >/dev/null 2>&1; then
+    ok "TPM2 unseal virker — disken låser op uden adgangskode ved næste boot."
+    return 0
+  fi
+
+  err "TPM'en kunne IKKE låse slot $slot op."
+  err ""
+  err "Bindingen findes, men den kan ikke bruges. Ved boot vil du stadig blive"
+  err "bedt om LUKS-adgangskoden. Den hyppigste årsag er at PCR ${PCR_IDS} ikke"
+  err "har samme værdi nu som ved boot:"
+  err ""
+  err "  • Secure Boot er slået fra. PCR ${PCR_IDS} måler netop Secure Boot-"
+  err "    tilstanden. Slå den til i BIOS/UEFI og kør modulet igen."
+  err "  • BIOS eller Secure Boot-certifikater er opdateret efter bindingen."
+  err "  • TPM'en er nulstillet eller ejet af noget andet."
+  err ""
+  err "Se docs/TPM2-LUKS-fejlfinding.md."
+  return 1
+}
+
 # ── Parathedskontrol ────────────────────────────────────────────────────────
 #
 # Kører kun læsninger og ændrer intet. Udskriver én linje pr. punkt i formatet
@@ -444,8 +487,14 @@ main() {
   verify_binding "$device"
 
   echo
-  ok "Done. Reboot and verify auto-unlock."
-  info "If auto-unlock does not work after reboot, enter your normal passphrase and see docs/TPM2-LUKS-fejlfinding.md."
+  # Sluttilstanden afgøres af om unseal virker, ikke af om vi nåede hertil.
+  # En grøn besked oven på en binding der ikke kan låse op, er værre end
+  # ingen besked: så tror den der satte maskinen op at den er færdig.
+  if verify_can_unseal "$device"; then
+    ok "Done. Genstart og bekræft at der ikke kommer en adgangskode-prompt."
+  else
+    die "TPM2 auto-unlock er IKKE aktivt. Ret ovenstående og kør modulet igen."
+  fi
 }
 
 main "$@"
