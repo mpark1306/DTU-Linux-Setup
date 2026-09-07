@@ -580,8 +580,13 @@ class ErrorDialog(QDialog):
         script_name: str,
         exit_code: int,
         output: str,
+        batch_mode: bool = False,
     ):
         super().__init__(parent)
+        # Hvad brugeren valgte. "close" for en enkelt modulkørsel, hvor der
+        # ikke er en kø at gøre noget ved.
+        self.choice = "close"
+        self._batch_mode = batch_mode
         self.setWindowTitle(f"Fejl: {module_title}")
         self.setMinimumSize(720, 540)
 
@@ -662,12 +667,45 @@ class ErrorDialog(QDialog):
 
         btn_row.addStretch()
 
-        bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        bb.rejected.connect(self.reject)
-        bb.accepted.connect(self.accept)
-        btn_row.addWidget(bb)
+        if batch_mode:
+            # Midt i en samlet kørsel er "Luk" ikke et svar: køen skal vide
+            # om modulet skal forsøges igen, springes over, eller om resten
+            # skal droppes. Før kørte den videre af sig selv, så en fejl midt
+            # i Run All forsvandt op i loggen.
+            retry_btn = QPushButton("↻  Prøv igen")
+            retry_btn.setDefault(True)
+            retry_btn.clicked.connect(lambda: self._choose("retry"))
+            btn_row.addWidget(retry_btn)
+
+            skip_btn = QPushButton("Spring over")
+            skip_btn.clicked.connect(lambda: self._choose("skip"))
+            btn_row.addWidget(skip_btn)
+
+            abort_btn = QPushButton("Afbryd resten")
+            abort_btn.clicked.connect(lambda: self._choose("abort"))
+            btn_row.addWidget(abort_btn)
+        else:
+            bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+            bb.rejected.connect(self.reject)
+            bb.accepted.connect(self.accept)
+            btn_row.addWidget(bb)
 
         layout.addLayout(btn_row)
+
+    def _choose(self, choice: str) -> None:
+        self.choice = choice
+        self.accept()
+
+    def closeEvent(self, event):  # noqa: N802 - Qt-navn
+        """Luk på X'et er ikke "fortsæt som om intet var hændt".
+
+        I en samlet kørsel betyder et lukket vindue uden valg, at brugeren
+        ikke tog stilling. Det sikreste er at springe modulet over frem for
+        at gentage det eller droppe resten uden at være blevet spurgt.
+        """
+        if self._batch_mode and self.choice == "close":
+            self.choice = "skip"
+        super().closeEvent(event)
 
     def _build_report(self) -> str:
         """Build the full text that gets copied to the clipboard."""

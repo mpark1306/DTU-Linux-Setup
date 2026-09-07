@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import QProcess, Qt, pyqtSignal
+from PyQt6.QtCore import QProcess, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -157,6 +157,13 @@ class MainWindow(QMainWindow):
         self._env_overrides: dict[str, str] = {}
         self._env_source: Path | None = None
         self._batch = BatchQueue()
+        # Modulet der kører lige nu, så "Prøv igen" ved en fejl ved hvad den
+        # skal køre om.
+        self._current_module: ModuleDef | None = None
+        # Fejldetaljer fra runneren, gemt indtil vi er ude af QProcess'ens
+        # signal og kan åbne en dialog forsvarligt.
+        self._pending_failure: tuple[str, int, str] | None = None
+        self._cancelling = False
 
         self.setWindowTitle("DTU Linux Setup")
         self.setMinimumSize(800, 700)
@@ -471,6 +478,7 @@ class MainWindow(QMainWindow):
             )
             return
 
+        self._current_module = mod
         script = self._resolve_script_path(mod)
         if not script.exists():
             QMessageBox.critical(
@@ -618,6 +626,7 @@ class MainWindow(QMainWindow):
             self._run_next_queued()
             return
 
+        self._current_module = mod
         self._set_running(True)
         self.statusBar().showMessage(f"Running: {mod.title}...")
         self._runner.run(
@@ -630,31 +639,89 @@ class MainWindow(QMainWindow):
         if isinstance(btn, ModuleCard):
             btn.set_result(success)
 
-        # If we have queued modules, run the next one
-        if self._batch.has_pending():
+        # Alt videre arbejde lægges i næste tur gennem event-loopet.
+        #
+        # Vi står her inde i QProcess::finished. Både at åbne en modal dialog
+        # og at starte den næste QProcess herfra kører en indlejret event-loop
+        # oven på et signal der stadig er under udsendelse, og runneren
+        # udskifter samtidig sit QProcess-objekt. Én tur gennem loopet lader
+        # signalet folde ud først.
+        QTimer.singleShot(0, lambda: self._after_module(success, module_id))
+
+    def _after_module(self, success: bool, module_id: str) -> None:
+        """Beslut hvad der skal ske, nu hvor runneren er ude af sit signal."""
+        if self._cancelling:
+            self._cancelling = False
+            self._pending_failure = None
+            return
+
+        if self._pending_failure is not None:
+            self._handle_failure()
+            return
+
+        if self._batch.in_progress:
             self._run_next_queued()
-        else:
-            self._set_running(False)
-            status = "completed" if success else "failed"
-            self.statusBar().showMessage(f"Module '{module_id}' {status}.")
+            return
+
+        self._set_running(False)
+        status = "completed" if success else "failed"
+        self.statusBar().showMessage(f"Module '{module_id}' {status}.")
 
     def _on_module_failed(self, module_id: str, exit_code: int, output: str) -> None:
-        """Show an ErrorDialog with diagnosis and copy-to-clipboard support."""
+        """Gem fejlen. Dialogen åbnes af _after_module.
+
+        Den blev tidligere åbnet her, altså inde i QProcess::finished, og
+        umiddelbart efter startede det næste modul fra samme signal.
+        """
+        self._pending_failure = (module_id, exit_code, output)
+
+    def _handle_failure(self) -> None:
+        """Vis fejlen, og lad brugeren bestemme hvad køen skal gøre."""
+        failure = self._pending_failure
+        self._pending_failure = None
+        if failure is None:
+            return
+        module_id, exit_code, output = failure
+
         mod = next((m for m in MODULES if m.id == module_id), None)
-        title = mod.title if mod else module_id
-        script_name = mod.script_name if mod else ""
+        in_batch = self._batch.in_progress
+
         dlg = ErrorDialog(
             self,
-            module_title=title,
+            module_title=mod.title if mod else module_id,
             module_id=module_id,
-            script_name=script_name,
+            script_name=mod.script_name if mod else "",
             exit_code=exit_code,
             output=output,
+            batch_mode=in_batch,
         )
         dlg.exec()
 
+        if not in_batch:
+            self._set_running(False)
+            self.statusBar().showMessage(f"Module '{module_id}' failed.")
+            return
+
+        choice = dlg.choice
+        retry_target = mod or self._current_module
+        if choice == "retry" and retry_target is not None:
+            self._append_log(f"\n↻ Prøver {retry_target.title} igen\n")
+            self._batch.push_front(retry_target)
+        elif choice == "abort":
+            self._append_log("\n⛔ Resten af kørslen afbrudt\n")
+            self._batch.cancel()
+            self._set_running(False)
+            self.statusBar().showMessage("Run All aborted after a failure.")
+            return
+        else:
+            self._append_log(f"\n⏭ Sprang {mod.title if mod else module_id} over\n")
+
+        self._run_next_queued()
+
     def _cancel_running(self) -> None:
         """Cancel the running module."""
+        self._cancelling = True
+        self._pending_failure = None
         self._batch.cancel()
         self._runner.cancel()
         self._set_running(False)

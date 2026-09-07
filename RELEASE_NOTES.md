@@ -1,3 +1,37 @@
+## v1.6.3 — 7. september 2026
+
+### Rettelser
+
+- **"Run All Admin Modules" lukkede appen i stedet for at melde fejl.** To
+  ting lå bag, og begge er rettet.
+
+  Fejldialogen blev åbnet inde i `QProcess::finished`, og det næste modul
+  blev startet fra samme signal. Det er en indlejret event-loop oven på et
+  signal, der stadig er under udsendelse, mens runneren udskifter sit
+  `QProcess`. Arbejdet lægges nu i næste tur gennem event-loopet, så signalet
+  får lov at folde ud først.
+
+  Og der var ingen `sys.excepthook`. Rejser en slot en undtagelse, som PyQt6
+  ikke selv fanger, kalder den `abort()`: vinduet forsvinder uden besked, og
+  traceback'en går til stderr, som ingen ser, når programmet er startet fra
+  menuen. Der er nu en hook, som viser fejlen i en dialog og lader vinduet
+  blive stående.
+
+- **En fejl midt i en samlet kørsel spørger nu, hvad der skal ske.**
+  Fejldialogen fik kun en "Luk"-knap, og kørslen fortsatte bag om brugeren,
+  så en fejl midt i Run All forsvandt op i loggen. Der er nu **Prøv igen**,
+  **Spring over** og **Afbryd resten**. Lukkes vinduet på X'et uden et valg,
+  springes modulet over — det er det mildeste svar, når brugeren ikke har
+  taget stilling.
+
+- **Genstart-spørgsmålet efter Run All dukkede aldrig op.** Køen blev kun
+  ført videre, mens der var flere moduler tilbage, så afslutningen — beskeden
+  om at alt er kørt, og spørgsmålet om genstart — blev aldrig nået, fordi
+  `has_pending()` allerede er falsk mens det sidste modul kører. Kørslen har
+  nu sin egen "i gang"-tilstand.
+
+---
+
 ## v1.6.2 — 7. september 2026
 
 Én rettelse. v1.6.0 og v1.6.1 kan ikke køre et eneste modul på en installeret

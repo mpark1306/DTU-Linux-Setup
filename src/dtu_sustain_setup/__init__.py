@@ -2,4 +2,4 @@
 
 # Keep in sync with VERSION in the Makefile and version in pyproject.toml.
 # `make check-version` (also run in CI) fails the build if they drift apart.
-__version__ = "1.6.2"
+__version__ = "1.6.3"

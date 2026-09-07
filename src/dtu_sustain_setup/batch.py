@@ -77,6 +77,13 @@ class BatchQueue:
     shared_env: dict[str, str] = field(default_factory=dict)
     is_admin_run: bool = False
     cancelled: bool = False
+    # Sandt fra kørslen starter til den er gjort færdig eller afbrudt.
+    #
+    # has_pending() kan ikke svare på det: den er falsk allerede mens det
+    # SIDSTE modul kører. Vinduet brugte den til at afgøre om køen skulle
+    # føres videre, så afslutningen af en samlet kørsel — beskeden og
+    # genstart-spørgsmålet — blev aldrig nået.
+    in_progress: bool = False
 
     def start(
         self,
@@ -89,6 +96,7 @@ class BatchQueue:
         self.shared_env = dict(shared_env)
         self.is_admin_run = is_admin_run
         self.cancelled = False
+        self.in_progress = True
 
     def has_pending(self) -> bool:
         return bool(self.pending)
@@ -101,12 +109,21 @@ class BatchQueue:
         if self.is_admin_run:
             self.cancelled = True
         self.pending.clear()
+        self.in_progress = False
 
     def should_prompt_reboot(self) -> bool:
         return self.is_admin_run and not self.cancelled
+
+    def push_front(self, mod: ModuleDef) -> None:
+        """Læg et modul forrest igen, så det køres om.
+
+        Bruges når brugeren vælger "Prøv igen" på en fejl midt i en kørsel.
+        """
+        self.pending.insert(0, mod)
 
     def reset(self) -> None:
         self.pending.clear()
         self.shared_env = {}
         self.is_admin_run = False
         self.cancelled = False
+        self.in_progress = False
