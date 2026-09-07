@@ -41,8 +41,35 @@ def get_scripts_dir(distro: Distro) -> Path:
     message naming the missing tool. That is a better failure than a path
     that does not exist.
     """
-    root = Path(__file__).resolve().parent.parent.parent / "scripts"
-    return root / "ubuntu"
+    return _scripts_root() / "ubuntu"
+
+
+def _scripts_root() -> Path:
+    """Where scripts/ lives, for both layouts the package is run from.
+
+    Installeret ligger pakken i <prefix>/dtu_sustain_setup/ ved siden af
+    <prefix>/scripts/. I repoet ligger den i <repo>/src/dtu_sustain_setup/,
+    hvor scripts/ er ét niveau højere. Forskellen er præcis ét src-led, så
+    roden kan ikke skrives af — den skal findes.
+
+    Indtil september 2026 stod der en hardkodet /opt/dtu-sustain-setup-sti
+    som faldback, og det var den der fik installerede maskiner til at virke.
+    Da distributionsvalget blev skåret ned, forsvandt den, og tilbage stod
+    kun den repo-relative sti: på en installeret maskine pegede den på
+    /opt/scripts/ubuntu, som ikke findes. Hvert eneste modul blev dermed
+    "ikke fundet", ikke kun update-latest.
+
+    Her ledes der i stedet efter mappen. Det dækker begge layouts og
+    samtidig en installation under et andet prefix end /opt, hvilket den
+    hardkodede sti ikke gjorde.
+    """
+    here = Path(__file__).resolve()
+    for root in (here.parent.parent, here.parent.parent.parent):
+        if (root / "scripts").is_dir():
+            return root / "scripts"
+    # Findes ingen af dem, så returnér repo-layoutet: fejlbeskeden fra
+    # kalderen navngiver da en sti der ligner den forventede.
+    return here.parent.parent.parent / "scripts"
 
 
 def _read_os_release() -> dict[str, str]:
