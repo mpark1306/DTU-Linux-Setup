@@ -156,6 +156,105 @@ check_secure_boot() {
   fi
 }
 
+# Finder LUKS-containere på maskinen.
+#
+# lsblk alene er ikke nok. FSTYPE-kolonnen kommer fra udev's ID_FS_TYPE, og
+# kan udev ikke svare, falder lsblk tilbage til at probe rådisken selv — hvilket
+# kræver læseadgang til /dev/nvme0n1p3 og den har en almindelig bruger ikke.
+# Så er kolonnen tom for ALLE partitioner, og kontrollen melder "ingen
+# LUKS-partition" på en maskine der tydeligvis beder om LUKS-adgangskoden ved
+# boot. Parathedskontrollen kører netop uden rettigheder, så det rammer den.
+#
+# Derfor tre uafhængige kilder, forenet:
+#
+#   1) lsblk/udev        — den normale vej, når udev svarer
+#   2) /sys/…/dm/uuid    — den åbne mapping siger CRYPT-LUKS1/2, og slaves/
+#                          peger på selve containeren. Verdenslæsbar, ingen
+#                          udev og ingen root involveret
+#   3) /etc/crypttab     — hvad boot faktisk låser op. Mode 0644
+#
+# Kilde 2 er den vigtige: kører maskinen overhovedet fra en LUKS-disk, ER
+# mappingen åben lige nu — ellers var vi ikke nået hertil.
+# Stierne kan overskrives, så testene kan lægge et falsk sysfs-træ op uden
+# root og uden en rigtig krypteret disk. I drift er de altid defaults.
+SYSFS_BLOCK="${SYSFS_BLOCK:-/sys/class/block}"
+CRYPTTAB_PATH="${CRYPTTAB_PATH:-/etc/crypttab}"
+
+luks_candidates() {
+  local -a found=()
+  local d dev uuid slave src real
+
+  while IFS= read -r dev; do
+    [[ -n "$dev" ]] && found+=("$dev")
+  done < <(lsblk -rno NAME,FSTYPE 2>/dev/null | awk '$2=="crypto_LUKS"{print "/dev/"$1}')
+
+  for d in "$SYSFS_BLOCK"/dm-*; do
+    [[ -r "$d/dm/uuid" ]] || continue
+    uuid="$(cat "$d/dm/uuid" 2>/dev/null || true)"
+    [[ "$uuid" == CRYPT-LUKS* ]] || continue
+    for slave in "$d"/slaves/*; do
+      [[ -e "$slave" ]] || continue
+      found+=("/dev/$(basename "$slave")")
+    done
+  done
+
+  if [[ -r "$CRYPTTAB_PATH" ]]; then
+    while read -r _ src key opts; do
+      [[ -z "$src" ]] && continue
+      # Krypteret swap med tilfældig nøgle er plain dm-crypt, ikke LUKS. Den
+      # linje står i crypttab på helt almindelige Ubuntu-installationer, og
+      # uden det her filter ville kontrollen melde "flere LUKS-partitioner" og
+      # i værste fald lade modulet binde sig til swap-partitionen.
+      [[ "$key" == /dev/urandom || "$key" == /dev/random ]] && continue
+      [[ ",${opts}," == *,swap,* ]] && continue
+      case "$src" in
+        UUID=*)     src="/dev/disk/by-uuid/${src#UUID=}" ;;
+        PARTUUID=*) src="/dev/disk/by-partuuid/${src#PARTUUID=}" ;;
+        PARTLABEL=*) src="/dev/disk/by-partlabel/${src#PARTLABEL=}" ;;
+        LABEL=*)    src="/dev/disk/by-label/${src#LABEL=}" ;;
+      esac
+      found+=("$src")
+    done < <(grep -v '^[[:space:]]*\(#\|$\)' "$CRYPTTAB_PATH" 2>/dev/null || true)
+  fi
+
+  # Afdupliker på den opløste sti: samme disk hedder /dev/nvme0n1p3 fra én
+  # kilde og /dev/disk/by-uuid/… fra en anden, og bliver ellers talt to gange
+  # — hvorefter kontrollen beder brugeren vælge mellem den samme disk og sig
+  # selv.
+  local -A seen=()
+  for dev in ${found[@]+"${found[@]}"}; do
+    [[ -n "$dev" ]] || continue
+    real="$(readlink -f "$dev" 2>/dev/null || true)"
+    [[ -n "$real" && -b "$real" ]] || continue
+    [[ -n "${seen[$real]:-}" ]] && continue
+    seen[$real]=1
+    # Har vi rettighederne, så spørg disken selv frem for at tro på kilden.
+    # Uden root kan cryptsetup ikke læse headeren, og så tæller kandidaten med
+    # på kildens ord — det er stadig bedre end at melde "ingen kryptering".
+    if [[ $EUID -eq 0 ]] && command -v cryptsetup >/dev/null 2>&1; then
+      cryptsetup isLuks "$real" 2>/dev/null || continue
+    fi
+    printf '%s\n' "$real"
+  done
+}
+
+# Hvad kilderne hver især sagde. Bruges kun når vi INTET fandt: forskellen på
+# "disken er ikke krypteret" og "vi kunne ikke se det" er hele forskellen på
+# hvad brugeren skal gøre bagefter.
+luks_sources_note() {
+  local via_lsblk via_dm via_crypttab
+  # Bemærk || true på hver: med "set -o pipefail" fælder en grep uden træffere
+  # hele pipen, og så river ERR-trap'en kontrollen ned midt i en fejlbesked.
+  via_lsblk="$(lsblk -rno NAME,FSTYPE 2>/dev/null | awk '$2=="crypto_LUKS"' | wc -l || true)"
+  via_dm="$(grep -l '^CRYPT-LUKS' "$SYSFS_BLOCK"/dm-*/dm/uuid 2>/dev/null | wc -l || true)"
+  via_crypttab="$(grep -c -v '^[[:space:]]*\(#\|$\)' "$CRYPTTAB_PATH" 2>/dev/null || true)"
+  [[ -n "$via_lsblk" ]]    || via_lsblk=0
+  [[ -n "$via_dm" ]]       || via_dm=0
+  [[ -n "$via_crypttab" ]] || via_crypttab=0
+  printf 'lsblk: %s, aabne dm-mappings: %s, crypttab-linjer: %s' \
+    "$via_lsblk" "$via_dm" "$via_crypttab"
+}
+
 detect_luks_device() {
   if [[ -n "$DEVICE_ARG" ]]; then
     [[ -b "$DEVICE_ARG" ]] || die "'$DEVICE_ARG' does not exist or is not a block device."
@@ -164,10 +263,12 @@ detect_luks_device() {
   fi
 
   local candidates
-  mapfile -t candidates < <(lsblk -rno NAME,FSTYPE | awk '$2=="crypto_LUKS"{print "/dev/"$1}')
+  mapfile -t candidates < <(luks_candidates)
 
   if [[ ${#candidates[@]} -eq 0 ]]; then
-    die "No LUKS partitions found. Pass a device explicitly: sudo $0 /dev/sdXN"
+    die "Ingen LUKS-container fundet ($(luks_sources_note)).
+       Angiv enheden eksplicit hvis du ved hvilken det er:
+         sudo $0 /dev/sdXN"
   elif [[ ${#candidates[@]} -eq 1 ]]; then
     echo "${candidates[0]}"
   else
@@ -388,7 +489,7 @@ run_checks() {
 
   # 5. LUKS-partition
   local candidates
-  mapfile -t candidates < <(lsblk -rno NAME,FSTYPE 2>/dev/null | awk '$2=="crypto_LUKS"{print "/dev/"$1}')
+  mapfile -t candidates < <(luks_candidates)
   if [[ -n "$DEVICE_ARG" ]]; then
     if [[ -b "$DEVICE_ARG" ]]; then
       dev="$DEVICE_ARG"
@@ -403,8 +504,8 @@ run_checks() {
     emit_check luks-device ok "LUKS-partition fundet" "$dev" ""
   elif [[ ${#candidates[@]} -eq 0 ]]; then
     emit_check luks-device fail "Ingen LUKS-partition fundet" \
-      "Disken ser ikke ud til at være krypteret." \
-      "TPM2-oplåsning kræver en LUKS-krypteret disk. Kryptering skal vælges ved installationen og kan ikke slås til bagefter."
+      "Ingen af kilderne så en krypteret container ($(luks_sources_note))." \
+      "Beder maskinen om en adgangskode ved boot, ER den krypteret, og så er det kontrollen der er blind: kør 'lsblk -f' og 'cat /etc/crypttab' i en terminal og sæt DTU_LUKS_DEVICE til den rigtige enhed. Ellers kræver TPM2-oplåsning en LUKS-krypteret disk, og kryptering skal vælges ved installationen."
   else
     emit_check luks-device warn "Flere LUKS-partitioner fundet" \
       "${candidates[*]}" \
