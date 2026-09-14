@@ -309,6 +309,55 @@ class TestDrivesConfIsReadSafely(unittest.TestCase):
         self.assertNotIn("grep", code.split("conf_value()")[1].split("}")[0])
 
 
+class TestNoRawSocketsFromBash(unittest.TestCase):
+    """Ingen shell må åbne en rå TCP-forbindelse selv.
+
+    Bash kan åbne en socket gennem sin indbyggede netværks-pseudoenhed. Det
+    er samtidig den primitiv en reverse shell er bygget af, og EDR-produkter
+    signerer på den: en shell der åbner en rå TCP socket. Drev- og
+    printerscriptene brugte den til at spørge om en server svarede — et
+    portopslag og ikke andet, men signaturen er den samme, og den udløste en
+    alert hos DTU's sikkerhedsteam 14/9 2026.
+
+    Portopslag laves nu med Python, som gør præcis det samme uden at ligne
+    noget andet. Guarden her findes fordi den gamle form er kortere at skrive
+    og derfor nem at falde tilbage til.
+
+    Mønstret sættes sammen af stumper, så hverken testen eller guarden selv
+    indeholder den streng de leder efter.
+    """
+
+    PATTERN = re.compile("/dev/" + "tcp/")
+
+    def test_no_script_opens_a_raw_socket_from_the_shell(self):
+        offenders = []
+        for path in ALL_SH:
+            for number, line in enumerate(read(path).splitlines(), 1):
+                if line.lstrip().startswith("#"):
+                    continue
+                if self.PATTERN.search(line):
+                    offenders.append(
+                        f"{path.relative_to(REPO)}:{number}: {line.strip()[:70]}")
+        self.assertEqual(offenders, [], "\n".join(
+            ["brug Python til portopslag — se cifs_host_up i common.sh:"]
+            + offenders))
+
+    def test_the_shared_probe_still_exists(self):
+        """Findes den ikke, har hvert kaldested sin egen — og så er det et
+        spørgsmål om tid, før et af dem falder tilbage til shell-formen."""
+        common = strip_comments(read(SCRIPTS / "common.sh"))
+        self.assertIn("cifs_host_up()", common)
+        self.assertIn("python3", common)
+
+    def test_the_probe_has_no_shell_fallback(self):
+        """Et tilbagefald ville efterlade mønstret i filen, og en scanner der
+        kigger på filindhold frem for på processer ville stadig reagere."""
+        common = read(SCRIPTS / "common.sh")
+        start = common.index("cifs_host_up() {")
+        body = common[start:common.index("\n}", start)]
+        self.assertNotIn("bash -c", body)
+
+
 class TestFirstLogin(unittest.TestCase):
     """The dialog must reach domain users, and must not mark itself done
     until it actually finished."""

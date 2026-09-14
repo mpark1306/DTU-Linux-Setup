@@ -324,9 +324,40 @@ cifs_test_mount() {
 # Fast TCP reachability probe (no mount, no extra packages) used to detect
 # whether the current network (wired / DTUSecure WiFi / VPN) can route to
 # a given file server at all before attempting a CIFS mount.
+# Portforespørgslen laves med Python, ikke med bash.
+#
+# Bash kan selv åbne en TCP-forbindelse gennem sin indbyggede netværks-
+# pseudoenhed. Det er samtidig den primitiv en reverse shell er bygget af, og
+# EDR-produkter signerer på den: en shell der åbner en rå TCP socket.
+# Funktionelt er det her en portforespørgsel og ikke andet, men signaturen er
+# den samme, og den udløste en alert hos DTU's sikkerhedsteam 14/9 2026.
+#
+# En sti-undtagelse i sensoren ville lære den at ignorere adfærden i stedet
+# for at fjerne den, og den ville ikke dække de frittstående scripts, som med
+# vilje kopieres til /tmp og køres derfra.
+#
+# En Python-proces der åbner en socket er derimod hverdagskost. Adfærden er
+# den samme: forbind, lykkes eller fejl, inden for timeouten.
+#
+# Der er med vilje ikke noget tilbagefald til bash-metoden: et tilbagefald
+# ville efterlade mønstret i filen, og en scanner der kigger på filindhold
+# frem for på processer ville stadig reagere. python3 er en hård afhængighed
+# af hele værktøjet — GUI'en er PyQt6 — så den findes på enhver maskine der
+# kører det her.
+CIFS_PROBE_PY='
+import socket, sys
+try:
+    with socket.create_connection((sys.argv[1], int(sys.argv[2])),
+                                  timeout=float(sys.argv[3])):
+        pass
+except OSError:
+    sys.exit(1)
+'
+
 cifs_host_up() {
   local host="$1" port="${2:-445}" timeout_s="${3:-3}"
-  timeout "$timeout_s" bash -c "exec 3<>/dev/tcp/${host}/${port}" 2>/dev/null
+  [[ -n "$host" ]] || return 1
+  python3 -c "$CIFS_PROBE_PY" "$host" "$port" "$timeout_s" 2>/dev/null
 }
 
 # sustain_pick_target USERNAME

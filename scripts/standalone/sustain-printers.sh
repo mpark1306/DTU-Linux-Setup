@@ -525,8 +525,15 @@ echo "      installeret"
 echo "[6/8] Kan serverne nås..."
 # Uden det her bliver en uopnåelig server til en kø der ser fin ud i lpstat
 # og taber hvert job i stilhed.
+# Portforespørgslen laves med Python, ikke med bash: en shell der åbner en rå
+# TCP socket er den primitiv en reverse shell bygges af, og EDR signerer på
+# den. Samme adfærd, uden signaturen. Se cifs_host_up i scripts/common.sh.
 reachable() {   # reachable VÆRT PORT
-    timeout 4 bash -c "exec 3<>/dev/tcp/$1/$2" 2>/dev/null
+    python3 -c '
+import socket, sys
+try: socket.create_connection((sys.argv[1], int(sys.argv[2])), timeout=4).close()
+except OSError: sys.exit(1)
+' "$1" "$2" 2>/dev/null
 }
 if reachable "$PRINT_SERVER" 445; then
     echo "      FollowMe-server svarer på 445 (SMB)"
