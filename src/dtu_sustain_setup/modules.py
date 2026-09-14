@@ -131,6 +131,15 @@ MODULES: list[ModuleDef] = [
         icon_name="preferences-desktop-remote-desktop",
     ),
     ModuleDef(
+        id="login-screen",
+        title="Login Screen",
+        description="Show the domain user by default\n(SDDM UID range + name field)",
+        script_name="login-screen.sh",
+        needs_root=True,
+        input_type="none",
+        icon_name="system-users",
+    ),
+    ModuleDef(
         id="tpm2-enroll",
         title="TPM2 Auto-Unlock",
         description="LUKS disk auto-unlock\n(TPM2, no passphrase at boot)",

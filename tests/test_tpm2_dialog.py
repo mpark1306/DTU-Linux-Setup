@@ -9,7 +9,9 @@ well-formed input.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -76,6 +78,116 @@ class TestCheckItemParsing(unittest.TestCase):
             with self.subTest(status=status):
                 item = CheckItem.parse(f"TPM2CHECK|x|{status}|T|D|F")
                 self.assertEqual(item.blocks, blocks)
+
+
+class TestLuksDetection(unittest.TestCase):
+    """Hvorfor detektionen ikke må hænge på lsblk alene.
+
+    lsblk's FSTYPE-kolonne kommer fra udev. Kan udev ikke svare, prober lsblk
+    selv, og det kræver læseadgang til rådisken — som parathedskontrollen ikke
+    har, fordi den med vilje kører uden rettigheder. Så er kolonnen tom for
+    ALLE partitioner, og en maskine der beder om LUKS-adgangskoden ved boot
+    bliver meldt som ukrypteret. Testene her kører netop på en maskine hvor
+    lsblk INTET crypto_LUKS ser, og kræver at de øvrige kilder finder disken
+    alligevel.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        # En rigtig blokenhed at pege på: kandidater der ikke findes bliver
+        # kasseret, og det skal de blive ved med at gøre.
+        cls.device = None
+        for entry in sorted(Path("/sys/class/block").iterdir()):
+            if (entry / "partition").exists() and Path("/dev", entry.name).is_block_device():
+                cls.device = entry.name
+                break
+
+    def setUp(self):
+        if self.device is None:
+            self.skipTest("ingen partition at pege testen på")
+        self.tmp = tempfile.mkdtemp()
+        self.sysfs = Path(self.tmp, "sys")
+        self.crypttab = Path(self.tmp, "crypttab")
+        self.crypttab.write_text("")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _dm(self, index: int, uuid: str, slaves: tuple[str, ...] = ()):
+        node = self.sysfs / f"dm-{index}"
+        (node / "dm").mkdir(parents=True)
+        (node / "dm" / "uuid").write_text(uuid + "\n")
+        for slave in slaves:
+            (node / "slaves" / slave).mkdir(parents=True)
+
+    def _luks_line(self):
+        for line in self._run().splitlines():
+            item = CheckItem.parse(line)
+            if item and item.id == "luks-device":
+                return item
+        self.fail("luks-device blev slet ikke rapporteret")
+
+    def _run(self) -> str:
+        env = dict(os.environ)
+        env["SYSFS_BLOCK"] = str(self.sysfs)
+        env["CRYPTTAB_PATH"] = str(self.crypttab)
+        return subprocess.run(
+            ["bash", str(SCRIPT), "--check"],
+            capture_output=True, text=True, timeout=60, env=env,
+        ).stdout
+
+    def test_open_mapping_is_enough_when_lsblk_is_blind(self):
+        """Kører maskinen fra en LUKS-disk, ER mappingen åben lige nu."""
+        self._dm(0, "CRYPT-LUKS2-9f3ab1c2-root_crypt", (self.device,))
+        item = self._luks_line()
+        self.assertEqual(item.status, "ok")
+        self.assertIn(self.device, item.detail)
+
+    def test_plain_dm_crypt_is_not_luks(self):
+        self._dm(0, "CRYPT-PLAIN-swap", (self.device,))
+        self._dm(1, "LVM-abc123")
+        self.assertEqual(self._luks_line().status, "fail")
+
+    def test_crypttab_uuid_is_resolved(self):
+        uuid = None
+        by_uuid = Path("/dev/disk/by-uuid")
+        if by_uuid.is_dir():
+            for link in by_uuid.iterdir():
+                if link.resolve().name == self.device:
+                    uuid = link.name
+                    break
+        if uuid is None:
+            self.skipTest("ingen by-uuid-henvisning til testenheden")
+        self.crypttab.write_text(f"root_crypt UUID={uuid} none luks,discard\n")
+        item = self._luks_line()
+        self.assertEqual(item.status, "ok")
+        self.assertIn(self.device, item.detail)
+
+    def test_same_disk_from_two_sources_counts_once(self):
+        """Ellers beder kontrollen brugeren vælge mellem disken og sig selv."""
+        self._dm(0, "CRYPT-LUKS2-9f3ab1c2-root_crypt", (self.device,))
+        self.crypttab.write_text(f"root_crypt /dev/{self.device} none luks\n")
+        self.assertEqual(self._luks_line().status, "ok")
+
+    def test_random_key_swap_is_ignored(self):
+        """Krypteret swap står i crypttab på helt almindelige installationer og
+        er plain dm-crypt. Talte den med, kunne modulet binde sig til swap."""
+        self.crypttab.write_text(
+            f"cryptswap /dev/{self.device} /dev/urandom swap,cipher=aes-xts-plain64\n"
+        )
+        self.assertEqual(self._luks_line().status, "fail")
+
+    def test_missing_device_is_not_a_candidate(self):
+        self.crypttab.write_text("root_crypt /dev/does-not-exist none luks\n")
+        self.assertEqual(self._luks_line().status, "fail")
+
+    def test_failure_names_what_was_looked_at(self):
+        """Forskellen på 'disken er ikke krypteret' og 'vi kunne ikke se det'
+        er hele forskellen på hvad brugeren skal gøre bagefter."""
+        item = self._luks_line()
+        self.assertEqual(item.status, "fail")
+        self.assertIn("lsblk", item.detail)
+        self.assertIn("crypttab", item.detail)
 
 
 class TestScriptContract(unittest.TestCase):
