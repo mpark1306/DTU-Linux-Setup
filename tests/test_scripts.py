@@ -179,6 +179,65 @@ class TestBothDepartmentsGetTheSameTreatment(unittest.TestCase):
                 self.assertRegex(self.text, rf"DEPARTMENT={dept}\b")
 
 
+class TestDriveAutoswitchHook(unittest.TestCase):
+    """Hook'en holdt op med at kalde reselect, og ingen test sagde fra.
+
+    Den blev skrevet om for at fjerne en stille 3-sekunders forsinkelse ved
+    hvert netværksskift, og endte med kun at måle og notificere. Dermed
+    skiftede maskinen intet af sig selv: omvalget skete kun hvis nogen
+    trykkede på knappen, automounten blev aldrig armet igen når nettet kom
+    tilbage, og uden en grafisk session skete der slet ingenting — så
+    automounten blev ved med at være armet mod en død server, hvilket er
+    præcis den frysning hook'en findes for at undgå.
+
+    Testene her handler derfor ikke om hvordan hook'en er skrevet, men om at
+    den stadig gør de tre ting den skal.
+    """
+
+    def setUp(self):
+        self.deploy = read(SCRIPTS / "deploy-drives-autoswitch.sh")
+        self.reselect = read(SCRIPTS / "dtu-drives-reselect.sh")
+
+    def test_the_hook_actually_runs_the_reselect_script(self):
+        """Selve regressionen: at måle og fortælle er ikke at handle."""
+        self.assertRegex(
+            strip_comments(self.deploy),
+            r"flock[^\n]*/usr/local/bin/dtu-drives-reselect\.sh",
+            "dispatcher-hook'en kalder ikke reselect-scriptet",
+        )
+
+    def test_the_hook_serialises_and_does_not_block_the_dispatcher(self):
+        """NetworkManager venter på dispatcher-scripts. Kører reselect i
+        forgrunden, holdes hele netværksskiftet tilbage af en CIFS-probe."""
+        code = strip_comments(self.deploy)
+        self.assertIn("flock -n", code, "uden flock hober kørsler sig op")
+        self.assertRegex(code, r"\) >> [^\n]*\.log 2>&1 &",
+                         "hook'ens arbejde køres ikke i baggrunden")
+
+    def test_reselect_has_a_distinct_code_for_no_target(self):
+        """Afsluttede den med 0 uanset hvad, kunne hverken hook'en eller
+        knappen se forskel på 'monteret igen' og 'intet svarer'."""
+        code = strip_comments(self.reselect)
+        self.assertIn("EX_NO_TARGET=75", code)
+        self.assertGreaterEqual(
+            code.count('exit "$EX_NO_TARGET"'), 2,
+            "både AIT- og Sustain-grenen skal melde manglende mål",
+        )
+
+    def test_the_notification_is_only_sent_when_nothing_answers(self):
+        """Ellers popper der en besked op ved hvert eneste netværksskift."""
+        code = strip_comments(self.deploy)
+        self.assertRegex(code, r'\[ "\\?\$RC" -eq 75 \] \|\| exit 0',
+                         "notifikationen er ikke betinget af exitkoden")
+
+    def test_the_button_waits_for_a_run_already_in_progress(self):
+        """Trykket kommer i samme sekund som netværksskiftet der udløste
+        notifikationen, så låsen er ofte optaget netop da."""
+        notify = strip_comments(read(SCRIPTS / "dtu-drives-notify.sh"))
+        self.assertIn("flock -w", notify)
+        self.assertNotIn("flock -n", notify)
+
+
 class TestFirstLogin(unittest.TestCase):
     """The dialog must reach domain users, and must not mark itself done
     until it actually finished."""
@@ -245,10 +304,18 @@ class TestDrivesNotification(unittest.TestCase):
         Path(path).unlink()
         self.assertEqual(proc.returncode, 0, proc.stderr)
 
-    def test_the_hook_checks_reachability_before_acting(self):
-        """The old hook slept 3s and ran the full reselect on every event.
-        The common case is that nothing changed."""
-        self.assertIn("/dev/tcp/", self.deploy)
+    def test_the_reachability_check_lives_in_the_reselect_script(self):
+        """Hook'en havde sit eget rækkevidde-tjek. Det læste kun den FØRSTE
+        cifs-linje i fstab, så en maskine med drev på to forskellige servere
+        fik kun den ene testet — og det kunne ikke se at en automount stod
+        afvæbnet og skulle armes igen, så drevene kom aldrig tilbage af sig
+        selv. Begge dele kan reselect. Hook'en spørger den nu i stedet for
+        at gætte selv."""
+        self.assertNotIn("/dev/tcp/", self.deploy,
+                         "hook'en gætter igen selv på rækkevidde")
+        reselect = read(SCRIPTS / "dtu-drives-reselect.sh")
+        self.assertIn("cifs_host_up", reselect)
+        self.assertIn("sustain_pick_target", reselect)
 
     def test_the_hook_does_not_sleep_for_seconds(self):
         m = re.search(r"cat > \"\$DISPATCHER_HOOK\" <<HOOK\n(.*?)\nHOOK\n",

@@ -19,6 +19,18 @@ source "${SCRIPT_DIR}/common.sh"
 LOG="/var/log/dtu-drives-reselect.log"
 log() { echo "$(date '+%F %T'): $*" >> "$LOG" 2>/dev/null || true; }
 
+# "Jeg prøvede, og der er stadig intet mål der svarer."
+#
+# Adskilt fra 0, fordi to kaldere har brug for at kende forskellen:
+# dispatcher-hook'en notificerer kun i dette tilfælde frem for ved hvert
+# netværksskift, og knappen i notifikationen sagde før "Drevene er forbundet
+# igen" hver eneste gang — også når intet var blevet forbundet, fordi
+# scriptet afsluttede med 0 uanset hvad.
+#
+# 75 er EX_TEMPFAIL fra sysexits(3): prøv igen senere. Det er præcis hvad
+# det her er — næste netværksskift kører scriptet igen.
+EX_NO_TARGET=75
+
 if [[ $EUID -ne 0 ]]; then
   fail "Must run as root."
   exit 1
@@ -65,6 +77,7 @@ if [[ "$DEPARTMENT" == "ait" ]]; then
         cifs_stop_automount "$mp"
       fi
     done
+    exit "$EX_NO_TARGET"
   fi
   exit 0
 fi
@@ -96,7 +109,7 @@ if ! sustain_pick_target "$USERNAME"; then
       cifs_stop_automount "$mp"
     fi
   done
-  exit 0
+  exit "$EX_NO_TARGET"
 fi
 
 # Uændret mål er ikke i sig selv grund til at gøre ingenting: er automount'en

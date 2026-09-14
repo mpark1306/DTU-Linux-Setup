@@ -50,7 +50,14 @@ Tryk for at forbinde dem igen, eller åbn “Genopfrisk netværksdrev” i menue
 [[ "$CHOICE" == "refresh" ]] || exit 0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if flock -n /var/lock/dtu-drives-reselect.lock \
+
+# -w 30, ikke -n. Dispatcher-hook'en kører nu reselect ved hvert
+# netværksskift, og det er netop et netværksskift der fik denne notifikation
+# frem — så låsen er ofte optaget i samme sekund som brugeren trykker. Med -n
+# gav flock 1 med det samme, og brugeren fik "Kunne ikke genopfriske drevene"
+# selvom kørslen var i fuld gang og ville lykkes. At vente et halvt minut på
+# en kørsel der allerede er i gang er det rigtige svar på et tryk.
+if flock -w 30 /var/lock/dtu-drives-reselect.lock \
         "${SCRIPT_DIR}/dtu-drives-reselect.sh" >> /var/log/dtu-drives-reselect.log 2>&1; then
     sudo -u "$TARGET_USER" DBUS_SESSION_BUS_ADDRESS="$BUS" \
         notify-send --app-name="DTU Linux Setup" --icon=dialog-ok \

@@ -50,13 +50,29 @@ cat > "$DISPATCHER_HOOK" <<HOOK
 # Installed by deploy-drives-autoswitch.sh — reacts to network changes for
 # the DTU network drives.
 #
-# The old version slept 3 seconds and then ran the full reselect on every
-# event, silently. That was both too slow to feel responsive and too quiet:
-# while it worked, every access to /mnt blocked, and nobody knew why.
+# To gange er den her hook blevet rettet i hver sin retning, og begge gange
+# gik det for vidt:
 #
-# Now: settle briefly, ask the cheap question (can the mounted target still
-# be reached), and only then do anything. If a change is needed the user is
-# told, with a button, rather than having the desktop stall on them.
+#   1) Først sov den 3 sekunder og kørte den fulde reselect stille ved hvert
+#      event. Den virkede, men imens blokerede hver adgang til /mnt, og
+#      ingen fik at vide hvorfor.
+#   2) Så blev kaldet til reselect fjernet helt og erstattet af et
+#      rækkevidde-tjek plus en notifikation. Dermed skiftede maskinen intet
+#      af sig selv længere: omvalget skete kun hvis nogen trykkede på
+#      knappen. Kom man tilbage på et net der virkede, blev automounten
+#      aldrig armet igen, og uden en grafisk session skete der slet ingenting
+#      — altså blev automounten ved med at være armet mod en død server,
+#      hvilket er præcis den frysning det hele findes for at undgå.
+#
+# Nu: kør reselect ved hvert skift, men i baggrunden og under flock, så
+# dispatcheren ikke venter og events ikke hober sig op. Scriptet laver selv
+# sine egne billige tjek og afslutter med det samme når intet skal ændres.
+# Notifikationen sendes kun når reselect siger 75 — "jeg prøvede, og der er
+# stadig intet mål der svarer" — frem for ved hvert netværksskift.
+#
+# Det gamle rækkevidde-tjek her er væk med vilje: det læste kun den FØRSTE
+# cifs-linje i fstab, så en maskine med drev på to forskellige servere fik
+# kun den ene testet.
 ACTION="\$2"
 case "\$ACTION" in
   up|down|vpn-up|vpn-down) ;;
@@ -66,19 +82,15 @@ esac
 (
   sleep 1                      # lige nok til at ruten er sat
 
-  # Er det nuværende mål stadig i live, er der intet at lave. Det er den
-  # hurtige vej, og den vej der tages næsten hver gang.
-  if [ -r /etc/dtu-setup/drives.conf ]; then
-    . /etc/dtu-setup/drives.conf 2>/dev/null || true
-  fi
-  CURRENT="\$(awk '/[[:space:]]cifs[[:space:]]/{print \$1}' /etc/fstab 2>/dev/null \
-              | head -1 | sed 's|^//||; s|/.*||')"
-  if [ -n "\$CURRENT" ] && timeout 2 bash -c "exec 3<>/dev/tcp/\$CURRENT/445" 2>/dev/null; then
-    exit 0
-  fi
+  flock -n /var/lock/dtu-drives-reselect.lock /usr/local/bin/dtu-drives-reselect.sh
+  RC=\$?
 
-  # Målet kan ikke nås. Sig det til dem der er logget ind på en grafisk
-  # session — én notifikation per bruger, med en knap.
+  # Kun 75. En optaget lås giver 1 fra flock, og det betyder at en anden
+  # kørsel er i gang lige nu — ikke at der mangler et mål at montere fra.
+  [ "\$RC" -eq 75 ] || exit 0
+
+  # Der er stadig ingen server der svarer. Sig det til dem der er logget ind
+  # på en grafisk session — én notifikation per bruger, med en knap.
   for u in \$(loginctl list-sessions --no-legend 2>/dev/null | awk '{print \$3}' | sort -u); do
     [ -n "\$u" ] || continue
     "${NOTIFY_SCRIPT}" "\$u" &
@@ -89,4 +101,5 @@ chmod 755 "$DISPATCHER_HOOK"
 chown root:root "$DISPATCHER_HOOK"
 
 ok "Drive auto-switch hook installed: ${DISPATCHER_HOOK}"
-echo "    Runs ${RESELECT_SCRIPT} on network up/down/vpn-up/vpn-down."
+echo "    Runs /usr/local/bin/dtu-drives-reselect.sh on network up/down/vpn-up/vpn-down,"
+echo "    and notifies logged-in users only when no target answers."
