@@ -217,7 +217,7 @@ EOF
 
 # Leder efter et ikonnavn i installerede ikontemaer. Ekkoer stien ved fund.
 find_theme_icon() {
-  local names="$1" n d s ext f
+  local names="$1" n d s ext f themedir
   local -a arr dirs sizes
   IFS=';' read -r -a arr <<<"$names"
   dirs=("${HOME:-/root}/.local/share/icons" /usr/share/icons /usr/local/share/icons)
@@ -228,7 +228,12 @@ find_theme_icon() {
       [[ -d "$d" ]] || continue
       for s in "${sizes[@]}"; do
         for ext in svg png; do
-          for f in "$d"/*/"$s"/apps/"${n}.${ext}"; do
+          # Temamappen glob'es for sig, og resten af stien saettes sammen
+          # bagefter. Skrevet som ét ord blandede den citeret og uciteret
+          # tekst, hvilket shellcheck laeser som en sandsynlig slaafejl
+          # (SC2140) — og den advarsel var en aegte CI-stopper.
+          for themedir in "$d"/*; do
+            f="${themedir}/${s}/apps/${n}.${ext}"
             [[ -f "$f" ]] && { printf '%s' "$f"; return 0; }
           done
         done
@@ -332,7 +337,9 @@ if [[ $REMOVE -eq 0 && $CHECK_ONLY -eq 0 ]]; then
 fi
 [[ $REMOVE -eq 1 ]] || mkdir -p "$ICON_DIR"
 [[ $REMOVE -eq 1 || $CHECK_ONLY -eq 1 ]] || mkdir -p "$APP_DIR"
-[[ $CHECK_ONLY -eq 1 ]] && { ORIG_ICON_DIR="$ICON_DIR"; ICON_DIR="$(mktemp -d)"; }
+# --check-icons maa ikke skrive i den rigtige ikonmappe, saa den peges mod en
+# midlertidig. Den oprindelige sti blev gemt i en variabel som ingen laeste.
+[[ $CHECK_ONLY -eq 1 ]] && ICON_DIR="$(mktemp -d)"
 
 # ---------------------------------------------------------------------------
 # Hovedløkke
