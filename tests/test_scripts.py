@@ -238,6 +238,77 @@ class TestDriveAutoswitchHook(unittest.TestCase):
         self.assertNotIn("flock -n", notify)
 
 
+class TestSustainMDrive(unittest.TestCase):
+    """Sustains M-drev var den ene automount ingen holdt øje med.
+
+    qdrive.sh monterer et personligt M-drev for Sustain også, og det ligger
+    på en ANDEN server end Q- og P-drevet. Men drives.conf nævnte det ikke,
+    og reselect'ens Sustain-gren rørte kun /mnt/Qdrev og /mnt/Personal. Kunne
+    home-serveren ikke nås, blev /mnt/Mdrev ved med at være armet — altså
+    præcis den frysning hele mekanismen findes for at undgå.
+    """
+
+    def setUp(self):
+        self.qdrive = strip_comments(read(SCRIPTS / "ubuntu" / "qdrive.sh"))
+        self.reselect_raw = read(SCRIPTS / "dtu-drives-reselect.sh")
+        self.reselect = strip_comments(self.reselect_raw)
+
+    def test_qdrive_records_the_m_drive_for_sustain(self):
+        """Uden serveren i drives.conf kan hook'en ikke spørge om DEN
+        svarer — målvalget for Q/P siger intet om home-serveren."""
+        for key in ("M_SERVER=", "M_MOUNT_POINT="):
+            with self.subTest(key=key):
+                self.assertIn(key, self.qdrive)
+
+    def test_reselect_arms_and_disarms_the_m_drive(self):
+        self.assertIn("M_MOUNT_POINT", self.reselect)
+        self.assertRegex(self.reselect,
+                         r"cifs_stop_automount \"\$M_MOUNTPOINT\"")
+        self.assertRegex(self.reselect,
+                         r"cifs_start_automount \"\$M_MOUNTPOINT\"")
+
+    def test_the_m_drive_is_handled_before_anything_needs_a_username(self):
+        """En maskine opsat før USERNAME kom i drives.conf skal stadig få
+        sit M-drev afvæbnet. Arm/afvæbn har ikke brug for at vide hvem
+        drevet tilhører."""
+        m_block = self.reselect.index("M_MOUNTPOINT=")
+        username = self.reselect.index('USERNAME="$(conf_value USERNAME)"')
+        self.assertLess(m_block, username,
+                        "M-drevet håndteres efter USERNAME-afhængig kode")
+
+    def test_an_unreachable_m_drive_does_not_raise_the_no_target_code(self):
+        """75 betyder 'ingen af brugerens drev kan nås' og udløser en
+        notifikation. Q/P kan sagtens virke mens home-serveren er nede."""
+        # Kun M-drev-blokken: AIT-grenen ovenfor bruger koden med rette.
+        start = self.reselect.index('[[ "$DEPARTMENT" == "sustain" ]] || exit 0')
+        end = self.reselect.index('USERNAME="$(conf_value USERNAME)"')
+        self.assertNotIn("EX_NO_TARGET", self.reselect[start:end])
+
+
+class TestDrivesConfIsReadSafely(unittest.TestCase):
+    """`grep -E '^NØGLE=' | cut` under set -euo pipefail.
+
+    En grep uden træffere giver 1, pipefail løfter det til hele pipen, og en
+    tildeling fra en fejlende kommandosubstitution tager scriptet ned. Så
+    døde reselect på selve linjen der skulle læse USERNAME, længe før den
+    guard der skulle fange en manglende USERNAME — på præcis de maskiner der
+    var opsat før nøglen fandtes.
+    """
+
+    def test_reselect_reads_drives_conf_without_a_failing_pipe(self):
+        code = strip_comments(read(SCRIPTS / "dtu-drives-reselect.sh"))
+        offenders = re.findall(
+            r'^\s*\w+="\$\(grep[^\n]*DRIVES_CONF[^\n]*\|[^\n]*\)"',
+            code, re.MULTILINE)
+        self.assertEqual(offenders, [], "\n".join(
+            ["en manglende nøgle tager scriptet ned her:"] + offenders))
+
+    def test_the_helper_cannot_fail_on_a_missing_key(self):
+        code = strip_comments(read(SCRIPTS / "dtu-drives-reselect.sh"))
+        self.assertIn("conf_value()", code)
+        self.assertNotIn("grep", code.split("conf_value()")[1].split("}")[0])
+
+
 class TestFirstLogin(unittest.TestCase):
     """The dialog must reach domain users, and must not mark itself done
     until it actually finished."""

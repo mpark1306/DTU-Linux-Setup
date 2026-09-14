@@ -288,13 +288,24 @@ echo "[7/7] Saving department config..."
 DTU_SETUP_DIR="/etc/dtu-setup"
 mkdir -p "$DTU_SETUP_DIR"
 echo "sustain" > "${DTU_SETUP_DIR}/department"
-cat > "${DTU_SETUP_DIR}/drives.conf" <<DCONF
-DEPARTMENT=sustain
-USERNAME=${USERNAME}
-TARGET=${TARGET_LABEL}
-MOUNT_POINT=${MOUNTPOINT}
-REMOTE_BASE=${MOUNTPOINT}/Personal/${USERNAME}
-DCONF
+{
+  echo "DEPARTMENT=sustain"
+  echo "USERNAME=${USERNAME}"
+  echo "TARGET=${TARGET_LABEL}"
+  echo "MOUNT_POINT=${MOUNTPOINT}"
+  echo "REMOTE_BASE=${MOUNTPOINT}/Personal/${USERNAME}"
+  # M-drevet ligger på en anden server end Q/P, så netværksskift-hook'en kan
+  # ikke udlede af målvalget om DEN svarer. Uden de to linjer var /mnt/Mdrev
+  # den ene automount på maskinen som ingen holdt øje med, og den blev derfor
+  # ved med at være armet mod en server der ikke kunne nås.
+  #
+  # Kun når drevet faktisk blev sat op: står nøglerne der uden et drev bag,
+  # ville reselect lede efter en fstab-linje der ikke findes.
+  if [[ -n "${M_SUBDIR:-}" ]]; then
+    echo "M_SERVER=${M_SERVER}"
+    echo "M_MOUNT_POINT=${M_MOUNTPOINT}"
+  fi
+} > "${DTU_SETUP_DIR}/drives.conf"
 chmod 644 "${DTU_SETUP_DIR}/drives.conf"
 
 "${SCRIPT_DIR}/../deploy-drives-autoswitch.sh"

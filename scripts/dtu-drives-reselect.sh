@@ -39,7 +39,22 @@ fi
 DRIVES_CONF="/etc/dtu-setup/drives.conf"
 [[ -f "$DRIVES_CONF" ]] || exit 0
 
-DEPARTMENT="$(grep -E '^DEPARTMENT=' "$DRIVES_CONF" | cut -d= -f2-)"
+# conf_value NØGLE — værdien, eller tom hvis nøglen ikke står der.
+#
+# Erstatter `grep -E '^NØGLE=' | cut -d= -f2-`. Med `set -euo pipefail` giver
+# en grep uden træffere 1, pipefail løfter det til hele pipen, og en tildeling
+# fra en fejlende kommandosubstitution tager scriptet ned. Guarden nedenfor —
+# `[[ -n "$USERNAME" ]] || exit 0` — blev derfor aldrig nået: på en maskine
+# opsat før USERNAME kom i drives.conf døde scriptet på selve linjen der
+# skulle læse den, og hook'en så en exitkode der ikke betød noget.
+#
+# sed uden træffere afslutter med 0 og skriver ingenting, hvilket er præcis
+# den semantik en manglende nøgle skal have.
+conf_value() {
+  sed -n "s/^$1=//p" "$DRIVES_CONF" 2>/dev/null | head -1
+}
+
+DEPARTMENT="$(conf_value DEPARTMENT)"
 
 # ── AIT ─────────────────────────────────────────────────────────────────────
 #
@@ -53,7 +68,7 @@ DEPARTMENT="$(grep -E '^DEPARTMENT=' "$DRIVES_CONF" | cut -d= -f2-)"
 # For AIT er opgaven derfor kun den ene: arm automount'en når serveren svarer,
 # og afvæbn den når den ikke gør.
 if [[ "$DEPARTMENT" == "ait" ]]; then
-  AIT_SERVER="$(grep -E '^SERVER=' "$DRIVES_CONF" | cut -d= -f2-)"
+  AIT_SERVER="$(conf_value SERVER)"
   AIT_SERVER="${AIT_SERVER:-${SITE_MDRIVE_SERVER:-${SITE_FILE_SERVER:-}}}"
   [[ -n "$AIT_SERVER" ]] || exit 0
 
@@ -84,8 +99,54 @@ fi
 
 [[ "$DEPARTMENT" == "sustain" ]] || exit 0
 
-USERNAME="$(grep -E '^USERNAME=' "$DRIVES_CONF" | cut -d= -f2-)"
-PREV_TARGET="$(grep -E '^TARGET=' "$DRIVES_CONF" | cut -d= -f2-)"
+# ── Sustains M-drev ─────────────────────────────────────────────────────────
+#
+# Sustain får også et personligt M-drev, og det ligger på en ANDEN server end
+# Q- og P-drevet. Derfor kan det ikke følge med i målvalget nedenfor: at
+# Qumulo svarer, siger intet om home-serveren, og omvendt.
+#
+# Indtil nu stod M-drevet slet ikke i drives.conf, og Sustain-grenen rørte
+# kun /mnt/Qdrev og /mnt/Personal. /mnt/Mdrev var dermed den ene automount på
+# en Sustain-maskine som ingen afvæbnede når serveren ikke kunne nås — altså
+# præcis den frysning resten af det her findes for at undgå.
+#
+# Kører før alt det USERNAME-afhængige med vilje. En maskine opsat før
+# USERNAME kom i drives.conf skal stadig kunne få sit M-drev afvæbnet, og
+# arm/afvæbn har ikke brug for at vide hvem drevet tilhører.
+M_MOUNTPOINT="$(conf_value M_MOUNT_POINT)"
+M_MOUNTPOINT="${M_MOUNTPOINT:-/mnt/Mdrev}"
+M_SERVER="$(conf_value M_SERVER)"
+
+# Maskiner opsat før de to nøgler fandtes: hvilken server drevet faktisk
+# peger på står allerede i fstab, og dén er facit — ikke hvad site.conf
+# siger i dag. Uden det her ville rettelsen kun gælde maskiner der kører
+# qdrive.sh forfra.
+if [[ -z "$M_SERVER" ]]; then
+  M_SERVER="$(awk -v mp="$M_MOUNTPOINT" '$2==mp && $3=="cifs"{print $1}' /etc/fstab 2>/dev/null \
+              | head -1 | sed 's|^//||; s|/.*||')"
+fi
+
+if [[ -n "$M_SERVER" ]] && grep -qE "[[:space:]]${M_MOUNTPOINT}[[:space:]]" /etc/fstab 2>/dev/null; then
+  if cifs_host_up "$M_SERVER" 445 3; then
+    if ! cifs_automount_active "$M_MOUNTPOINT"; then
+      log "${M_SERVER} kan nås igen — armer automount for ${M_MOUNTPOINT}."
+      cifs_start_automount "$M_MOUNTPOINT"
+    fi
+  elif cifs_automount_active "$M_MOUNTPOINT"; then
+    log "${M_SERVER} kan ikke nås — afvæbner automount for ${M_MOUNTPOINT} så stien ikke blokerer."
+    cifs_stop_automount "$M_MOUNTPOINT"
+  fi
+fi
+
+# Bemærk at et utilgængeligt M-drev IKKE giver EX_NO_TARGET. Den kode betyder
+# "ingen af brugerens drev kan nås" og udløser en notifikation; Q- og
+# P-drevet kan sagtens virke samtidig med at home-serveren ikke svarer, og en
+# besked om det ville være støj om et drev der kommer igen af sig selv ved
+# næste netværksskift. Afvæbningen ovenfor er det der forhindrer frysningen,
+# og den er lydløs.
+
+USERNAME="$(conf_value USERNAME)"
+PREV_TARGET="$(conf_value TARGET)"
 [[ -n "$USERNAME" ]] || exit 0
 id "$USERNAME" >/dev/null 2>&1 || exit 0
 
