@@ -473,7 +473,18 @@ com.usebottles.bottles           # Windows app runner
 io.github.alescdb.mailviewer     # Mail viewer
 
 [snap]
-office365webdesktop              # Office 365 web apps
+# tom — office365webdesktop er erstattet af [pwa]
+
+[pwa]                            # Microsoft 365 som .desktop-genveje
+outlook                          # i Ungoogled Chromium, for alle brugere
+calendar
+word
+excel
+powerpoint
+onenote
+onedrive
+todo
+m365
 
 [cisco]
 cisco-secure-client              # Cisco AnyConnect VPN

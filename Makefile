@@ -59,6 +59,7 @@ lint:
 	@echo "Running shellcheck..."
 	@command -v shellcheck >/dev/null || { echo "shellcheck not installed: sudo apt install shellcheck"; exit 1; }
 	shellcheck --severity=warning --external-sources \
+	  bin/*.sh scripts/*.sh scripts/ubuntu/*.sh scripts/standalone/*.sh
 	@echo "Byte-compiling Python..."
 	python3 -m compileall -q src/dtu_sustain_setup
 	@echo "✅ Lint passed."

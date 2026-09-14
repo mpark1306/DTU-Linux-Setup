@@ -71,9 +71,11 @@ FLATPAK_APPS=(
     com.usebottles.bottles
     io.github.alescdb.mailviewer
 )
-SNAP_APPS=(
-    office365webdesktop
-)
+# Tom: office365webdesktop er erstattet af Microsoft 365-PWA-genvejene,
+# som software-modulet installerer med scripts/install-ms-pwa.sh. Dette
+# script er nødløsningen når GUI'en ikke kan køre, og det skal ikke
+# geninstallere en snap modulet netop fjerner.
+SNAP_APPS=()
 CISCO_ENABLED=true
 
 echo "  Flatpak apps: ${FLATPAK_APPS[*]:-none}"

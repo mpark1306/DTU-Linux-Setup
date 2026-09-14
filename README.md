@@ -444,7 +444,18 @@ io.gitlab.librewolf-community
 io.github.ungoogled_software.ungoogled_chromium
 
 [snap]
-office365webdesktop --channel=latest/beta
+# tom — erstattet af [pwa]
+
+[pwa]
+outlook
+calendar
+word
+excel
+powerpoint
+onenote
+onedrive
+todo
+m365
 
 [cisco]
 cisco-secure-client

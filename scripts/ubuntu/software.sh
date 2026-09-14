@@ -24,6 +24,7 @@ echo "Reading software list from: ${SOFTWARE_CONF}"
 # Parse config file into arrays
 FLATPAK_APPS=()
 SNAP_APPS=()
+PWA_APPS=()
 CISCO_ENABLED=false
 _section=""
 while IFS= read -r line; do
@@ -39,17 +40,23 @@ while IFS= read -r line; do
     case "$_section" in
         flatpak) FLATPAK_APPS+=("$line") ;;
         snap)    SNAP_APPS+=("$line") ;;
+        pwa)     PWA_APPS+=("$line") ;;
         cisco)   CISCO_ENABLED=true ;;
     esac
 done < "$SOFTWARE_CONF"
 
 echo "  Flatpak apps: ${FLATPAK_APPS[*]:-none}"
 echo "  Snap apps:    ${SNAP_APPS[*]:-none}"
+echo "  M365 PWAs:    ${PWA_APPS[*]:-none}"
 echo "  Cisco VPN:    ${CISCO_ENABLED}"
 
 # Calculate total steps
 TOTAL_STEPS=2  # Flatpak setup + Flatpak install
 (( ${#SNAP_APPS[@]} > 0 )) && TOTAL_STEPS=$((TOTAL_STEPS + 1))
+# The PWA step also removes the snap it replaced, so it runs even when the
+# section is empty — otherwise a machine imaged before the change would keep
+# office365webdesktop forever.
+TOTAL_STEPS=$((TOTAL_STEPS + 1))
 $CISCO_ENABLED && TOTAL_STEPS=$((TOTAL_STEPS + 1))
 STEP=0
 
@@ -113,6 +120,49 @@ if (( ${#SNAP_APPS[@]} > 0 )); then
     else
         warn "snapd not available – skipping Snap packages."
     fi
+fi
+
+# ─── Step: Microsoft 365 PWA shortcuts ──────────────────────────────────────
+#
+# Replaces the office365webdesktop snap. That snap was a packaged browser
+# shipped from a beta channel, running alongside the browser the machine
+# already has. install-ms-pwa.sh writes ordinary .desktop files that open the
+# same Microsoft 365 apps in Ungoogled Chromium — the flatpak installed above.
+STEP=$((STEP + 1))
+echo "[${STEP}/${TOTAL_STEPS}] Microsoft 365 web apps..."
+
+# The snap this replaces. Removed by name, and only if it is actually there:
+# an upgraded machine must not keep both.
+OBSOLETE_SNAPS=(office365webdesktop)
+if command -v snap &>/dev/null; then
+    for obsolete in "${OBSOLETE_SNAPS[@]}"; do
+        if snap list "$obsolete" &>/dev/null 2>&1; then
+            echo "  → removing obsolete snap: ${obsolete}"
+            snap remove --purge "$obsolete" || warn "Could not remove ${obsolete} snap"
+        fi
+    done
+fi
+
+if (( ${#PWA_APPS[@]} > 0 )); then
+    PWA_SCRIPT="${REPO_ROOT}/scripts/install-ms-pwa.sh"
+    if [[ ! -f "$PWA_SCRIPT" ]]; then
+        warn "install-ms-pwa.sh not found at ${PWA_SCRIPT} — skipping M365 shortcuts."
+    else
+        # --system: the shortcuts go in /usr/share/applications for every user.
+        # Without it the script installs into $HOME, and this module runs as
+        # root, so they would land in root's home and nobody would see them.
+        if [[ -n "${DTU_MS_TENANT:-}" ]]; then
+            export MS_TENANT="$DTU_MS_TENANT"
+        fi
+        echo "  → ${PWA_APPS[*]}"
+        if bash "$PWA_SCRIPT" --system "${PWA_APPS[@]}"; then
+            ok "Microsoft 365 shortcuts installed for all users."
+        else
+            warn "install-ms-pwa.sh failed — the M365 shortcuts may be missing."
+        fi
+    fi
+else
+    echo "    No M365 web apps configured."
 fi
 
 # ─── Step: Cisco Secure Client ──────────────────────────────────────────────
@@ -183,27 +233,82 @@ if $CISCO_ENABLED; then
 
             CISCO_INSTALLED=0
             CISCO_FAILED=0
+            CISCO_TIMED_OUT=0
+
+            # Each module gets its own log file, and the installer writes
+            # into that file rather than into a pipe we read.
+            #
+            # This is not a style preference. The old code ran the installer
+            # inside $( ), which waits for end-of-file on the installer's
+            # stdout — NOT for the installer to exit. Cisco's installers
+            # leave processes behind that inherited that stdout, so the pipe
+            # never reached EOF and the module hung forever *after* a
+            # successful install. The GUI showed nothing, because all output
+            # was being captured for a variable that never got assigned.
+            #
+            # A file has no such property: the write end being held open by
+            # some leftover process costs nothing, and the redirect returns
+            # as soon as the installer itself exits.
+            CISCO_TIMEOUT="${DTU_CISCO_MODULE_TIMEOUT:-900}"
+
+            # Somewhere that outlives the extraction directory, which is
+            # deleted below. A log the failure message points at has to still
+            # be there when someone goes looking for it.
+            CISCO_LOG_DIR=/var/log/dtu-setup
+            mkdir -p "$CISCO_LOG_DIR"
+
             for script in "${ORDERED_SCRIPTS[@]}"; do
                 MODULE=$(basename "$(dirname "$script")")
+                MODULE_LOG="${CISCO_LOG_DIR}/cisco-${MODULE}.log"
                 echo "    --- Installing: ${MODULE} ---"
+                echo "        (no output until this module finishes; up to ${CISCO_TIMEOUT}s)"
+
+                # `yes` answers Cisco's EULA prompt. `exec` inside the
+                # subshell makes timeout's exit status the subshell's own, so
+                # PIPESTATUS[1] is the installer's real result.
                 set +e
-                SCRIPT_OUTPUT=$( cd "$(dirname "$script")" && yes | bash "$(basename "$script")" 2>&1 )
-                EXIT_CODE=$?
+                yes | ( cd "$(dirname "$script")" \
+                        && exec timeout "$CISCO_TIMEOUT" bash "$(basename "$script")" ) \
+                    > "$MODULE_LOG" 2>&1
+                # NOT $? — pipefail is on, and `yes` dies of SIGPIPE (141) the
+                # moment the installer exits. $? therefore reports 141 for a
+                # perfectly successful install.
+                EXIT_CODE=${PIPESTATUS[1]}
                 set -e
+
+                SCRIPT_OUTPUT="$(cat "$MODULE_LOG" 2>/dev/null)"
                 echo "$SCRIPT_OUTPUT"
-                if echo "$SCRIPT_OUTPUT" | grep -qiE "already installed|installed successfully|is installed"; then
-                    echo "    [OK] ${MODULE}"
-                    ((CISCO_INSTALLED++)) || true
+
+                if [[ $EXIT_CODE -eq 124 ]]; then
+                    # timeout(1) reports 124 when it had to kill the child.
+                    warn "${MODULE} timed out after ${CISCO_TIMEOUT}s and was killed."
+                    echo "        The installer did not exit on its own. Its log:"
+                    echo "          ${MODULE_LOG}"
+                    echo "        Raise the limit with DTU_CISCO_MODULE_TIMEOUT=<seconds> if"
+                    echo "        this machine is simply slow."
+                    ((CISCO_TIMED_OUT++)) || true
+                    ((CISCO_FAILED++)) || true
                 elif [[ $EXIT_CODE -eq 0 ]]; then
                     echo "    [OK] ${MODULE}"
                     ((CISCO_INSTALLED++)) || true
+                elif echo "$SCRIPT_OUTPUT" | grep -qiE "already installed|installed successfully|is installed"; then
+                    # Non-zero exit, but the installer says it did the work.
+                    # Checked after the exit code, not before it: the other
+                    # order let a timed-out module whose log happened to
+                    # contain "is installed" be reported as a success.
+                    echo "    [OK] ${MODULE} (exit ${EXIT_CODE}, but reports success)"
+                    ((CISCO_INSTALLED++)) || true
                 else
-                    warn "${MODULE} failed"
+                    warn "${MODULE} failed (exit ${EXIT_CODE})"
                     ((CISCO_FAILED++)) || true
                 fi
             done
 
             ok "Cisco Secure Client: ${CISCO_INSTALLED} module(s) installed, ${CISCO_FAILED} failed."
+            echo "    Per-module logs: ${CISCO_LOG_DIR}/cisco-*.log"
+            if (( CISCO_TIMED_OUT > 0 )); then
+                warn "${CISCO_TIMED_OUT} module(s) had to be killed on timeout."
+            fi
             echo "    Note: NVM (Network Visibility Module) may fail on newer kernels ($(uname -r)). This is a Cisco limitation."
         fi
 
@@ -214,5 +319,6 @@ fi
 ok "Software installation complete."
 echo "    Flatpaks: ${FLATPAK_APPS[*]:-none}"
 echo "    Snaps: ${SNAP_APPS[*]:-none}"
+echo "    M365 PWAs: ${PWA_APPS[*]:-none}"
 echo "    Cisco Secure Client: ${CISCO_ENABLED}"
 echo "    A reboot may be required for Flatpak apps to appear in the menu."
