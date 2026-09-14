@@ -1,3 +1,88 @@
+## v1.7.0 — 14. september 2026
+
+### Nyt
+
+- **Microsoft 365 som PWA-genveje i stedet for en snap.** `office365webdesktop`
+  var en indpakket browser fra en beta-kanal, kørende ved siden af den browser
+  maskinen allerede har. `scripts/install-ms-pwa.sh` skriver i stedet
+  almindelige `.desktop`-genveje, der åbner de samme apps i Ungoogled
+  Chromium, som i forvejen installeres et trin før.
+
+  Ny `[pwa]`-sektion i `data/software.conf` med de ni app-id'er. Trinnet kører
+  også når sektionen er tom, fordi det samtidig fjerner snap'en: ellers ville
+  en maskine imaget før denne ændring beholde begge dele for altid. Genvejene
+  installeres med `--system`, så de gælder alle brugere.
+
+- **Login Screen-modul.** Viser domænebrugeren som standard på loginskærmen.
+
+### Rettelser
+
+- **Software-modulet hang på Cisco-installationen efter en vellykket
+  installation.** Modulerne blev kørt inde i `$( )`, som venter på
+  end-of-file på installerens stdout og ikke på at installeren afslutter.
+  Ciscos installere efterlader processer, der har arvet netop den stdout, så
+  røret aldrig lukkede. GUI'en viste ingenting imens, fordi alt output blev
+  opsamlet til en variabel, der aldrig blev tildelt.
+
+  Hver installer skriver nu til sin egen logfil i `/var/log/dtu-setup/`, har
+  en timeout omkring sig (`DTU_CISCO_MODULE_TIMEOUT`, standard 900s), og
+  exitkoden læses fra `PIPESTATUS` frem for `$?` — med `pipefail` døde `yes`
+  af SIGPIPE, så `$?` var 141 for en fuldstændig vellykket installation.
+
+- **Netværksskift-hook'en handlede ikke længere, den målte kun.** Kaldet til
+  `dtu-drives-reselect.sh` var faldet ud, så omvalget skete kun hvis nogen
+  trykkede på knappen i notifikationen. Maskinen skiftede ikke mål af sig
+  selv, automounts blev aldrig afvæbnet når serveren holdt op med at svare,
+  og drevene kom ikke tilbage når man nåede et net der virkede. Uden en
+  grafisk session skete der slet ingenting.
+
+  Hook'en kører nu reselect ved hvert netværksskift, i baggrunden og under
+  `flock`. Notifikationen sendes kun når reselect melder 75, "jeg prøvede, og
+  der er stadig intet mål der svarer".
+
+- **Sustains M-drev var ustyret.** Det ligger på en anden server end Q- og
+  P-drevet, men stod ikke i `drives.conf`, og reselect rørte kun `/mnt/Qdrev`
+  og `/mnt/Personal`. `/mnt/Mdrev` var dermed den ene automount ingen
+  afvæbnede, og altså den der kunne fryse skrivebordet.
+
+- **reselect døde på en `drives.conf` uden `USERNAME`.** `grep | cut` under
+  `set -euo pipefail`: en grep uden træffere giver 1, og tildelingen tog
+  scriptet ned — to linjer før den guard, der skulle fange netop det. Det
+  ramte alle maskiner opsat før nøglen fandtes. Læsningerne går nu gennem en
+  hjælper, der ikke kan fejle på en manglende nøgle.
+
+- **LUKS-detektionen hang på én skrøbelig kilde.** `lsblk`s FSTYPE-kolonne
+  kommer fra udev, og svarer udev ikke, meldes en krypteret disk som
+  ukrypteret. Tre uafhængige kilder forenes nu.
+
+### Ændret
+
+- **Portopslag laves med Python i stedet for med shellen.** Bash kan selv
+  åbne en TCP-forbindelse gennem sin indbyggede netværks-pseudoenhed, og det
+  er samtidig den primitiv en reverse shell er bygget af. Drev- og
+  printerscriptene brugte den til at spørge om en server svarede, hvilket
+  udløste en reverse shell-alert hos DTU's sikkerhedsteam 14. september 2026.
+
+  Fem kaldesteder er skiftet til `python3` og `socket.create_connection`:
+  `cifs_host_up` i `common.sh`, `reachable` i `sustain-printers.sh`, samt
+  `host_up` i `ait-drives.sh` og de to scripts den selv skriver ud på
+  maskinen. Samme adfærd, uden signaturen. En guard i testsuiten holder
+  mønstret ude fremover.
+
+  Det er værd at vide for drift: `reselect` kører nu ved hvert netværksskift,
+  så opslaget mod filserveren sker mange gange dagligt på hver maskine.
+
+### Internt
+
+- `make lint` havde aldrig lintet noget. Linjen sluttede på en backslash, der
+  fortsatte ind i det følgende `@echo`, så shellcheck fik `@echo` som filnavn.
+  CI havde hele tiden den rigtige liste.
+- TPM2-LUKS-testene fejlede på enhver maskine med en krypteret disk, altså
+  netop de maskiner værktøjet findes for, og bestod kun i CI. Testene kan nu
+  selv bestemme hvad `lsblk` ser.
+
+---
+
 ## v1.6.3 — 7. september 2026
 
 ### Rettelser
