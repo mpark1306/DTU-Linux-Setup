@@ -180,13 +180,39 @@ check_secure_boot() {
 SYSFS_BLOCK="${SYSFS_BLOCK:-/sys/class/block}"
 CRYPTTAB_PATH="${CRYPTTAB_PATH:-/etc/crypttab}"
 
+# Kilde 1 har ingen sti at pege et andet sted hen, og uden en sådan kunne
+# testene ikke stille en maskine hvor lsblk intet ser: de lagde et falsk
+# sysfs og crypttab op, mens værtens egen krypterede disk sev ind ad den
+# tredje dør. Syv tests fejlede derfor på enhver maskine med LUKS — altså
+# netop de maskiner værktøjet findes for — og bestod kun i CI.
+#
+# Sat, læses filen i stedet for at køre lsblk. Formatet er lsblk's eget:
+# "NAVN FSTYPE" pr. linje.
+#
+# Bevidst en fixture med DATA og ikke en sti til en binær: scriptet kører
+# som root på enroll-stien, og en miljøvariabel skal ikke kunne bestemme
+# hvad der bliver eksekveret. Som root efterprøves hver kandidat desuden
+# med `cryptsetup isLuks`, så en løgnagtig fixture bliver filtreret fra.
+LSBLK_FIXTURE="${LSBLK_FIXTURE:-}"
+
+# Én kilde, ét sted. Begge kaldesteder skal bruge den samme: noten nedenfor
+# er dét brugeren får at se når intet blev fundet, og en note der siger
+# noget andet end detektionen ville være værre end ingen note.
+lsblk_fstypes() {
+  if [[ -n "$LSBLK_FIXTURE" ]]; then
+    cat "$LSBLK_FIXTURE" 2>/dev/null || true
+  else
+    lsblk -rno NAME,FSTYPE 2>/dev/null || true
+  fi
+}
+
 luks_candidates() {
   local -a found=()
   local d dev uuid slave src real
 
   while IFS= read -r dev; do
     [[ -n "$dev" ]] && found+=("$dev")
-  done < <(lsblk -rno NAME,FSTYPE 2>/dev/null | awk '$2=="crypto_LUKS"{print "/dev/"$1}')
+  done < <(lsblk_fstypes | awk '$2=="crypto_LUKS"{print "/dev/"$1}')
 
   for d in "$SYSFS_BLOCK"/dm-*; do
     [[ -r "$d/dm/uuid" ]] || continue
@@ -245,7 +271,7 @@ luks_sources_note() {
   local via_lsblk via_dm via_crypttab
   # Bemærk || true på hver: med "set -o pipefail" fælder en grep uden træffere
   # hele pipen, og så river ERR-trap'en kontrollen ned midt i en fejlbesked.
-  via_lsblk="$(lsblk -rno NAME,FSTYPE 2>/dev/null | awk '$2=="crypto_LUKS"' | wc -l || true)"
+  via_lsblk="$(lsblk_fstypes | awk '$2=="crypto_LUKS"' | wc -l || true)"
   via_dm="$(grep -l '^CRYPT-LUKS' "$SYSFS_BLOCK"/dm-*/dm/uuid 2>/dev/null | wc -l || true)"
   via_crypttab="$(grep -c -v '^[[:space:]]*\(#\|$\)' "$CRYPTTAB_PATH" 2>/dev/null || true)"
   [[ -n "$via_lsblk" ]]    || via_lsblk=0

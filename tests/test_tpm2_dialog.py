@@ -87,9 +87,16 @@ class TestLuksDetection(unittest.TestCase):
     selv, og det kræver læseadgang til rådisken — som parathedskontrollen ikke
     har, fordi den med vilje kører uden rettigheder. Så er kolonnen tom for
     ALLE partitioner, og en maskine der beder om LUKS-adgangskoden ved boot
-    bliver meldt som ukrypteret. Testene her kører netop på en maskine hvor
+    bliver meldt som ukrypteret. Testene her stiller netop en maskine hvor
     lsblk INTET crypto_LUKS ser, og kræver at de øvrige kilder finder disken
     alligevel.
+
+    Alle tre kilder stubbes: SYSFS_BLOCK, CRYPTTAB_PATH og LSBLK_FIXTURE.
+    Den sidste fandtes ikke før, og uden den var "lsblk ser ingenting" en
+    antagelse om værtsmaskinen frem for noget testen bestemte. På en maskine
+    med en rigtig LUKS-disk sev den ind som en ekstra kandidat, og alle syv
+    tests herunder fejlede — altså på præcis de maskiner værktøjet findes
+    for. De bestod kun i CI, hvor runneren er ukrypteret.
     """
 
     @classmethod
@@ -109,6 +116,10 @@ class TestLuksDetection(unittest.TestCase):
         self.sysfs = Path(self.tmp, "sys")
         self.crypttab = Path(self.tmp, "crypttab")
         self.crypttab.write_text("")
+        # Tom = lsblk ser ingenting. Det er udgangspunktet for alle testene
+        # herunder; den ene der handler om lsblk-kilden fylder den selv.
+        self.lsblk = Path(self.tmp, "lsblk")
+        self.lsblk.write_text("")
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -131,6 +142,7 @@ class TestLuksDetection(unittest.TestCase):
         env = dict(os.environ)
         env["SYSFS_BLOCK"] = str(self.sysfs)
         env["CRYPTTAB_PATH"] = str(self.crypttab)
+        env["LSBLK_FIXTURE"] = str(self.lsblk)
         return subprocess.run(
             ["bash", str(SCRIPT), "--check"],
             capture_output=True, text=True, timeout=60, env=env,
@@ -188,6 +200,35 @@ class TestLuksDetection(unittest.TestCase):
         self.assertEqual(item.status, "fail")
         self.assertIn("lsblk", item.detail)
         self.assertIn("crypttab", item.detail)
+
+    def test_lsblk_alone_is_enough_when_udev_answers(self):
+        """Kilde 1 på egen hånd — den normale vej på en rask maskine.
+
+        Resten af klassen stiller med vilje en blind lsblk, så uden denne
+        test var kilde 1 aldrig kørt af nogen test: den blev tidligere
+        leveret af værtsmaskinen, og hvad den sagde, bestemte testen ikke.
+        """
+        self.lsblk.write_text(f"{self.device} crypto_LUKS\n")
+        item = self._luks_line()
+        self.assertEqual(item.status, "ok")
+        self.assertIn(self.device, item.detail)
+
+    def test_lsblk_ignores_partitions_that_are_not_luks(self):
+        """FSTYPE-kolonnen er hele filteret. Læses den for løst, bliver
+        enhver partition på maskinen til en LUKS-kandidat."""
+        self.lsblk.write_text(f"{self.device} ext4\n")
+        self.assertEqual(self._luks_line().status, "fail")
+
+    def test_all_three_sources_naming_one_disk_count_once(self):
+        """Udvider dedup-testen til også at dække kilde 1. Tæller den med
+        en ekstra gang, beder kontrollen brugeren vælge mellem den samme
+        disk og sig selv."""
+        self.lsblk.write_text(f"{self.device} crypto_LUKS\n")
+        self._dm(0, "CRYPT-LUKS2-9f3ab1c2-root_crypt", (self.device,))
+        self.crypttab.write_text(f"root_crypt /dev/{self.device} none luks\n")
+        item = self._luks_line()
+        self.assertEqual(item.status, "ok")
+        self.assertIn(self.device, item.detail)
 
 
 class TestScriptContract(unittest.TestCase):
