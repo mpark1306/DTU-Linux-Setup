@@ -208,7 +208,9 @@ def _is_writable(path: Path) -> bool:
 
 def _parse_software_conf(path: Path) -> dict[str, list[str]]:
     """Parse software.conf and return {section: [packages]}."""
-    sections: dict[str, list[str]] = {"flatpak": [], "snap": [], "cisco": []}
+    sections: dict[str, list[str]] = {
+        "flatpak": [], "snap": [], "pwa": [], "cisco": [],
+    }
     current_section = ""
     if not path.exists():
         return sections
@@ -225,8 +227,34 @@ def _parse_software_conf(path: Path) -> dict[str, list[str]]:
     return sections
 
 
+# The order sections are written in. Anything the parser found that is not
+# listed here is written after them rather than dropped.
+KNOWN_SECTIONS = ("flatpak", "snap", "pwa", "cisco")
+
+# Written above each section so a round-trip through the dialog does not
+# strip the explanation. The dialog rewrites the whole file, so a comment
+# that only lives in the shipped copy is gone the first time someone
+# presses Save.
+SECTION_NOTES = {
+    "snap": [
+        "# Tom som standard. office365webdesktop er afløst af [pwa],",
+        "# men sektionen virker: skriv en snap her som \"navn --flag\".",
+    ],
+    "pwa": [
+        "# Microsoft 365 web-apps som .desktop-genveje, installeret for",
+        "# alle brugere med scripts/install-ms-pwa.sh.",
+    ],
+}
+
+
 def _write_software_conf(path: Path, sections: dict[str, list[str]]) -> None:
-    """Write sections back to software.conf."""
+    """Write sections back to software.conf.
+
+    Sections the dialog does not know about are preserved. [pwa] was added
+    to the shipped software.conf without being added here, so pressing Save
+    silently deleted it — the parser read it, and the writer did not write
+    it back.
+    """
     lines = [
         "# DTU Linux Setup – Software Configuration",
         "# Lines starting with # are comments. Empty lines are ignored.",
@@ -235,14 +263,15 @@ def _write_software_conf(path: Path, sections: dict[str, list[str]]) -> None:
         "#   [section]",
         "#   package_id",
         "#",
-        "# Sections: flatpak, snap, cisco",
+        "# Sections: " + ", ".join(KNOWN_SECTIONS),
         "",
     ]
-    for section_name in ("flatpak", "snap", "cisco"):
+    extra = [name for name in sections if name not in KNOWN_SECTIONS]
+    for section_name in (*KNOWN_SECTIONS, *extra):
         pkgs = sections.get(section_name, [])
         lines.append(f"[{section_name}]")
-        for pkg in pkgs:
-            lines.append(pkg)
+        lines.extend(SECTION_NOTES.get(section_name, []))
+        lines.extend(pkgs)
         lines.append("")
     path.write_text("\n".join(lines) + "\n")
 
@@ -270,9 +299,10 @@ class SoftwareDialog(QDialog):
         # Tab widget for each section
         self._tabs = QTabWidget()
         self._lists: dict[str, QListWidget] = {}
-        section_labels = {"flatpak": "Flatpak", "snap": "Snap", "cisco": "Cisco"}
+        section_labels = {"flatpak": "Flatpak", "snap": "Snap",
+                          "pwa": "Microsoft 365", "cisco": "Cisco"}
 
-        for section_key in ("flatpak", "snap", "cisco"):
+        for section_key in KNOWN_SECTIONS:
             tab = QWidget()
             tab_layout = QVBoxLayout(tab)
 

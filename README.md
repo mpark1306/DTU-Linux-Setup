@@ -113,8 +113,10 @@ dækker det hele.
 
 ### Den korte vej
 
-Én kommando. Den henter nyeste release, installerer afhængighederne og
-opdaterer en eksisterende installation, hvis der allerede er en:
+Én kommando. Den henter nyeste release og kører `make install`, hvilket også
+opdaterer en eksisterende installation. Den henter `tar` og `make` hvis de
+mangler, men **ikke** desktop- og Qt-afhængighederne — dem skal du installere
+først, hvis maskinen ikke allerede har dem (se pakkelisten nedenfor):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mpark1306/DTU-Linux-Setup/main/bin/dtu-install.sh | sudo bash
@@ -367,14 +369,24 @@ Synkroniserede mapper: `~/Desktop`, `~/Documents`, `~/Pictures`.
 
 ### ⏫ Auto Update Setup
 
-Installerer en systemd-timer der dagligt henter og installerer
-sikkerhedsopdateringer, så en maskine ikke sakker bagud mellem to
-image-bygninger.
+Installerer en opdateringsrutine, der kører `apt-get dist-upgrade`,
+`autoremove --purge` og `fwupdmgr update`. Den udløses både af en timer og af
+en NetworkManager-hook, så en maskine der var slukket eller uden net henter
+det ind, når den kommer online igen.
+
+**Den kan genstarte maskinen.** Efterlader opdateringen
+`/run/reboot-required`, planlægges en genstart-prompt til brugeren, og
+accepteres den ikke, genstartes der efter et varsel.
 
 ### 🖥️ Login Screen
 
-Konfigurerer loginskærmen til at vise den domænebruger, der sidst var logget
-ind, som standardvalg i stedet for et tomt brugernavnsfelt.
+Skriver `/etc/sddm.conf.d/zz-dtu-domain-login.conf`, så domænebrugere
+overhovedet dukker op på loginskærmen: SDDM viser kun konti inden for et
+UID-interval, og domæne-UID'er ligger over standardgrænsen. Samtidig sættes
+`RememberLastUser` og `RememberLastSession`.
+
+Modulet gælder kun KDE-imaget. Er SDDM ikke display manager, siger det fra og
+afslutter uden at ændre noget.
 
 ### 🖥️ RDP (xrdp)
 
@@ -500,7 +512,7 @@ cisco-secure-client
 
 ### Software-dialogen
 
-Klik på **Software**-knappen for at åbne en dialog hvor du kan tilføje, redigere og fjerne pakker per sektion (Flatpak / Snap / PWA / Cisco), vælge Cisco-tarball via **Browse…**, og enten **Save** (kun gem) eller **Save & Install**.
+Klik på **Software**-knappen for at åbne en dialog hvor du kan tilføje, redigere og fjerne pakker per sektion (Flatpak / Snap / Microsoft 365 / Cisco), vælge Cisco-tarball via **Browse…**, og enten **Save** (kun gem) eller **Save & Install**.
 
 ### Cisco Secure Client
 
