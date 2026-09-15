@@ -1,3 +1,70 @@
+## v1.7.1 — 15. september 2026
+
+### Nyt
+
+- **TPM2 binder om efter en firmwareopdatering, i stedet for at spørge om
+  koden resten af maskinens levetid.** Disknøglen er forseglet i TPM'en bag en
+  politik: udlevér den kun hvis PCR 7 stadig har denne værdi. PCR 7 er en
+  løbende hash over Secure Boot-tilstanden, og næsten alle BIOS-opdateringer
+  medbringer en ny dbx, som måles ind i den. Værdien ændrer sig, TPM'en nægter
+  at udlevere nøglen, og initramfs falder tilbage til adgangskode-prompten.
+
+  Intet er i stykker: LUKS er urørt, og adgangskode-nøgleslotten virker. Kun
+  seglet passer ikke længere. Windows løser det ved at forsegle igen når
+  genoprettelsesnøglen er tastet én gang. Det gjorde vi ikke, så maskinen
+  spurgte ved hver eneste opstart derefter, og ingen fik at vide hvorfor.
+
+  Tre dele, med vilje adskilt fordi ingen proces har både root og en grafisk
+  session:
+
+  - `dtu-tpm2-watch.service` prøver efter hver opstart at unseale rigtigt, med
+    `clevis luks pass`, og skriver en tilstandsfil. Den retter ingenting.
+  - `dtu-tpm2-notify.sh` kører i brugerens session og siger det på dansk, én
+    gang per hændelse. Beskeden starter med at der ikke er noget galt med
+    disken eller koden, fordi det er dét brugeren tror.
+  - **TPM2 – Bind om** i GUI'en beder om koden én gang, fjerner den døde
+    binding, forsegler mod de nye værdier, og afprøver at det virker.
+
+  To ting den nægter at gøre. Den binder ikke om automatisk: det ville kræve
+  at koden lå på maskinen, og så havde en angriber med disken både låsen og
+  nøglen. Og den nægter at binde om når Secure Boot er slået fra, fordi PCR 7
+  måler netop den tilstand: bindingen ville så låse disken op på en maskine
+  uden Secure Boot. En brudt binding er en gene; det ville være en forringelse.
+
+  Den døde binding fjernes før den nye laves. Ellers samler der sig en
+  ubrugelig keyslot per firmwareopdatering maskinen har set, og LUKS2 har 32.
+
+### Rettelser
+
+- **Software-modulet fyldte hele disken på en ny maskine.** Rapporteret fra en
+  maskine med 465 GB, hvoraf 438 GB lå i `/var/log/dtu-setup/`.
+
+  v1.7.0 rettede et hæng ved at lade Ciscos installere skrive til en logfil i
+  stedet for til et rør. Det var rigtigt, men byttede hænget ud med en
+  diskfylder. Tre ting manglede et loft på én gang: `yes` leverede uendeligt
+  input, logfilen havde ingen størrelsesgrænse, og timeouten var 900 sekunder.
+
+  `posture_install.sh` spørger om en **sti**, ikke om ja eller nej. Den afviser
+  "y" og spørger igen. Målt på en attrap med samme adfærd: 16 MB i sekundet,
+  altså omkring 29 GB i timen, og hurtigere på en NVMe.
+
+  Fire ændringer:
+
+  - **Kun `vpn` installeres som standard.** Tarballen indeholder også posture,
+    nvm, dart og umbrella. Ingen af dem bruges på DTU, og hver enkelt er en
+    fremmed interaktiv installer kørt som root. At installere noget vi ikke
+    bruger er ikke gratis. `[cisco]`-sektionen i `data/software.conf` navngiver
+    nu modulerne; en gammel konfiguration med `cisco-secure-client` betyder
+    fortsat det samme.
+  - **Input er bundet** til 50 svar. En løkke drevet af input rammer EOF og må
+    give op.
+  - **Vagthund på logfilen**, standard 50 MB (`DTU_CISCO_MAX_LOG`). Den fanger
+    en installer der looper uden at læse input, hvilket bundet input ikke gør.
+  - **Kun halen af loggen læses** til GUI'en. `cat "$MODULE_LOG"` i en variabel
+    var den anden ubundne læsning i samme løkke.
+
+  Logge ældre end 30 dage ryddes ved hver kørsel.
+
 ## v1.7.0 — 14. september 2026
 
 ### Nyt
