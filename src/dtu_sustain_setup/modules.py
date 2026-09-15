@@ -85,7 +85,7 @@ MODULES: list[ModuleDef] = [
     ModuleDef(
         id="software",
         title="Software",
-        description="Flatpaks, Snaps\n& Cisco VPN",
+        description="Flatpaks, M365,\nSnaps & Cisco VPN",
         script_name="software.sh",
         needs_root=True,
         input_type="software",

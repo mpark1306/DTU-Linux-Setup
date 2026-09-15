@@ -36,11 +36,7 @@ cd DTU-Linux-Setup
 sudo apt update
 sudo apt install kde-standard python3 python3-pyqt6 policykit-1
 make deb
-sudo dpkg -i dtu-sustain-setup_1.0.0_all.deb
-```
-
-```bash
-make rpm
+sudo apt install ./dtu-sustain-setup_*_all.deb
 ```
 
 ---
@@ -141,7 +137,7 @@ cd ~/Documents/DTU-Linux-Setup
 git checkout deploy
 git pull
 make deb
-sudo dpkg -i dtu-sustain-setup_1.0.0_all.deb
+sudo apt install ./dtu-sustain-setup_*_all.deb
 ```
 
 > Konfigurationsfilen `/etc/dtu-setup/site.conf` og `/etc/dtu-setup/department` røres ikke af en opdatering.
@@ -216,11 +212,7 @@ DTU Linux Setup er et grafisk værktøj der automatiserer opsætning af Linux-ar
 ```bash
 sudo apt update && sudo apt install python3-pyqt6
 make deb
-sudo dpkg -i dtu-sustain-setup_1.0.0_all.deb
-```
-
-```bash
-make rpm
+sudo apt install ./dtu-sustain-setup_*_all.deb
 ```
 
 ### Trin 2: Forberedelser
@@ -228,7 +220,7 @@ make rpm
 Inden du starter, sørg for at have:
 
 | Hvad                     | Eksempel                               | Bruges til              |
-|--------------------------|-------------------------------------- -|-------------------------|
+|--------------------------|----------------------------------------|-------------------------|
 | DTU-brugernavn           | `mpark`                                | Q-Drive, FollowMe, WiFi |
 | DTU-adgangskode          | `*****`                                | Q-Drive, FollowMe       |
 | Admin-brugernavn         | `adm-<username>`                            | Domain Join             |

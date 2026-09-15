@@ -11,7 +11,7 @@ POLICYDIR   ?= /usr/share/polkit-1/actions
 
 VERSION     := 1.7.0
 
-.PHONY: help install uninstall deb rpm clean check-version lint test
+.PHONY: help install uninstall deb clean check-version lint test readme-table
 
 help:
 	@echo "DTU Linux Setup – Build targets"
@@ -20,6 +20,7 @@ help:
 	@echo "  make uninstall      Remove installation"
 	@echo "  make deb            Build DEB package (Ubuntu)"
 	@echo "  make run            Run from source (development)"
+	@echo "  make readme-table   Regenerate the module table in README.md"
 	@echo "  make check-version  Verify all version strings agree"
 	@echo "  make lint           shellcheck all scripts + byte-compile Python"
 	@echo "  make test           Guard + smoke tests (no root, no network)"
@@ -29,6 +30,9 @@ help:
 # VERSION above is the single source of truth. These files repeat it because
 # they are read by tools that cannot see the Makefile; this target makes the
 # duplication safe by failing the build when they drift.
+
+readme-table:
+	@python3 tools/module_table.py --write
 
 check-version:
 	@echo "Makefile VERSION:      $(VERSION)"
@@ -207,19 +211,6 @@ deb:
 	dpkg-deb --build --root-owner-group -Zxz $(DEB_ROOT) dtu-sustain-setup_$(VERSION)_all.deb
 	rm -rf $(DEB_ROOT)
 	@echo "✅ DEB package built: dtu-sustain-setup_$(VERSION)_all.deb"
-
-rpm:
-	@echo "Building RPM package..."
-	@command -v rpmbuild >/dev/null || { echo "Install rpm-build first"; exit 1; }
-	mkdir -p ~/rpmbuild/{SOURCES,SPECS,BUILD,RPMS,SRPMS}
-	# Create tarball
-	tar czf ~/rpmbuild/SOURCES/dtu-sustain-setup-$(VERSION).tar.gz \
-		--transform='s,^,dtu-sustain-setup-$(VERSION)/,' \
-		src/ scripts/ data/ bin/ packaging/
-	cp packaging/rpm/dtu-sustain-setup.spec ~/rpmbuild/SPECS/
-	sed -i 's/^Version:[[:space:]]*.*/Version:        $(VERSION)/' ~/rpmbuild/SPECS/dtu-sustain-setup.spec
-	rpmbuild -bb ~/rpmbuild/SPECS/dtu-sustain-setup.spec
-	@echo "✅ RPM package built. Check ~/rpmbuild/RPMS/"
 
 # ─── Clean ──────────────────────────────────────────────────────────────────
 

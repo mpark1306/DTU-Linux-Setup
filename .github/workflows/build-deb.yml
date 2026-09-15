@@ -104,39 +104,9 @@ jobs:
           path: "*.deb"
           if-no-files-found: error
 
-  # ── Job 2: Build .rpm in Fedora container ───────────────────────────────
-  build-rpm:
-    needs: lint
-    runs-on: ubuntu-latest
-    container:
-      image: fedora:latest
-
-    steps:
-      - name: Install build dependencies
-        run: dnf install -y make rpm-build git
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build .rpm
-        run: make rpm
-
-      - name: Collect .rpm
-        run: |
-          mkdir -p dist
-          find "$HOME/rpmbuild/RPMS" -type f -name "*.rpm" -exec cp -v {} dist/ \;
-          ls -lah dist/
-
-      - name: Upload .rpm artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: rpm-package
-          path: dist/*.rpm
-          if-no-files-found: error
-
-  # ── Job 3: Publish release ───────────────────────────────────────────────
+  # ── Job 2: Publish release ───────────────────────────────────────────────
   release:
-    needs: [build-deb, build-rpm]
+    needs: build-deb
     runs-on: ubuntu-latest
 
     steps:
@@ -144,12 +114,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: deb-package
-          path: dist/
-
-      - name: Download .rpm
-        uses: actions/download-artifact@v4
-        with:
-          name: rpm-package
           path: dist/
 
       - name: Compute checksums

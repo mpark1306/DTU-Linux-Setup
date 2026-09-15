@@ -21,8 +21,8 @@ DTU Linux Setup samler alle de manuelle trin en IT-administrator (eller selvbetj
 - Tilslutte **DTUSecure** WiFi automatisk via WPA2-Enterprise/PEAP
 - Installere **Microsoft Defender for Endpoint** + onboarding
 - Konfigurere **PolicyKit** så domænebrugere må håndtere USB, WiFi og pakker uden adgangskode
-- Installere **Flatpaks**, **Microsoft 365-genveje** og **Cisco Secure Client VPN**
-  efter en redigerbar pakkeliste
+- Installere **Flatpaks**, **Microsoft 365-genveje**, **Snaps** og
+  **Cisco Secure Client VPN** efter en redigerbar pakkeliste
 - Sætte **xrdp** (Remote Desktop) op
 - Aktivere **daglige automatiske opdateringer** (Sustain + AIT)
 - Låse LUKS-krypterede diske op automatisk ved boot via **TPM2** (ingen passphrase)
@@ -42,6 +42,8 @@ Alt sker via en PyQt6-GUI med et grid af knapper. Hver knap kører ét bash-scri
 - [Site-konfiguration](#site-konfiguration-etcdtu-setupsiteconf)
 - [Brug](#brug)
 - [Modul-detaljer](#modul-detaljer)
+- [Netværksdrev og netværksskift](#netværksdrev-og-netværksskift)
+- [RepairBooth](#repairbooth)
 - [Software-styring](#software-styring)
 - [Arkitektur](#arkitektur)
 - [Filstruktur](#filstruktur)
@@ -68,118 +70,94 @@ Ved første start (eller via dropdown'en i toppen af GUI'en) vælges den institu
 
 ## Moduler
 
+<!-- BEGIN modultabel: genereret af tools/module_table.py -->
 16 moduler i alt: 15 aktive og 1 deaktiveret. Alle kræver root og kører via
-`pkexec`. Modulerne er fordelt på to faner i GUI'en: **Admin Scripts** (kører
-uden brugerens egne credentials) og **User Scripts** (kræver brugerens
-DTU-login).
+`pkexec`. **Fane** er den af GUI'ens to faner modulet ligger på:
+*Admin* kører uden brugerens egne credentials, *User* kræver dem.
 
-| # | Modul | Hvad det gør | Sustain | AIT |
-|---|---|---|:-:|:-:|
-| 1 | **Domain Join** | Join WIN.DTU.DK (realmd + SSSD + mkhomedir) | ✅ | ✅ |
-| 2 | **Network Drives** | Mount institut-drev via CIFS (Q+P eller O+M) | ✅ | ✅ |
-| 3 | **Microsoft Defender** | Defender for Endpoint install + onboarding | ✅ | ✅ |
-| 4 | **PolicyKit** | Domæne­bruger­rettigheder (USB, WiFi, pakker) | ✅ | ✅ |
-| 5 | **Printers** | FollowMe (Sustain) eller WebPrint webapp (AIT) | ✅ | ✅ |
-| 6 | **DTUSecure WiFi** | WPA2-Enterprise auto-connect (PEAP/MSCHAPv2) | ✅ | ✅ |
-| 7 | **Software** | Flatpaks, Microsoft 365-genveje & Cisco Secure Client VPN | ✅ | ✅ |
-| 8 | **Auto-mount** | USB automount + polkit-regler (ingen symlinks) | ✅ | ✅ |
-| 9 | **Sync Home Dirs** | Backup af Desktop/Documents/Pictures til netværksdrev (rsync, login + timer) | ✅ | ✅ |
-| 10 | **Auto Update Setup** | Daglige automatiske opdateringer | ✅ | ✅ |
-| 11 | **RDP (xrdp)** | Remote Desktop med KDE Plasma over xrdp | ✅ | — |
-| 12 | **Login Screen** | Viser domænebrugeren som standard på loginskærmen | ✅ | ✅ |
-| 13 | **TPM2 Auto-Unlock** | LUKS disk auto-unlock ved boot (TPM2, ingen passphrase) | ✅ | — |
-| 14 | **First-Login Setup** | Deploy welcome-dialog der vises ved nye domænebrugeres første login | ✅ | ✅ |
-| 15 | **Repair Home Folders** | Ret ødelagte Desktop/Documents/Pictures fra tidligere installationer + fjern fstab-dubletter | ✅ | ✅ |
-| 16 | **Reset Test User** | *Deaktiveret.* Fjern domain-user state + home-dir til gen-test | ✅ | ✅ |
+| # | Modul | Hvad det gør | Fane | Input |
+|---|---|---|:-:|---|
+| 1 | **Domain Join** | Join WIN.DTU.DK domain (realmd + SSSD + mkhomedir) | Admin | Hostname + admin |
+| 2 | **Network Drives** | Map department network drives (Q+P or O+M via CIFS) | User | DTU-login |
+| 3 | **Microsoft Defender** | Defender for Endpoint (install + onboard) | Admin | — |
+| 4 | **PolicyKit** | Domain-user rights (USB, WiFi, packages) | Admin | — |
+| 5 | **Printers** | FollowMe (Sustain) / WebPrint app (AIT) | User | DTU-login |
+| 6 | **DTUSecure WiFi** | WPA2-Enterprise (PEAP/MSCHAPv2 auto-connect) | Admin | DTU-login |
+| 7 | **Software** | Flatpaks, M365, Snaps & Cisco VPN | Admin | Pakkevalg |
+| 8 | **Auto-mount** | USB automount + udev rules (no symlinks) | Admin | — |
+| 9 | **Sync Home Dirs** | Backup Desktop, Documents & Pictures to network drive | User | — |
+| 10 | **Auto Update Setup** | Install daily automatic updates (for DTU Sustain + AIT) | Admin | — |
+| 11 | **RDP (xrdp)** | Remote Desktop (KDE Plasma via xrdp) | Admin | — |
+| 12 | **Login Screen** | Show the domain user by default (SDDM UID range + name field) | Admin | — |
+| 13 | **TPM2 Auto-Unlock** | LUKS disk auto-unlock (TPM2, no passphrase at boot) | Admin | — |
+| 14 | **First-Login Setup** | Deploy welcome dialog for new domain users | Admin | — |
+| 15 | **Reset Test User** *(deaktiveret)* | Remove domain user state & home dir for re-testing | Admin | Brugernavn |
+| 16 | **Repair Home Folders** | Fix broken Desktop/Documents/Pictures from earlier installs + dedupe fstab | User | Brugernavn |
+<!-- END modultabel -->
 
+Teksten i kolonnen **Hvad det gør** er den, der står på knappen i GUI'en,
+så tabellen og programmet ikke kan komme til at sige hver sit.
+
+To moduler giver kun mening på Sustain-maskiner i praksis: **RDP (xrdp)**
+og **TPM2 Auto-Unlock**. Det står ikke i koden, så det kan ikke genereres —
+de er ikke spærret for AIT, de bruges bare ikke der.
 
 ---
 
 ## Installation
 
-### Forudsætninger
-
 Ubuntu 24.04 er den understøttede platform. Modul-scriptene ligger i
-`scripts/ubuntu/`, og `distro.py` peger alle distributioner derhen.
+`scripts/ubuntu/`, og `distro.py` peger alle distributioner derhen. Der skal
+være `python3` 3.10 eller nyere, KDE Plasma og PolicyKit; pakkelisten nedenfor
+dækker det hele.
 
-| | Pakke |
-|---|---|
-| **Desktop** | `kde-standard` |
-| **Python** | `python3` (≥ 3.10) |
-| **GUI** | `python3-pyqt6` |
-| **Privilegier** | `policykit-1` |
-| **Shell** | `bash` |
+### Den korte vej
 
-Der er tre måder at installere på: **A) hurtig curl one-liner** (nyeste version), **B) færdige pakker fra GitHub Releases**, eller **C) manuel installation fra kildekode**.
-
----
-
-### A) Hurtig install (curl one-liner)
-
-Henter og installerer nyeste version direkte fra GitHub — ingen git eller GitHub-konto nødvendig. Samme kommando opdaterer også en eksisterende installation.
+Én kommando. Den henter nyeste release, installerer afhængighederne og
+opdaterer en eksisterende installation, hvis der allerede er en:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mpark1306/DTU-Linux-Setup/main/bin/dtu-install.sh | sudo bash
 ```
 
+Derefter mangler kun ét skridt: en udfyldt `site.conf`, se
+[Site-konfiguration](#site-konfiguration-etcdtu-setupsiteconf) nedenfor. Uden
+den stopper hvert modul, der har brug for en konkret værdi.
 
-> **Vælg en bestemt branch:** `curl -fsSL <url> | sudo BRANCH=main bash`
+### Hvis du hellere vil gøre det i hånden
 
----
-
-### B) Installér fra GitHub Releases
-
-Hver release på [GitHub Releases](https://github.com/mpark1306/DTU-Linux-Setup/releases/latest) indeholder færdigbyggede pakker:
-
-- `dtu-sustain-setup_<version>_all.deb` — Ubuntu
-- `sha256sums.txt` — checksums til verifikation
-
-CI bygger også en `.rpm`, men modul-scriptene er kun skrevet til Ubuntu, så
-den er ikke en understøttet installationsvej.
-
-#### Ubuntu 24.04
+Afhængighederne er de samme uanset hvilken vej du vælger:
 
 ```bash
-# Installér afhængigheder
 sudo apt update
 sudo apt install kde-standard python3 python3-pyqt6 policykit-1
+```
 
-# Slå nyeste version op og installér den
+**Fra en release.** Pakkerne ligger på
+[Releases](https://github.com/mpark1306/DTU-Linux-Setup/releases/latest)
+sammen med `sha256sums.txt` til verifikation:
+
+```bash
 VERSION=$(curl -fsSL https://api.github.com/repos/mpark1306/DTU-Linux-Setup/releases/latest | grep -oP '"tag_name":\s*"v\K[^"]+')
 curl -fsSLO "https://github.com/mpark1306/DTU-Linux-Setup/releases/download/v${VERSION}/dtu-sustain-setup_${VERSION}_all.deb"
 sudo apt install "./dtu-sustain-setup_${VERSION}_all.deb"
 ```
 
-> **Tip:** Se seneste versionsnummer og de eksakte asset-navne på [Releases-siden](https://github.com/mpark1306/DTU-Linux-Setup/releases/latest).
-
----
-
-### C) Manuel installation fra kildekode
-
-Klon eller download repo'et og installér direkte, eller byg pakken selv.
-
-#### Ubuntu 24.04
+**Fra kildekode.** Enten direkte, eller ved at bygge pakken selv
+(versionsnummeret kommer fra `VERSION` i Makefile):
 
 ```bash
-sudo apt update
-sudo apt install kde-standard python3 python3-pyqt6 policykit-1
+sudo make install          # direkte
 
-# Direkte
-sudo make install
-
-# Eller byg DEB-pakke selv (versionsnummeret kommer fra VERSION i Makefile)
-make deb
-sudo dpkg -i dtu-sustain-setup_*_all.deb
+make deb                   # eller byg en pakke
+sudo apt install ./dtu-sustain-setup_*_all.deb
 ```
-
----
 
 ### Afinstallation
 
 ```bash
-sudo make uninstall
-# eller
-sudo dpkg -r dtu-sustain-setup       # Ubuntu
+sudo apt remove dtu-sustain-setup    # installeret fra pakke
+sudo make uninstall                  # installeret med make install
 ```
 
 ---
@@ -260,29 +238,17 @@ make run                # Fra kildekode
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  🔴  DTU Linux Setup                  Department: [ Sustain ▼ ]  │
+│  DTU Linux Setup                      Department: [ Sustain ▼ ]  │
 │  Detected: Ubuntu 24.04.1 LTS                                    │
 │                                                                  │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐            │
-│  │ Domain Join  │  │ Network      │  │ MS Defender  │            │
-│  │ WIN.DTU.DK   │  │ Drives       │  │ Endpoint     │            │
-│  └──────────────┘  └──────────────┘  └──────────────┘            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐            │
-│  │ PolicyKit    │  │ Printers     │  │ DTUSecure    │            │
-│  │ Domain rights│  │ FollowMe/Web │  │ WiFi         │            │
-│  └──────────────┘  └──────────────┘  └──────────────┘            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐            │
-│  │ Software     │  │ Auto-mount   │  │ Sync Home    │            │
-│  │ Flatpak/Snap │  │ USB udev     │  │ Dirs         │            │
-│  └──────────────┘  └──────────────┘  └──────────────┘            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐            │
-│  │ Auto Update  │  │ RDP (xrdp)   │  │ TPM2 Auto-   │            │
-│  │ Setup        │  │              │  │ Unlock       │            │
-│  └──────────────┘  └──────────────┘  └──────────────┘            │
-│  ┌──────────────┐  ┌──────────────┐                              │
-│  │ Login Screen │  │ First-Login  │                              │
-│  │              │  │ Setup        │                              │
-│  └──────────────┘  └──────────────┘                              │
+│  ┌ Admin Scripts ┐ ┌ User Scripts ┐                              │
+│  │                                                             │ │
+│  │   ┌──────────┐   ┌──────────┐   ┌──────────┐                │ │
+│  │   │  modul   │   │  modul   │   │  modul   │   …            │ │
+│  │   └──────────┘   └──────────┘   └──────────┘                │ │
+│  │                                                             │ │
+│  │   Knappen skifter farve: grøn = succes, rød = fejl          │ │
+│  └─────────────────────────────────────────────────────────────┘ │
 │                                                                  │
 │  [ ▶  Run All Admin Modules ]                       [ Cancel ]   │
 │                                                                  │
@@ -290,7 +256,7 @@ make run                # Fra kildekode
 │  ┌──────────────────────────────────────────────────────────────┐│
 │  │ ▶ Running with elevated privileges: domain-join.sh           ││
 │  │ === Domain Join ===                                          ││
-│  │ ✅ Hostname set to DTU-DEPT-PC01                             ││
+│  │ Hostname set to DTU-DEPT-PC01                                ││
 │  └──────────────────────────────────────────────────────────────┘│
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -428,6 +394,70 @@ Til IT-test: fjerner en domænebrugers SSSD-cache, home-dir, keyring og NetworkM
 
 ---
 
+## Netværksdrev og netværksskift
+
+DTU-bærbare flytter sig mellem kabel, DTUSecure og VPN, og ikke alle
+filservere kan nås fra alle tre. Derfor er drevene ikke bare monteret én gang
+og glemt: **Network Drives**-modulet installerer en NetworkManager-hook, der
+kører ved hvert netværksskift.
+
+| Fil | Rolle |
+|---|---|
+| `/etc/NetworkManager/dispatcher.d/91-dtu-drives` | Reagerer på `up`, `down`, `vpn-up`, `vpn-down` |
+| `/usr/local/bin/dtu-drives-reselect.sh` | Vælger mål, armer og afvæbner. Gør arbejdet |
+| `/usr/local/bin/dtu-drives-notify.sh` | Notifikation med knappen **Genopfrisk drev** |
+| `/usr/share/applications/dtu-drives-refresh.desktop` | Menupunkt under System, samme handling |
+| `/etc/dtu-setup/drives.conf` | Hvad der blev valgt. Hook'en læser den |
+| `/var/log/dtu-drives-reselect.log` | Hvad der skete og hvornår |
+
+Ved hvert skift gør `dtu-drives-reselect.sh` tre ting:
+
+1. **Vælger mål.** På Sustain kan Q- og P-drevet nås enten direkte på
+   Qumulo-backenden eller gennem DFS-roden. DTUSecure og visse VPN-profiler
+   kan ikke rute til den direkte vej, så den vælges efter hvad der faktisk
+   svarer, og fstab skrives om når målet skifter.
+2. **Armer automounten** når serveren svarer.
+3. **Afvæbner den** når serveren ikke svarer.
+
+Punkt 3 er det vigtigste. En systemd-automount, der er armet mod en server
+der ikke svarer, opsnapper **hver eneste** adgang til stien og lader kalderen
+sove indtil monteringen timer ud. Dolphins Places-panel, `df`,
+tab-completion og plasmashells egen mappeovervågning rammer den alle sammen,
+og maskinen ser frossen ud frem for offline. Afvæbnet er `/mnt/...` en tom
+mappe, der svarer med det samme, og hook'en armer den igen næste gang
+serveren kan nås.
+
+Notifikationen sendes kun når intet mål svarer, ikke ved hvert netværksskift.
+Nogle skriveborde leverer notifikationer gennem XDG-portalen, som ikke
+understøtter knapper; derfor findes menupunktet, der altid virker.
+
+**M-drevet ligger på en anden server end Q og P**, så det kan ikke følge med i
+målvalget. Det armes og afvæbnes for sig, og et utilgængeligt M-drev udløser
+med vilje ingen notifikation: Q og P kan sagtens virke imens.
+
+---
+
+## RepairBooth
+
+[RepairBooth](https://github.com/mpark1306/DTU-Linux-Setup-RepairBooth) er et
+selvstændigt værktøj, der **kontrollerer** det, DTU Linux Setup **opsætter**.
+Hvor dette program kører moduler, stiller RepairBooth diagnosen på en maskine,
+der allerede er sat op, og tilbyder et klik-fix for de fleste fund.
+
+Det er især relevant for netværksdrevene ovenfor, fordi en maskine med
+ustyrede drev ligner en maskine hvor alt er fint — lige indtil den fryser.
+Kategorien **Drive Auto-switch** svarer direkte på:
+
+- Er hook'en installeret, og er den eksekverbar? NetworkManager ignorerer en
+  dispatcher uden x-bit uden at logge noget
+- Kalder den rent faktisk reselect-scriptet, eller måler den bare?
+- Er `drives.conf` fuldstændig nok til at hook'en kan handle?
+- Står et drev armet mod en server, der ikke svarer?
+
+De fleste af dem kan rettes derfra. `drives.conf` kan ikke: den fil skrives
+kun af drev-modulet, som kræver domænekodeordet.
+
+
 ## Software-styring
 
 Software-modulet bruger en redigerbar konfigurationsfil i stedet for hardkodede pakker.
@@ -449,7 +479,9 @@ io.gitlab.librewolf-community
 io.github.ungoogled_software.ungoogled_chromium
 
 [snap]
-# tom — erstattet af [pwa]
+# Tom som standard. office365webdesktop er afløst af [pwa] nedenfor, men
+# sektionen virker stadig: skriv en snap her som "navn --flag", og
+# Software-modulet installerer den.
 
 [pwa]
 outlook
@@ -595,12 +627,11 @@ DTU-Linux-Setup/
 ├── bin/
 │   └── dtu-sustain-setup         # Launcher
 ├── packaging/
-│   ├── debian/                   # DEB-pakke
-│   └── rpm/                      # RPM spec
+│   └── debian/                   # DEB-pakke
 ├── docs/
 │   ├── GUIDE.md                  # Brugerguide
 │   └── TPM2-LUKS-fejlfinding.md  # TPM2 auto-unlock fejlfinding
-├── Makefile                      # build / install / deb / rpm
+├── Makefile                      # build / install / deb
 ├── RELEASE_NOTES.md              # Ændringslog per version
 ├── pyproject.toml
 └── README.md
