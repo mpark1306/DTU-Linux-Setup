@@ -71,7 +71,7 @@ Ved første start (eller via dropdown'en i toppen af GUI'en) vælges den institu
 ## Moduler
 
 <!-- BEGIN modultabel: genereret af tools/module_table.py -->
-16 moduler i alt: 15 aktive og 1 deaktiveret. Alle kræver root og kører via
+17 moduler i alt: 16 aktive og 1 deaktiveret. Alle kræver root og kører via
 `pkexec`. **Fane** er den af GUI'ens to faner modulet ligger på:
 *Admin* kører uden brugerens egne credentials, *User* kræver dem.
 
@@ -90,9 +90,10 @@ Ved første start (eller via dropdown'en i toppen af GUI'en) vælges den institu
 | 11 | **RDP (xrdp)** | Remote Desktop (KDE Plasma via xrdp) | Admin | — |
 | 12 | **Login Screen** | Show the domain user by default (SDDM UID range + name field) | Admin | — |
 | 13 | **TPM2 Auto-Unlock** | LUKS disk auto-unlock (TPM2, no passphrase at boot) | Admin | — |
-| 14 | **First-Login Setup** | Deploy welcome dialog for new domain users | Admin | — |
-| 15 | **Reset Test User** *(deaktiveret)* | Remove domain user state & home dir for re-testing | Admin | Brugernavn |
-| 16 | **Repair Home Folders** | Fix broken Desktop/Documents/Pictures from earlier installs + dedupe fstab | User | Brugernavn |
+| 14 | **TPM2 – Bind om** | Efter en firmwareopdatering (disken spørger om koden igen) | Admin | — |
+| 15 | **First-Login Setup** | Deploy welcome dialog for new domain users | Admin | — |
+| 16 | **Reset Test User** *(deaktiveret)* | Remove domain user state & home dir for re-testing | Admin | Brugernavn |
+| 17 | **Repair Home Folders** | Fix broken Desktop/Documents/Pictures from earlier installs + dedupe fstab | User | Brugernavn |
 <!-- END modultabel -->
 
 Teksten i kolonnen **Hvad det gør** er den, der står på knappen i GUI'en,

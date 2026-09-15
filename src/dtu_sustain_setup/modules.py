@@ -149,6 +149,15 @@ MODULES: list[ModuleDef] = [
         icon_name="security-high",
     ),
     ModuleDef(
+        id="tpm2-rebind",
+        title="TPM2 – Bind om",
+        description="Efter en firmwareopdatering\n(disken spørger om koden igen)",
+        script_name="tpm2-rebind.sh",
+        needs_root=True,
+        input_type="none",
+        icon_name="security-medium",
+    ),
+    ModuleDef(
         id="first-login-deploy",
         title="First-Login Setup",
         description="Deploy welcome dialog\nfor new domain users",

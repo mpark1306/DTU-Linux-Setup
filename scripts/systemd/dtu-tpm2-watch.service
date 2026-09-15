@@ -1,0 +1,19 @@
+[Unit]
+Description=Kontrollér at TPM2 stadig kan låse LUKS op
+Documentation=man:clevis-luks-bind(1)
+# Efter at diskene er låst op og enhederne findes. Kontrollen laeser
+# LUKS-headeren og taler med TPM'en; ingen af delene er klar foer.
+After=cryptsetup.target local-fs.target
+Wants=cryptsetup.target
+ConditionPathExists=/usr/bin/clevis
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/dtu-tpm2-watch.sh
+# En detektor maa aldrig braekke en opstart. Fejler den, er resultatet at
+# ingen bliver adviseret, ikke at maskinen ikke booter.
+SuccessExitStatus=0 1
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

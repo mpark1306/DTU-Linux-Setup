@@ -25,6 +25,7 @@ echo "Reading software list from: ${SOFTWARE_CONF}"
 FLATPAK_APPS=()
 SNAP_APPS=()
 PWA_APPS=()
+CISCO_MODULES=()
 CISCO_ENABLED=false
 _section=""
 while IFS= read -r line; do
@@ -41,14 +42,34 @@ while IFS= read -r line; do
         flatpak) FLATPAK_APPS+=("$line") ;;
         snap)    SNAP_APPS+=("$line") ;;
         pwa)     PWA_APPS+=("$line") ;;
-        cisco)   CISCO_ENABLED=true ;;
+        cisco)
+            CISCO_ENABLED=true
+            # Linjer under [cisco] navngiver de moduler der skal installeres.
+            # Den gamle vaerdi "cisco-secure-client" betoed "installér alt" og
+            # betyder nu "installér standarden", som er vpn alene.
+            [[ "$line" == "cisco-secure-client" ]] || CISCO_MODULES+=("${line,,}")
+            ;;
     esac
 done < "$SOFTWARE_CONF"
 
 echo "  Flatpak apps: ${FLATPAK_APPS[*]:-none}"
 echo "  Snap apps:    ${SNAP_APPS[*]:-none}"
 echo "  M365 PWAs:    ${PWA_APPS[*]:-none}"
-echo "  Cisco VPN:    ${CISCO_ENABLED}"
+# Kun VPN som standard.
+#
+# Tarballen indeholder ogsaa posture, nvm, dart og umbrella. Ingen af dem
+# bruges paa DTU, og de installeres hver isaer af et interaktivt script vi ikke
+# ejer og ikke kan forudsige. posture er det konkrete eksempel: den spoerger om
+# en STI, ikke om ja eller nej, saa "y" bliver afvist og spoergsmaalet gentaget.
+# Med uendeligt input og en log uden loft skrev den 438 GB paa en kvarter og
+# fyldte rodfilsystemet paa en ny maskine.
+#
+# At installere noget vi ikke bruger er ikke gratis. Det er en risiko uden
+# modydelse.
+if $CISCO_ENABLED && (( ${#CISCO_MODULES[@]} == 0 )); then
+    CISCO_MODULES=(vpn)
+fi
+echo "  Cisco:        ${CISCO_ENABLED} (moduler: ${CISCO_MODULES[*]:-ingen})"
 
 # Calculate total steps
 TOTAL_STEPS=2  # Flatpak setup + Flatpak install
@@ -165,6 +186,35 @@ else
     echo "    No M365 web apps configured."
 fi
 
+_cisco_wanted() {
+    local modul="${1,,}" oensket
+    for oensket in "${CISCO_MODULES[@]}"; do
+        [[ "$modul" == "$oensket" ]] && return 0
+    done
+    return 1
+}
+
+# Vagthund paa logfilen. Den skal vaere her, selvom input nu er bundet: en
+# installatoer kan ogsaa loope uden at laese fra stdin, og saa er der intet
+# der stopper den foer tidsgraensen. 900 sekunder med fri skriveadgang paa en
+# NVMe er hundredvis af gigabyte.
+_cisco_log_watchdog() {
+    local fil="$1" maks="$2" pid="$3"
+    while kill -0 "$pid" 2>/dev/null; do
+        if [[ -f "$fil" ]] && (( $(stat -c %s "$fil" 2>/dev/null || echo 0) > maks )); then
+            kill -TERM "$pid" 2>/dev/null
+            sleep 2
+            kill -KILL "$pid" 2>/dev/null
+            return 0
+        fi
+        # Overskridelsen er skrivehastighed gange interval. Ét sekund paa en
+        # NVMe er i vaerste fald nogle hundrede megabyte, og filen ryddes
+        # bagefter. Det er forskellen paa en bule og en fuld disk.
+        sleep 1
+    done
+    return 1
+}
+
 # ─── Step: Cisco Secure Client ──────────────────────────────────────────────
 if $CISCO_ENABLED; then
     STEP=$((STEP + 1))
@@ -225,8 +275,25 @@ if $CISCO_ENABLED; then
             done
 
             ORDERED_SCRIPTS=()
-            [[ -n "$VPN_SCRIPT" ]] && ORDERED_SCRIPTS+=("$VPN_SCRIPT")
-            ORDERED_SCRIPTS+=("${OTHER_SCRIPTS[@]}")
+            SKIPPED_MODULES=()
+            if [[ -n "$VPN_SCRIPT" ]] && _cisco_wanted vpn; then
+                ORDERED_SCRIPTS+=("$VPN_SCRIPT")
+            fi
+            for s in "${OTHER_SCRIPTS[@]}"; do
+                _m="$(basename "$(dirname "$s")")"
+                if _cisco_wanted "$_m"; then
+                    ORDERED_SCRIPTS+=("$s")
+                else
+                    SKIPPED_MODULES+=("$_m")
+                fi
+            done
+
+            if (( ${#SKIPPED_MODULES[@]} > 0 )); then
+                echo "    Skipping (not requested): ${SKIPPED_MODULES[*]}"
+            fi
+            if (( ${#ORDERED_SCRIPTS[@]} == 0 )); then
+                warn "None of the requested modules (${CISCO_MODULES[*]}) are in this tarball."
+            fi
 
             echo "    Modules to install:"
             for s in "${ORDERED_SCRIPTS[@]}"; do echo "      $(basename "$(dirname "$s")")"; done
@@ -251,11 +318,19 @@ if $CISCO_ENABLED; then
             # as soon as the installer itself exits.
             CISCO_TIMEOUT="${DTU_CISCO_MODULE_TIMEOUT:-900}"
 
+            # Loft paa den enkelte logfil. Rigelig plads til en normal
+            # installation, og langt under hvad der kan goere skade.
+            CISCO_MAX_LOG="${DTU_CISCO_MAX_LOG:-52428800}"   # 50 MB
+
             # Somewhere that outlives the extraction directory, which is
             # deleted below. A log the failure message points at has to still
             # be there when someone goes looking for it.
             CISCO_LOG_DIR=/var/log/dtu-setup
             mkdir -p "$CISCO_LOG_DIR"
+            chmod 750 "$CISCO_LOG_DIR"
+            # Logge fra tidligere koersler har ingen vaerdi naar vi er i gang
+            # med en ny, og de er det eneste i mappen der kan vokse.
+            find "$CISCO_LOG_DIR" -maxdepth 1 -name 'cisco-*.log' -mtime +30 -delete 2>/dev/null || true
 
             for script in "${ORDERED_SCRIPTS[@]}"; do
                 MODULE=$(basename "$(dirname "$script")")
@@ -263,23 +338,48 @@ if $CISCO_ENABLED; then
                 echo "    --- Installing: ${MODULE} ---"
                 echo "        (no output until this module finishes; up to ${CISCO_TIMEOUT}s)"
 
-                # `yes` answers Cisco's EULA prompt. `exec` inside the
-                # subshell makes timeout's exit status the subshell's own, so
-                # PIPESTATUS[1] is the installer's real result.
+                # Input er bundet. "yes" alene svarer i det uendelige, og en
+                # installatoer der ikke kan bruge svaret spoerger bare igen.
+                # 50 linjer raekker rigeligt til en EULA-prompt; derefter faar
+                # den EOF og maa give op i stedet for at loope.
+                #
+                # Stadig en FIL og ikke et roer: $( ) venter paa end-of-file
+                # paa installatoerens stdout, ikke paa at den afslutter, og
+                # Cisco efterlader processer der arver den stdout. Det hang
+                # modulet for evigt efter en ellers vellykket installation.
+                # En omdirigering til fil har ikke den egenskab.
+                rm -f "$MODULE_LOG"
                 set +e
-                yes | ( cd "$(dirname "$script")" \
-                        && exec timeout "$CISCO_TIMEOUT" bash "$(basename "$script")" ) \
-                    > "$MODULE_LOG" 2>&1
-                # NOT $? — pipefail is on, and `yes` dies of SIGPIPE (141) the
-                # moment the installer exits. $? therefore reports 141 for a
-                # perfectly successful install.
-                EXIT_CODE=${PIPESTATUS[1]}
+                ( cd "$(dirname "$script")" \
+                  && exec timeout "$CISCO_TIMEOUT" bash "$(basename "$script")" ) \
+                    < <(yes | head -n 50) > "$MODULE_LOG" 2>&1 &
+                INSTALLER_PID=$!
+                _cisco_log_watchdog "$MODULE_LOG" "$CISCO_MAX_LOG" "$INSTALLER_PID" &
+                WATCHDOG_PID=$!
+                wait "$INSTALLER_PID"
+                EXIT_CODE=$?
+                kill "$WATCHDOG_PID" 2>/dev/null
+                wait "$WATCHDOG_PID" 2>/dev/null
                 set -e
 
-                SCRIPT_OUTPUT="$(cat "$MODULE_LOG" 2>/dev/null)"
+                LOG_SIZE=$(stat -c %s "$MODULE_LOG" 2>/dev/null || echo 0)
+                CISCO_LOG_CAPPED=0
+                if (( LOG_SIZE > CISCO_MAX_LOG )); then
+                    CISCO_LOG_CAPPED=1
+                    warn "${MODULE} skrev over $((CISCO_MAX_LOG / 1024 / 1024)) MB log og blev stoppet."
+                    echo "        Den spurgte formentlig om noget den ikke fik brugbart svar paa."
+                    : > "$MODULE_LOG"
+                    echo "        (loggen er ryddet; den ville ellers fylde disken)" >> "$MODULE_LOG"
+                fi
+
+                # Kun halen laeses. Hele filen i en variabel var den anden
+                # ubundne laesning i den her loekke.
+                SCRIPT_OUTPUT="$(tail -c 20000 "$MODULE_LOG" 2>/dev/null || true)"
                 echo "$SCRIPT_OUTPUT"
 
-                if [[ $EXIT_CODE -eq 124 ]]; then
+                if (( CISCO_LOG_CAPPED )); then
+                    ((CISCO_FAILED++)) || true
+                elif [[ $EXIT_CODE -eq 124 ]]; then
                     # timeout(1) reports 124 when it had to kill the child.
                     warn "${MODULE} timed out after ${CISCO_TIMEOUT}s and was killed."
                     echo "        The installer did not exit on its own. Its log:"

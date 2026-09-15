@@ -625,3 +625,10 @@ main() {
 }
 
 main "$@"
+
+# Overvaagningen installeres her, ikke som et separat modul. Den der binder
+# disken til TPM'en, er ogsaa den der skal sikre at nogen opdager naar
+# bindingen holder op med at virke.
+if [[ -x "${SCRIPT_DIR}/../setup-tpm2-watch.sh" ]]; then
+    "${SCRIPT_DIR}/../setup-tpm2-watch.sh" || warn "Kunne ikke installere overvaagningen af bindingen."
+fi
