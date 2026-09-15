@@ -98,9 +98,9 @@ Ved første start (eller via dropdown'en i toppen af GUI'en) vælges den institu
 Teksten i kolonnen **Hvad det gør** er den, der står på knappen i GUI'en,
 så tabellen og programmet ikke kan komme til at sige hver sit.
 
-To moduler giver kun mening på Sustain-maskiner i praksis: **RDP (xrdp)**
-og **TPM2 Auto-Unlock**. Det står ikke i koden, så det kan ikke genereres —
-de er ikke spærret for AIT, de bruges bare ikke der.
+Alle moduler gælder begge profiler. Hvor de opfører sig forskelligt, er det
+inde i scriptet: Printers laver FollowMe-køer på Sustain og en WebPrint-webapp
+på AIT, og Network Drives monterer Q+P henholdsvis O+M.
 
 ---
 
@@ -376,11 +376,11 @@ image-bygninger.
 Konfigurerer loginskærmen til at vise den domænebruger, der sidst var logget
 ind, som standardvalg i stedet for et tomt brugernavnsfelt.
 
-### 🖥️ RDP (xrdp) — kun Ubuntu
+### 🖥️ RDP (xrdp)
 
 xrdp på port 3389/tcp med KDE Plasma X11-session, TLS-only, clipboard- og drive-redirection.
 
-### 🔐 TPM2 Auto-Unlock — kun Ubuntu
+### 🔐 TPM2 Auto-Unlock
 
 Enroller LUKS-krypterede diske i maskinens TPM2-chip (`tpm2-enroll.sh`) så disken låses op automatisk ved boot uden at brugeren skal indtaste en passphrase. Se [docs/TPM2-LUKS-fejlfinding.md](docs/TPM2-LUKS-fejlfinding.md) for fejlfinding.
 
