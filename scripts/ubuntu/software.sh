@@ -244,7 +244,14 @@ if $CISCO_ENABLED; then
         # Install dependencies
         echo "    Installing dependencies..."
         export LD_LIBRARY_PATH="/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
-        apt-get install -y libxml2 "linux-headers-$(uname -r)" gcc make 2>/dev/null || true
+        # linux-headers-$(uname -r) er byggemaskinens kerne inde i en chroot,
+        # saa der ville hentes headers til en kerne maskinen aldrig koerer.
+        # linux-headers-generic peger paa maalets egen kerne.
+        if in_chroot; then
+            apt-get install -y libxml2 linux-headers-generic gcc make 2>/dev/null || true
+        else
+            apt-get install -y libxml2 "linux-headers-$(uname -r)" gcc make 2>/dev/null || true
+        fi
 
         if [[ -f /usr/lib/x86_64-linux-gnu/libxml2.so.2 || -L /usr/lib/x86_64-linux-gnu/libxml2.so.2 ]]; then
             echo "    [OK] libxml2.so.2 found"

@@ -18,8 +18,15 @@ export DEBIAN_FRONTEND=noninteractive
 # ("unsupported release ring") and makes mdatp report unhealthy forever.
 NP_MODE="${NP_MODE:-disabled}"
 
-. /etc/os-release
-echo "[i] Detected: Ubuntu ${VERSION_ID} (${VERSION_CODENAME})"
+# Ikke '. /etc/os-release': den laegger ~20 variabler i dette scripts
+# navnerum, og scriptet koerer under 'set -u'. Hjaelperne i common.sh laeser
+# kun den noegle der spoerges om.
+UBUNTU_VER="$(ubuntu_version || true)"
+UBUNTU_CODE="$(os_release_value VERSION_CODENAME || true)"
+if [[ -z "$UBUNTU_VER" ]]; then
+    die "Defender is only packaged for Ubuntu. /etc/os-release says ID=$(os_release_value ID || true)."
+fi
+echo "[i] Detected: Ubuntu ${UBUNTU_VER} (${UBUNTU_CODE})"
 
 # Cleanup old artifacts
 rm -f /etc/apt/sources.list.d/microsoft-prod.list || true
@@ -33,8 +40,26 @@ apt-get update -y || warn "apt-get update reported errors (likely a broken third
 apt-get install -y curl ca-certificates gnupg apt-transport-https
 
 echo "[2/6] Installing Microsoft keyring..."
-curl -fsSL "https://packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb" \
-  -o /tmp/packages-microsoft-prod.deb
+# Microsoft udgiver ikke en config-mappe for en ny Ubuntu-udgivelse med det
+# samme, saa en 26.04-maskine kan moede en 404 i maaneder. .deb'en goer kun to
+# ting: laegger en apt-kilde og en noegle. Findes vores udgivelse ikke endnu,
+# er det rigtige at bruge den nyeste der ER udgivet og SIGE det, frem for at
+# doe paa en curl-fejl der ikke naevner aarsagen.
+MS_CONFIG_VER=""
+for cand in "$UBUNTU_VER" 26.04 24.04 22.04; do
+    if [[ -z "$cand" ]]; then continue; fi
+    if curl -fsSL "https://packages.microsoft.com/config/ubuntu/${cand}/packages-microsoft-prod.deb" \
+         -o /tmp/packages-microsoft-prod.deb; then
+        MS_CONFIG_VER="$cand"; break
+    fi
+done
+if [[ -z "$MS_CONFIG_VER" ]]; then
+    die "No packages.microsoft.com config for Ubuntu ${UBUNTU_VER} or any older release. Check the network and https://packages.microsoft.com/config/ubuntu/"
+fi
+if [[ "$MS_CONFIG_VER" != "$UBUNTU_VER" ]]; then
+    warn "Microsoft has no repo for Ubuntu ${UBUNTU_VER} yet; using the ${MS_CONFIG_VER} one."
+    warn "mdatp will install from the ${MS_CONFIG_VER} suite. Re-run this module once ${UBUNTU_VER} is published."
+fi
 dpkg -i /tmp/packages-microsoft-prod.deb
 apt-get update -y || warn "apt-get update reported errors (likely a broken third-party repository); continuing."
 
@@ -114,4 +139,4 @@ mdatp definitions update || true
 sleep 5
 mdatp health || true
 mdatp version || true
-ok "Microsoft Defender installed on Ubuntu ${VERSION_ID}"
+ok "Microsoft Defender installed on Ubuntu ${UBUNTU_VER}"

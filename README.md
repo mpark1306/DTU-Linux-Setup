@@ -133,7 +133,7 @@ Afhængighederne er de samme uanset hvilken vej du vælger:
 
 ```bash
 sudo apt update
-sudo apt install kde-standard python3 python3-pyqt6 policykit-1
+sudo apt install kde-standard python3 python3-pyqt6 polkitd pkexec
 ```
 
 **Fra en release.** Pakkerne ligger på
@@ -714,7 +714,7 @@ which dtu-sustain-setup
 ### "pkexec not found"
 
 ```bash
-sudo apt install policykit-1   # Ubuntu
+sudo apt install polkitd pkexec   # Ubuntu
 ```
 
 ### Modul fejler med "Script Missing"

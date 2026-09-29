@@ -69,8 +69,11 @@ def value_of(conf: str, key: str) -> str | None:
 
 
 class TestSssdRewrite(unittest.TestCase):
+    # Both 24.04 and 26.04 socket-activate the nss/pam responders, so "yes" is
+    # the real-world case and the one the rest of these tests should see.
     def setUp(self):
-        self.rc, self.out, self.err = run_rewriter(REALM_JOIN_CONF)
+        self.rc, self.out, self.err = run_rewriter(
+            REALM_JOIN_CONF, env={"SSSD_SOCKET_RESPONDERS": "yes"})
         self.assertEqual(self.rc, 0, self.err)
 
     def test_services_line_is_removed(self):
@@ -78,6 +81,24 @@ class TestSssdRewrite(unittest.TestCase):
         the same socket and crash-loop. This is the v1.4.0 fix, and the one
         thing Speedup_Login.sh undid by writing the line straight back."""
         self.assertIsNone(value_of(self.out, "services"))
+
+    def test_services_line_is_written_when_responders_are_not_socket_activated(self):
+        """The other half of the same lockout. On a release that stops
+        socket-activating the responders, deleting the line would leave no
+        nss/pam responder at all: no domain user resolves and nobody logs in.
+        Same outcome as the crash-loop, reached from the opposite direction."""
+        rc, out, err = run_rewriter(
+            REALM_JOIN_CONF, env={"SSSD_SOCKET_RESPONDERS": "no"})
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(value_of(out, "services"), "nss, pam")
+
+    def test_an_unset_answer_is_treated_as_not_socket_activated(self):
+        """Fail towards a machine that can still be logged into. If the probe
+        did not run, writing the line is the recoverable mistake; deleting it
+        is the one that locks everyone out."""
+        rc, out, err = run_rewriter(REALM_JOIN_CONF)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(value_of(out, "services"), "nss, pam")
 
     def test_desktop_behaviour(self):
         self.assertEqual(value_of(self.out, "use_fully_qualified_names"), "False")
@@ -127,9 +148,22 @@ class TestSssdRewrite(unittest.TestCase):
         self.assertEqual(value_of(out, "access_provider"), "permit")
 
     def test_running_twice_changes_nothing(self):
-        rc, second, err = run_rewriter(self.out)
+        # Samme miljoe som setUp: idempotens skal maales paa den samme gren,
+        # ellers sammenlignes et socket-aktiveret foerste loeb med et
+        # ikke-socket-aktiveret andet.
+        rc, second, err = run_rewriter(
+            self.out, env={"SSSD_SOCKET_RESPONDERS": "yes"})
         self.assertEqual(rc, 0, err)
         self.assertEqual(second, self.out)
+
+    def test_the_other_branch_is_idempotent_too(self):
+        rc, first, err = run_rewriter(
+            REALM_JOIN_CONF, env={"SSSD_SOCKET_RESPONDERS": "no"})
+        self.assertEqual(rc, 0, err)
+        rc, second, err = run_rewriter(
+            first, env={"SSSD_SOCKET_RESPONDERS": "no"})
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(second, first)
 
     def test_a_file_without_a_domain_section_is_left_untouched(self):
         conf = "[sssd]\nservices = nss, pam\n"

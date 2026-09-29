@@ -20,7 +20,10 @@ jobs:
   # config, so a shell bug is expensive. Kept at --severity=warning: the tree
   # is clean at that level, and dropping to "error" would let real defects in.
   lint:
-    runs-on: ubuntu-latest
+    # Pinned, ikke 'ubuntu-latest': den ruller selv videre til 26.04 og
+    # ville aendre hvad der testes paa et tidspunkt ingen har valgt. Hele
+    # pointen med 26.04-arbejdet er at vaelge tidspunktet selv.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
@@ -58,7 +61,7 @@ jobs:
   # ── Job 1: Build .deb on Ubuntu ─────────────────────────────────────────
   build-deb:
     needs: lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.make_version }}
 
@@ -107,7 +110,7 @@ jobs:
   # ── Job 2: Publish release ───────────────────────────────────────────────
   release:
     needs: build-deb
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Download .deb

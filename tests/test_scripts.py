@@ -974,5 +974,186 @@ echo "RC=$?"
         self.assertLess(call, marker)
 
 
+class TestHelpersAreActuallyDefined(unittest.TestCase):
+    """The generalisation of a bug that shipped: tpm2-rebind.sh called `die`
+    at four places, including its Secure-Boot-off safety refusal, and nothing
+    defined it. Under `set -euo pipefail` every one of those paths became
+    "die: command not found", exit 127, message never printed. shellcheck does
+    not detect undefined functions, so lint and CI were green.
+    """
+
+    def _defined_in(self, path: Path) -> set[str]:
+        return set(re.findall(r"^([a-z_][a-z0-9_]*)\(\)", read(path), re.MULTILINE))
+
+    def test_die_is_defined_in_common(self):
+        self.assertIn("die", self._defined_in(SCRIPTS / "common.sh"))
+
+    def test_tpm2_rebind_can_print_its_secure_boot_refusal(self):
+        """The one message that must never be swallowed: it explains why the
+        machine refuses to re-bind, and silence there looks like a crash."""
+        rebind = SCRIPTS / "ubuntu" / "tpm2-rebind.sh"
+        body = strip_comments(read(rebind))
+        self.assertIn("die ", body, "tpm2-rebind.sh no longer calls die")
+        self.assertRegex(read(rebind), r"source .*common\.sh",
+                         "it must source the file that defines die")
+        self.assertIn("die", self._defined_in(SCRIPTS / "common.sh"))
+
+    def test_every_helper_a_script_calls_is_reachable(self):
+        """Closed vocabulary: only the helper names we define ourselves, so
+        there are no false positives from external binaries."""
+        common = self._defined_in(SCRIPTS / "common.sh")
+        for path in ALL_SH:
+            if path.name == "common.sh":
+                continue
+            body = strip_comments(read(path))
+            if not re.search(r"source .*common\.sh", body):
+                continue
+            available = common | self._defined_in(path)
+            for name in sorted(common):
+                # Called in command position, i.e. at the start of a statement.
+                if re.search(rf"(?:^|\||&&|;|\{{)\s*{name}\s", body, re.MULTILINE):
+                    with self.subTest(script=path.name, helper=name):
+                        self.assertIn(name, available)
+
+
+class TestNoAdHocOsRelease(unittest.TestCase):
+    """/etc/os-release used to be sourced in four places. Sourcing it drops
+    about twenty names into the caller's namespace, and these scripts run under
+    `set -u`, so a key that a future release stops shipping is a hard error far
+    from its cause. common.sh now owns the reading.
+    """
+
+    # install-software-manual.sh is deliberately standalone: it must run on its
+    # own with `sudo bash install-software-manual.sh`, without the rest of the
+    # repo, so it carries its own copy of the helpers by design.
+    ALLOWED = {"common.sh", "install-software-manual.sh"}
+
+    def test_nothing_else_sources_os_release(self):
+        for path in ALL_SH:
+            if path.name in self.ALLOWED:
+                continue
+            body = strip_comments(read(path))
+            with self.subTest(script=path.name):
+                self.assertNotRegex(body, r"^\s*\.\s+/etc/os-release",
+                                    "use os_release_value / ubuntu_version instead")
+
+    def test_defender_no_longer_uses_a_sourced_version_id(self):
+        body = strip_comments(read(SCRIPTS / "ubuntu" / "defender.sh"))
+        self.assertNotIn("VERSION_ID", body)
+        self.assertIn("ubuntu_version", body)
+
+
+class TestChrootSafety(unittest.TestCase):
+    """`uname -r` inside the image chroot is the build host's kernel, so
+    linux-headers-$(uname -r) fetches headers for a kernel the machine will
+    never run. Both call sites must branch on in_chroot.
+    """
+
+    def test_every_uname_r_headers_call_is_guarded(self):
+        for path in ALL_SH:
+            body = strip_comments(read(path))
+            if "linux-headers-$(uname -r)" not in body:
+                continue
+            with self.subTest(script=path.name):
+                self.assertIn("in_chroot", body,
+                              "unguarded uname -r would install the wrong headers")
+
+    def test_the_standalone_script_carries_its_own_copy(self):
+        """It does not source common.sh, so a bare in_chroot call there would
+        be the same class of bug as the missing die."""
+        body = read(SCRIPTS / "install-software-manual.sh")
+        self.assertIn("in_chroot() {", body)
+        self.assertNotRegex(body, r"source .*common\.sh",
+                            "it is standalone on purpose; that is why it needs its own copy")
+
+
+class TestRdpSession(unittest.TestCase):
+    """`exec xterm` was the fallback when no Plasma session was found, but
+    xterm is not in the image: the branch died with exit 127 and no message,
+    and the user saw a black screen that closed itself.
+    """
+
+    def setUp(self):
+        self.text = read(SCRIPTS / "ubuntu" / "rdp.sh")
+        self.body = strip_comments(self.text)
+
+    def test_no_xterm_fallback(self):
+        self.assertNotIn("exec xterm", self.body)
+
+    def test_the_startwm_heredoc_stays_quoted(self):
+        """It is written verbatim to the target machine. Unquoting the heredoc
+        would expand our build-time variables into the target's startwm.sh,
+        which is the subtle way to break this."""
+        self.assertIn("<<'STARTWM'", self.body)
+
+    def test_a_missing_session_starter_fails_provisioning(self):
+        """Otherwise it surfaces weeks later as a black RDP screen."""
+        self.assertIn("startplasma-x11", self.body)
+        idx = self.body.index("[7/7]")
+        self.assertIn("command -v startplasma-x11", self.body[idx:])
+
+
+class TestLoginScreenRefusesBeforeWriting(unittest.TestCase):
+    """The one module that can lock every user out of a machine's greeter. It
+    empties SDDM's user list and relies on the theme switching to a username
+    field on its own. If a release changes that, the machine shows an empty
+    list and no name field. So every refusal has to happen before the config
+    is written: then the failure mode is "nothing changed", not "no login".
+    """
+
+    def setUp(self):
+        self.body = strip_comments(read(SCRIPTS / "ubuntu" / "login-screen.sh"))
+
+    def test_the_theme_check_runs_before_the_config_is_written(self):
+        check = self.body.index("userListModel")
+        write = self.body.index('cat > "$CONF"')
+        self.assertLess(check, write,
+                        "the QML assertion must gate the write, not follow it")
+
+    def test_the_theme_is_resolved_not_assumed(self):
+        """default.conf says kubuntu and kde_settings.conf says ubuntu-theme;
+        the later one wins. A hardcoded 'breeze' would check QML the machine
+        does not use."""
+        self.assertIn("sddm_conf_value Theme Current", self.body)
+
+    def test_the_user_list_outcome_is_verified(self):
+        """Emulates SDDM's UserModel against the config just written. One
+        account left in range means a user list and no name field."""
+        self.assertIn("getent passwd", self.body)
+        self.assertIn("HIDE_SHELLS", self.body)
+
+    def test_a_failed_outcome_check_rolls_the_config_back(self):
+        idx = self.body.index("getent passwd")
+        self.assertIn('rm -f "$CONF"', self.body[idx:])
+
+    def test_hide_shells_is_written_once(self):
+        """The config file and the verification must read the same list, or
+        they drift and the check stops matching what SDDM does."""
+        self.assertIn("HideShells=${HIDE_SHELLS}", self.body)
+
+
+class TestPackagingDependenciesAgree(unittest.TestCase):
+    """The .deb dependency list is written twice, in packaging/debian/control
+    and in the Makefile's deb target. check-version exists because this repo
+    has exactly that duplication problem elsewhere.
+    """
+
+    def setUp(self):
+        self.control = read(REPO / "packaging" / "debian" / "control")
+        self.makefile = read(REPO / "Makefile")
+
+    def test_policykit_1_is_gone(self):
+        """It does not exist on 26.04. polkitd and pkexec exist on both."""
+        for name, text in (("control", self.control), ("Makefile", self.makefile)):
+            with self.subTest(file=name):
+                self.assertNotIn("policykit-1", text)
+
+    def test_both_ask_for_polkitd_and_pkexec(self):
+        for name, text in (("control", self.control), ("Makefile", self.makefile)):
+            with self.subTest(file=name):
+                self.assertIn("polkitd", text)
+                self.assertIn("pkexec", text)
+
+
 if __name__ == "__main__":
     unittest.main()

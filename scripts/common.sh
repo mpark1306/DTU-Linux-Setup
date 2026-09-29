@@ -11,6 +11,11 @@ banner()  { echo -e "\n${CYAN}${BOLD}=== $1 ===${NC}\n"; }
 ok()      { echo -e "${GREEN}✅ $1${NC}"; }
 warn()    { echo -e "${YELLOW}⚠️  $1${NC}"; }
 fail()    { echo -e "${RED}❌ $1${NC}"; }
+# die MSG
+# Som fail(), men afslutter. Ligger her fordi tpm2-rebind.sh kaldte den fire
+# steder uden at nogen definerede den. Under 'set -e' blev hver fejlvej til
+# 'die: command not found', exit 127, og beskeden naaede aldrig brugeren.
+die()     { fail "$*"; exit 1; }
 
 need_root() {
   if [[ $EUID -ne 0 ]]; then
@@ -237,6 +242,99 @@ apt_wait() {
       return 1
     fi
   done
+}
+
+# ─── Udgave og version ──────────────────────────────────────────────────────
+# Fleeten koerer baade 24.04 og 26.04 i overgangsperioden, og de samme
+# modulscripts skal virke paa begge. Disse tre er det ene sted der kender
+# udgaven, i stedet for et '. /etc/os-release' spredt ud over scriptene.
+#
+# ROOT-argumentet gaelder alle tre og goer dem chroot-bevidste: imagebygningen
+# skal spoerge om chrootens udgave, ikke byggevaertens.
+#
+# FAELDE: 'v="$(ubuntu_version)"' afslutter et script under 'set -e' naar
+# maskinen ikke er Ubuntu, fordi en tildelings status ER substitutionens.
+# Skriv 'v="$(ubuntu_version || true)"' og test bagefter om v er tom, eller
+# brug version_at_least, som haandterer det selv.
+
+# os_release_value KEY [ROOT]
+# Ekkoer vaerdien af KEY. Return 1 hvis hverken filen eller noeglen findes.
+#
+# Filen kildes ikke ind i vores eget shell. Den saetter ID, VERSION_ID, NAME og
+# et dusin andre navne i global scope, hvilket er praecis den faelde de
+# spredte '. /etc/os-release'-kald sidder i.
+os_release_value() {
+  local key="$1" root="${2-}" f v
+  for f in "${root}/etc/os-release" "${root}/usr/lib/os-release"; do
+    if [[ -r "$f" ]]; then
+      v="$(sed -n "s/^${key}=\(.*\)$/\1/p" "$f" | head -1)"
+      v="${v%\"}"; v="${v#\"}"
+      v="${v%\'}"; v="${v#\'}"
+      if [[ -n "$v" ]]; then printf '%s' "$v"; return 0; fi
+    fi
+  done
+  return 1
+}
+
+# ubuntu_version [ROOT]
+# Ekkoer "24.04" eller "26.04". Return 1 hvis ID ikke er ubuntu, saa et kald
+# paa en anden distro giver en tydelig fejl frem for en tom sammenligning der
+# tilfaeldigvis er falsk.
+ubuntu_version() {
+  local root="${1-}" id ver
+  id="$(os_release_value ID "$root")" || return 1
+  [[ "$id" == "ubuntu" ]] || return 1
+  ver="$(os_release_value VERSION_ID "$root")" || return 1
+  printf '%s' "$ver"
+}
+
+# version_at_least MIN [ROOT]
+# Sand hvis maskinens udgave er MIN eller nyere. Bruges til at forgrene:
+#   if version_at_least 26.04; then ... fi
+#
+# Sammenligningen er numerisk per felt. En strengsammenligning rammer
+# "24.04 < 26.04" ved held og tager fejl paa "9.10 < 24.04". 10#-praefikset er
+# noedvendigt fordi 04 ellers laeses som oktal, hvilket spraenger den dag et
+# felt er 08 eller 09.
+#
+# NB: 'if', ikke '&&'. Under 'set -e' ville en falsk '[[ ]] && x' afslutte hele
+# det kaldende script, jf. kommentaren ved cifs_start_automount nedenfor.
+version_at_least() {
+  local min="$1" root="${2-}" cur
+  cur="$(ubuntu_version "$root")" || return 1
+  local cur_maj cur_min min_maj min_min
+  cur_maj="${cur%%.*}"
+  cur_min="${cur#*.}"
+  if [[ "$cur_min" == "$cur" ]]; then cur_min=0; fi
+  cur_min="${cur_min%%.*}"
+  min_maj="${min%%.*}"
+  min_min="${min#*.}"
+  if [[ "$min_min" == "$min" ]]; then min_min=0; fi
+  min_min="${min_min%%.*}"
+  if (( 10#$cur_maj > 10#$min_maj )); then return 0; fi
+  if (( 10#$cur_maj < 10#$min_maj )); then return 1; fi
+  if (( 10#$cur_min >= 10#$min_min )); then return 0; fi
+  return 1
+}
+
+# in_chroot
+# Sand hvis vi koerer i en chroot, fx under imagebygningen. Da er 'uname -r'
+# byggemaskinens kerne og ikke maalmaskinens, saa 'linux-headers-$(uname -r)'
+# henter headers til en kerne der aldrig kommer til at koere paa maskinen.
+#
+# systemd-detect-virt findes ikke i enhver minimal chroot, saa der er en
+# faldback: i en chroot er /proc/1/root et andet inode end /. Kan ingen af de
+# to svare, meldes 'nej', hvilket er den sikre retning: et forkert 'ja' ville
+# springe et trin over paa en rigtig maskine.
+in_chroot() {
+  if command -v systemd-detect-virt >/dev/null 2>&1; then
+    if systemd-detect-virt --chroot >/dev/null 2>&1; then return 0; fi
+  fi
+  local pid1 root
+  pid1="$(stat -Lc '%d:%i' /proc/1/root/. 2>/dev/null || true)"
+  root="$(stat -Lc '%d:%i' /. 2>/dev/null || true)"
+  if [[ -n "$pid1" && -n "$root" && "$pid1" != "$root" ]]; then return 0; fi
+  return 1
 }
 
 # ─── CIFS mount helpers ─────────────────────────────────────────────────────

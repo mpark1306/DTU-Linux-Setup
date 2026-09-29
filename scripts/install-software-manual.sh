@@ -14,6 +14,21 @@ ok()      { echo -e "${GREEN}✅ $1${NC}"; }
 warn()    { echo -e "${YELLOW}⚠️  $1${NC}"; }
 fail()    { echo -e "${RED}❌ $1${NC}"; }
 
+# in_chroot findes ogsaa i scripts/common.sh, som er den kanoniske udgave.
+# Kopien staar her fordi dette script med vilje er selvstaendigt: det skal
+# kunne koeres alene med 'sudo bash install-software-manual.sh', uden resten
+# af repoet. Aendres logikken, skal begge steder rettes.
+in_chroot() {
+  if command -v systemd-detect-virt >/dev/null 2>&1; then
+    if systemd-detect-virt --chroot >/dev/null 2>&1; then return 0; fi
+  fi
+  local pid1 root
+  pid1="$(stat -Lc '%d:%i' /proc/1/root/. 2>/dev/null || true)"
+  root="$(stat -Lc '%d:%i' /. 2>/dev/null || true)"
+  if [[ -n "$pid1" && -n "$root" && "$pid1" != "$root" ]]; then return 0; fi
+  return 1
+}
+
 if [[ $EUID -ne 0 ]]; then
     fail "This script must be run as root (use sudo)."
     exit 1
@@ -164,7 +179,13 @@ if $CISCO_ENABLED; then
         echo "    Installing dependencies..."
         if [[ "$DISTRO" == "ubuntu" ]]; then
             export LD_LIBRARY_PATH="/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
-            pkg_install libxml2 "linux-headers-$(uname -r)" gcc make 2>/dev/null || true
+            # Se noten i scripts/ubuntu/software.sh: uname -r er byggemaskinens
+            # kerne i en chroot.
+            if in_chroot; then
+                pkg_install libxml2 linux-headers-generic gcc make 2>/dev/null || true
+            else
+                pkg_install libxml2 "linux-headers-$(uname -r)" gcc make 2>/dev/null || true
+            fi
         else
             pkg_install libxml2-2 kernel-devel gcc make 2>/dev/null || true
         fi

@@ -229,24 +229,27 @@ fi
 echo "[6/9] Configuring SSSD..."
 # Rewrite sssd.conf with Python for reliable multi-setting updates
 if [ -f /etc/sssd/sssd.conf ]; then
-  if SITE_AD_ACCESS_PROVIDER="${SITE_AD_ACCESS_PROVIDER:-}" python3 - <<'PYEOF'
+  # Er nss/pam-responderne socket-aktiverede, skal "services =" VAEK: realm
+  # joins standard-sssd.conf lister dem, og SSSD's monitor kapper saa om den
+  # samme socket som systemd (start-limit-hit, crash-loop). Er de IKKE
+  # socket-aktiverede, skal linjen omvendt VAERE der, ellers starter
+  # responderne aldrig, ingen domaenebruger kan slaas op, og udfaldet er det
+  # samme som en udelukkelse. Der spoerges om unitfilerne findes, ikke om
+  # udgivelsesnummeret, saa svaret bliver rigtigt ogsaa paa 26.10 og senere.
+  SSSD_SOCKET_RESPONDERS=no
+  if [[ -f /usr/lib/systemd/system/sssd-nss.socket \
+     && -f /usr/lib/systemd/system/sssd-pam.socket ]]; then
+    SSSD_SOCKET_RESPONDERS=yes
+  fi
+  echo "    socket-activated nss/pam responders: ${SSSD_SOCKET_RESPONDERS}"
+  if SITE_AD_ACCESS_PROVIDER="${SITE_AD_ACCESS_PROVIDER:-}" \
+     SSSD_SOCKET_RESPONDERS="$SSSD_SOCKET_RESPONDERS" python3 - <<'PYEOF'
 import os
 import re
 
 PATH = '/etc/sssd/sssd.conf'
 with open(PATH) as f:
     content = f.read()
-
-# Ubuntu 24.04's sssd-common socket-activates the nss/pam responders
-# (sssd-nss.socket, sssd-pam.socket). realm join's default sssd.conf still
-# lists them on the services= line too, which makes SSSD's monitor race
-# systemd for the same socket and crash-loop (start-limit-hit). Drop the
-# line so responders are purely socket-activated, as intended on 24.04.
-#
-# This is also why the standalone Speedup_Login.sh must not be run after this
-# module: it writes `services = nss, pam` straight back in and the crash-loop
-# returns. Everything that script does for speed is done here instead.
-content = re.sub(r'^services\s*=.*\n?', '', content, flags=re.MULTILINE)
 
 
 def set_in_section(text, section, key, value, only_if_absent=False):
@@ -270,6 +273,25 @@ def set_in_section(text, section, key, value, only_if_absent=False):
         body = '{} = {}\n'.format(key, value) + body
     return text[:start] + body + text[end:]
 
+
+# Both 24.04 (sssd 2.9) and 26.04 (sssd 2.12) socket-activate the nss/pam
+# responders, so on both the services= line has to go: realm join's default
+# sssd.conf lists them there too, and SSSD's monitor then races systemd for
+# the same socket and crash-loops (start-limit-hit).
+#
+# The branch exists for the release that stops socket-activating them. Then
+# deleting the line would leave no responder at all, no domain user would
+# resolve, and nobody could log in — the same outcome, reached the other way.
+# The bash side above decides by looking for the unit files.
+if os.environ.get('SSSD_SOCKET_RESPONDERS') == 'yes':
+    content = re.sub(r'^services\s*=.*\n?', '', content, flags=re.MULTILINE)
+else:
+    content = set_in_section(content, 'sssd', 'services', 'nss, pam')
+
+# This is also why the standalone Speedup_Login.sh must not be run after this
+# module on a socket-activated release: it writes `services = nss, pam`
+# straight back in and the crash-loop returns. Everything that script does for
+# speed is done here instead.
 
 match = re.search(r'^\[domain/([^\]]+)\]', content, re.MULTILINE)
 if not match:

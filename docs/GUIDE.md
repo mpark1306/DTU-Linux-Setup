@@ -34,7 +34,7 @@ cd DTU-Linux-Setup
 **Ubuntu 24.04:**
 ```bash
 sudo apt update
-sudo apt install kde-standard python3 python3-pyqt6 policykit-1
+sudo apt install kde-standard python3 python3-pyqt6 polkitd pkexec
 make deb
 sudo apt install ./dtu-sustain-setup_*_all.deb
 ```

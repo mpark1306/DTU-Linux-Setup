@@ -31,11 +31,6 @@ PCR_BANK="${PCR_BANK:-sha256}"
 DEVICE_ARG="${1:-${DTU_LUKS_DEVICE:-}}"
 EXISTING_PASSPHRASE_FILE=""
 
-die() {
-  err "$*"
-  exit 1
-}
-
 cleanup_secret_files() {
   if [[ -n "$EXISTING_PASSPHRASE_FILE" && -f "$EXISTING_PASSPHRASE_FILE" ]]; then
     shred -u "$EXISTING_PASSPHRASE_FILE" 2>/dev/null || rm -f "$EXISTING_PASSPHRASE_FILE"

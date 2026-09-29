@@ -53,8 +53,11 @@ test:
 	@echo "── Bash: site configuration ─────────────────────────────────"
 	bash tests/test_site_conf.sh
 	@echo ""
+	@echo "── Bash: udgave og version (24.04 / 26.04) ──────────────────"
+	bash tests/test_os_helpers.sh
+	@echo ""
 	@echo "── Shell: scripts (statisk + adfærd) ───────────────────────"
-	PYTHONPATH=src python3 -m unittest tests.test_scripts -v 2>&1 | tail -5
+	PYTHONPATH=src python3 -m unittest tests.test_scripts
 	@echo ""
 	@echo "── Python: env loader ───────────────────────────────────────"
 	PYTHONPATH=src python3 -m unittest discover -s tests -v
@@ -63,7 +66,8 @@ lint:
 	@echo "Running shellcheck..."
 	@command -v shellcheck >/dev/null || { echo "shellcheck not installed: sudo apt install shellcheck"; exit 1; }
 	shellcheck --severity=warning --external-sources \
-	  bin/*.sh scripts/*.sh scripts/ubuntu/*.sh scripts/standalone/*.sh
+	  bin/*.sh scripts/*.sh scripts/ubuntu/*.sh scripts/standalone/*.sh \
+	  tests/*.sh
 	@echo "Byte-compiling Python..."
 	python3 -m compileall -q src/dtu_sustain_setup
 	@echo "✅ Lint passed."
@@ -178,7 +182,7 @@ deb:
 	@echo "Priority: optional"                     >> $(DEB_ROOT)/DEBIAN/control
 	@echo "Architecture: all"                      >> $(DEB_ROOT)/DEBIAN/control
 	@echo "Maintainer: DTU Sustain IT <support@sustain.dtu.dk>" >> $(DEB_ROOT)/DEBIAN/control
-	@echo "Depends: python3 (>= 3.10), python3-pyqt6, bash, policykit-1" >> $(DEB_ROOT)/DEBIAN/control
+	@echo "Depends: python3 (>= 3.10), python3-pyqt6, bash, polkitd, pkexec" >> $(DEB_ROOT)/DEBIAN/control
 	@echo "Recommends: realmd, sssd, sssd-ad, adcli, krb5-user, cifs-utils, cups, samba-common-bin, xrdp, xorgxrdp" >> $(DEB_ROOT)/DEBIAN/control
 	@echo "Description: DTU Sustain Linux workstation setup tool" >> $(DEB_ROOT)/DEBIAN/control
 	@echo " A graphical setup utility for DTU Sustain Linux workstations." >> $(DEB_ROOT)/DEBIAN/control

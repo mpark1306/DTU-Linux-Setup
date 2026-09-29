@@ -12,7 +12,8 @@ Depends:
  python3 (>= 3.10),
  python3-pyqt6,
  bash,
- policykit-1,
+ polkitd,
+ pkexec,
  ${misc:Depends}
 Recommends:
  realmd,

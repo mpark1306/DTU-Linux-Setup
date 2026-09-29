@@ -1,3 +1,79 @@
+## Uudgivet
+
+### Rettet
+
+- **`tpm2-rebind.sh` kunne ikke skrive sine egne fejlbeskeder.** Scriptet kaldte
+  `die` fire steder uden at nogen definerede den, saa under `set -euo pipefail`
+  blev hver fejlvej til `die: command not found` og exit 127. Den vaerste var
+  afvisningen naar Secure Boot er slaaet fra, altsaa scriptets egen vigtigste
+  sikkerhedsbesked: den blev aldrig vist. `die` ligger nu i `common.sh` ved
+  siden af `fail`, og den lokale kopi i `tpm2-enroll.sh` er fjernet.
+
+  shellcheck fanger ikke udefinerede funktioner, saa `make lint` og CI var
+  groenne hele tiden. Der er nu en test der daekker hele klassen: hver hjaelper
+  et script kalder, skal kunne naas.
+
+- **`linux-headers-$(uname -r)` hentede byggemaskinens kerne i en chroot.**
+  Begge kaldsteder forgrener nu paa `in_chroot` og bruger
+  `linux-headers-generic` naar de koerer under imagebygningen.
+
+- **`make test` kunne ikke fejle paa trin 3.** Linjen roerte `unittest` gennem
+  `tail -5`, saa exitstatus var `tail`s. Det er verificeret at trin 3 nu
+  propagerer.
+
+### Nyt
+
+- **Én gren koerer paa baade 24.04 og 26.04.** `common.sh` har tre nye
+  hjaelpere, `os_release_value`, `ubuntu_version` og `version_at_least`, plus
+  `in_chroot`. De er det ene sted der kender udgaven, i stedet for et
+  `. /etc/os-release` spredt ud over scriptene. Sammenligningen er numerisk per
+  felt, saa `24.10` sorterer rigtigt mellem `24.04` og `26.04`, og `10#`-
+  praefikset betyder at et felt som `09` ikke laeses som oktal.
+
+- **`policykit-1` er skiftet til `polkitd` og `pkexec`.** Pakken findes ikke paa
+  26.04, og de to findes paa begge udgaver, saa det kraever ingen forgrening.
+  Det er ogsaa den aerligere afhaengighed: GUI'en bruger `pkexec` direkte, og
+  `polkitd` er den der haandhaever reglerne modulerne installerer.
+
+- **RDP overlever flytningen af `startplasma-x11`.** Den ligger i
+  `plasma-session-x11` paa 26.04, som `kubuntu-desktop` ikke traekker ind.
+  Modulet installerer den nu paa 26.04 og efterproever til sidst at en
+  sessionsstarter faktisk findes, saa en manglende session bliver en fejl paa
+  stedet frem for en sort skaerm uger senere. `startwm.sh`-faldbacken
+  `exec xterm` er vaek: xterm er ikke i imaget, saa den doede tavst.
+
+- **`login-screen.sh` afviser nu FOER den skriver noget.** Modulet goer
+  brugerlisten tom og hviler paa at temaet selv skifter til et navnefelt. Det
+  staar i temaets QML og kan aendre sig med en udgivelse, saa nu efterproeves
+  det mod den QML der faktisk ligger paa maskinen, og temaet oploeses som SDDM
+  selv goer det: paa en provisioneret maskine siger `default.conf` "kubuntu" og
+  `kde_settings.conf` "ubuntu-theme", og den sidste vinder.
+
+  Holder invarianten ikke, skrives der intet. Maskinen beholder standard-SDDM,
+  den lokale konto staar paa listen, og nogen kan komme ind og rette det. Efter
+  skrivningen efterlignes SDDM's egen brugerliste, og er der én konto tilbage i
+  intervallet, rulles konfigurationen tilbage frem for at efterlade en
+  loginskaerm uden navnefelt.
+
+  Modulet advarer ogsaa hvis temamappen ikke ejes af en pakke. Det er
+  tilfaeldet paa en maskine hvor nogen har aabnet Systemindstillinger ->
+  Loginskaerm: temaet er da en kopi som apt aldrig opdaterer, og som derfor kan
+  blive ved at virke ved et tilfaelde efter en opgradering.
+
+- **`defender.sh` doer ikke laengere paa en 404.** Microsoft udgiver ikke en
+  config-mappe for en ny Ubuntu-udgivelse med det samme, saa modulet falder nu
+  tilbage til den nyeste der findes og siger det hoejt.
+
+- **`domain-join.sh` har faaet en vagt om `services =`.** Baade 24.04 og 26.04
+  socket-aktiverer nss/pam-responderne, saa linjen skal fortsat slettes.
+  Fjernede en udgivelse den socket-aktivering, ville en sletning efterlade
+  maskinen uden responder, og ingen domaenebruger kunne slaas op: samme udfald
+  som den crash-loop sletningen loeser, naaet fra den anden side. Der spoerges
+  nu om unitfilerne findes, og begge grene er daekket af tests.
+
+- **CI er pinnet til `ubuntu-24.04`.** `ubuntu-latest` ruller selv videre til
+  26.04 og ville aendre hvad der testes paa et tidspunkt ingen har valgt.
+
 ## v1.8.0 — 29. september 2026
 
 ### Nyt

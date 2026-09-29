@@ -17,6 +17,14 @@ apt_wait
 apt-get update -qq 2>/dev/null || true
 apt-get install -y xrdp xorgxrdp >/dev/null
 
+# startplasma-x11 flyttede til pakken plasma-session-x11 i 26.04, og
+# kubuntu-desktop traekker den ikke ind. Uden den falder startwm.sh igennem
+# til fejlen nedenfor, og RDP giver en sort skaerm.
+if version_at_least 26.04; then
+    echo "      26.04: installing plasma-session-x11 (startplasma-x11 moved there)"
+    apt-get install -y plasma-session-x11 >/dev/null
+fi
+
 echo "[2/7] Adding xrdp user to ssl-cert group..."
 usermod -aG ssl-cert xrdp
 
@@ -45,8 +53,13 @@ if command -v startplasma-x11 >/dev/null 2>&1; then
 elif command -v startplasma-wayland >/dev/null 2>&1; then
     exec startplasma-wayland
 else
-    # Fallback
-    exec xterm
+    # Ikke 'exec xterm': xterm er ikke installeret i imaget, saa faldbacken
+    # doede tavst og brugeren fik en sort skaerm uden et spor at gaa efter.
+    # xrdp fanger stderr herfra, saa beskeden lander i sessionsloggen.
+    echo "dtu-rdp: found neither startplasma-x11 nor startplasma-wayland." >&2
+    echo "dtu-rdp: install plasma-session-x11 on 26.04, or plasma-workspace on 24.04." >&2
+    echo "dtu-rdp: see journalctl -u xrdp and /var/log/xrdp-sesman.log" >&2
+    exit 1
 fi
 STARTWM
 chmod 755 /etc/xrdp/startwm.sh
@@ -116,6 +129,19 @@ if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
 fi
 
 echo "[7/7] Verifying..."
+# Der findes en sessionsstarter. Uden denne kontrol opdages en manglende
+# startplasma-x11 foerst naar et menneske proever at koble op, uger senere, og
+# symptomet er en sort skaerm der lukker sig selv. Her bliver det i stedet en
+# fejl paa den linje hvor aarsagen er.
+if ! command -v startplasma-x11 >/dev/null 2>&1 \
+   && ! command -v startplasma-wayland >/dev/null 2>&1; then
+  fail "Neither startplasma-x11 nor startplasma-wayland is installed."
+  fail "An RDP session would start and close again immediately."
+  fail "On 26.04 the X11 session lives in 'plasma-session-x11'; on 24.04 in 'plasma-workspace'."
+  exit 1
+fi
+ok "session starter present: $(command -v startplasma-x11 || command -v startplasma-wayland)"
+
 if systemctl is-active --quiet xrdp; then
   ok "xrdp is running on port 3389."
 else
