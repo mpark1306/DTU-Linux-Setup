@@ -32,7 +32,7 @@ log() { echo "$(date '+%F %T'): $*" >> "$LOG"; }
 
 # Skip silently if network drive is not mounted
 if ! mountpoint -q "$MOUNT_POINT" 2>/dev/null; then
-    log "Drev ikke tilgængeligt, springer over."
+    log "Drive not available, skipping."
     exit 0
 fi
 
@@ -48,7 +48,7 @@ for DIR in "${DIRS[@]}"; do
     DST="${REMOTE_BASE}/${DIR}/"
 
     if [[ ! -d "$SRC" ]]; then
-        log "SKIP ${DIR}: kilde findes ikke"
+        log "SKIP ${DIR}: the source does not exist"
         continue
     fi
 
@@ -60,5 +60,5 @@ for DIR in "${DIRS[@]}"; do
     fi
 done
 
-log "Sync gennemført for ${USER}. Fejl=${ERRORS}"
+log "Sync finished for ${USER}. Errors=${ERRORS}"
 exit 0

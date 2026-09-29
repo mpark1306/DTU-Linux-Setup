@@ -117,7 +117,7 @@ class BatchQueue:
     def push_front(self, mod: ModuleDef) -> None:
         """Læg et modul forrest igen, så det køres om.
 
-        Bruges når brugeren vælger "Prøv igen" på en fejl midt i en kørsel.
+        Bruges når brugeren vælger "Try again" på en fejl midt i en kørsel.
         """
         self.pending.insert(0, mod)
 

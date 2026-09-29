@@ -78,10 +78,10 @@ ask_yes_no() {
 
   # Ingen terminal: brug default og sig det højt, så valget står i modul-loggen.
   if [[ "$default" == y ]]; then
-    info "$question — ingen terminal, vælger JA (sæt $envvar=0 for at undlade)."
+    info "$question  No terminal, choosing YES (set $envvar=0 to skip it)."
     return 0
   fi
-  info "$question — ingen terminal, vælger NEJ (sæt $envvar=1 for at gøre det)."
+  info "$question  No terminal, choosing NO (set $envvar=1 to do it)."
   return 1
 }
 
@@ -292,8 +292,8 @@ detect_luks_device() {
   mapfile -t candidates < <(luks_candidates)
 
   if [[ ${#candidates[@]} -eq 0 ]]; then
-    die "Ingen LUKS-container fundet ($(luks_sources_note)).
-       Angiv enheden eksplicit hvis du ved hvilken det er:
+    die "No LUKS container found ($(luks_sources_note)).
+       Name the device explicitly if you know which one it is:
          sudo $0 /dev/sdXN"
   elif [[ ${#candidates[@]} -eq 1 ]]; then
     echo "${candidates[0]}"
@@ -305,10 +305,10 @@ detect_luks_device() {
       ((i++))
     done
     if [[ ! -t 0 ]]; then
-      die "Flere LUKS-partitioner fundet, og der er ingen terminal at spørge i.
-       Angiv enheden eksplicit:
-         DTU_LUKS_DEVICE=${candidates[0]} (fra GUI'en: sæt den i env-filen)
-         sudo $0 ${candidates[0]}         (fra terminal)"
+      die "Several LUKS partitions found, and there is no terminal to ask in.
+       Name the device explicitly:
+         DTU_LUKS_DEVICE=${candidates[0]} (from the GUI: set it in the env file)
+         sudo $0 ${candidates[0]}         (from a terminal)"
     fi
     local choice
     read -rp "Select number: " choice
@@ -344,8 +344,8 @@ bind_clevis() {
     clevis luks list -d "$dev" || true
     # Default nej: en ekstra identisk TPM2-binding gør ingen forskel og
     # bruger en LUKS-keyslot. Disken låser allerede op fra TPM'en.
-    ask_yes_no "Tilføj endnu en binding alligevel?" n DTU_TPM2_REBIND \
-      || { info "Springer ekstra binding over — disken er allerede bundet."; return; }
+    ask_yes_no "Add another binding anyway?" n DTU_TPM2_REBIND \
+      || { info "Skipping the extra binding; the disk is already bound."; return; }
   fi
 
   info "Binding $dev to TPM2 (PCR ${PCR_IDS}, bank ${PCR_BANK})."
@@ -402,28 +402,28 @@ verify_can_unseal() {
   slot="$(clevis luks list -d "$dev" 2>/dev/null | awk -F: '/tpm2/{gsub(/ /,"",$1); print $1; exit}')"
 
   if [[ -z "$slot" ]]; then
-    warn "Fandt ingen tpm2-binding at teste på $dev."
+    warn "No tpm2 binding found to test on $dev."
     return 1
   fi
 
-  info "Tester at TPM'en kan låse slot $slot op..."
+  info "Testing that the TPM can unlock slot $slot..."
   if clevis luks pass -d "$dev" -s "$slot" >/dev/null 2>&1; then
-    ok "TPM2 unseal virker — disken låser op uden adgangskode ved næste boot."
+    ok "TPM2 unseal works. The disk will unlock without a passphrase at the next boot."
     return 0
   fi
 
-  err "TPM'en kunne IKKE låse slot $slot op."
+  err "The TPM could NOT unlock slot $slot."
   err ""
-  err "Bindingen findes, men den kan ikke bruges. Ved boot vil du stadig blive"
-  err "bedt om LUKS-adgangskoden. Den hyppigste årsag er at PCR ${PCR_IDS} ikke"
-  err "har samme værdi nu som ved boot:"
+  err "The binding exists, but it cannot be used. At boot you will still be"
+  err "asked for the LUKS passphrase. The usual cause is that PCR ${PCR_IDS}"
+  err "does not hold the same value now as it did at boot:"
   err ""
-  err "  • Secure Boot er slået fra. PCR ${PCR_IDS} måler netop Secure Boot-"
-  err "    tilstanden. Slå den til i BIOS/UEFI og kør modulet igen."
-  err "  • BIOS eller Secure Boot-certifikater er opdateret efter bindingen."
-  err "  • TPM'en er nulstillet eller ejet af noget andet."
+  err "  • Secure Boot is turned off. PCR ${PCR_IDS} measures exactly that"
+  err "    state. Turn it on in BIOS/UEFI and run the module again."
+  err "  • The BIOS or the Secure Boot certificates were updated after binding."
+  err "  • The TPM was cleared, or is owned by something else."
   err ""
-  err "Se docs/TPM2-LUKS-fejlfinding.md."
+  err "See docs/TPM2-LUKS-fejlfinding.md."
   return 1
 }
 
@@ -456,40 +456,40 @@ run_checks() {
 
   # 1. Distro
   if command -v apt-get >/dev/null 2>&1; then
-    emit_check distro ok "Understøttet distribution" \
+    emit_check distro ok "Supported distribution" \
       "apt-get fundet" ""
   else
-    emit_check distro fail "Ikke-understøttet distribution" \
-      "Dette modul bruger clevis via initramfs-tools og kræver apt." \
-      "TPM2-oplåsning skal sættes op manuelt på denne distribution."
+    emit_check distro fail "Unsupported distribution" \
+      "This module uses clevis through initramfs-tools and needs apt." \
+      "TPM2 unlocking has to be set up by hand on this distribution."
   fi
 
   # 2. TPM2-enhed
   if [[ -e /dev/tpmrm0 ]]; then
-    emit_check tpm-device ok "TPM2-enhed til stede" "/dev/tpmrm0" ""
+    emit_check tpm-device ok "TPM2 device present" "/dev/tpmrm0" ""
   elif [[ -e /dev/tpm0 ]]; then
-    emit_check tpm-device warn "TPM2-enhed til stede uden resource manager" \
-      "/dev/tpm0 findes, men /dev/tpmrm0 mangler." \
-      "Normalt uskadeligt. Mangler tpm2-abrmd, kan clevis stadig bruge /dev/tpm0."
+    emit_check tpm-device warn "TPM2 device present, without a resource manager" \
+      "/dev/tpm0 exists, but /dev/tpmrm0 is missing." \
+      "Usually harmless. Without tpm2-abrmd, clevis can still use /dev/tpm0."
   else
-    emit_check tpm-device fail "Ingen TPM2-enhed fundet" \
-      "Hverken /dev/tpm0 eller /dev/tpmrm0 findes." \
-      "Slå TPM, fTPM eller Intel PTT til i BIOS/UEFI. På AMD hedder den ofte fTPM, på Intel PTT."
+    emit_check tpm-device fail "No TPM2 device found" \
+      "Neither /dev/tpm0 nor /dev/tpmrm0 exists." \
+      "Enable TPM, fTPM or Intel PTT in BIOS/UEFI. On AMD it is usually called fTPM, on Intel PTT."
   fi
 
   # 3. Svarer TPM'en
   if command -v tpm2_pcrread >/dev/null 2>&1; then
     if tpm2_pcrread "${PCR_BANK}:${PCR_IDS}" >/dev/null 2>&1; then
-      emit_check tpm-responds ok "TPM svarer" "Kunne læse PCR ${PCR_IDS} i bank ${PCR_BANK}." ""
+      emit_check tpm-responds ok "The TPM responds" "PCR ${PCR_IDS} could be read in bank ${PCR_BANK}." ""
     else
-      emit_check tpm-responds fail "TPM svarer ikke" \
-        "Enheden findes, men PCR ${PCR_IDS} kunne ikke læses i bank ${PCR_BANK}." \
-        "Tjek at TPM'en ikke er deaktiveret eller ejet af noget andet. Prøv: tpm2_pcrread ${PCR_BANK}:${PCR_IDS}"
+      emit_check tpm-responds fail "The TPM does not respond" \
+        "The device exists, but PCR ${PCR_IDS} could not be read in bank ${PCR_BANK}." \
+        "Check that the TPM is not disabled or owned by something else. Try: tpm2_pcrread ${PCR_BANK}:${PCR_IDS}"
     fi
   else
-    emit_check tpm-responds unknown "TPM-respons ikke kontrolleret" \
-      "tpm2-tools er ikke installeret endnu." \
-      "Installeres automatisk når modulet køres."
+    emit_check tpm-responds unknown "TPM response not checked" \
+      "tpm2-tools is not installed yet." \
+      "It is installed automatically when the module runs."
   fi
 
   # 4. Secure Boot
@@ -499,18 +499,18 @@ run_checks() {
   # med at virke. Derfor er rækkefølgen vigtig, ikke bare tilstanden.
   if command -v mokutil >/dev/null 2>&1; then
     if mokutil --sb-state 2>/dev/null | grep -qi "enabled"; then
-      emit_check secure-boot ok "Secure Boot er slået til" \
-        "PCR ${PCR_IDS} måler Secure Boot-tilstanden." \
-        "Slå den ikke fra bagefter — så ændrer PCR ${PCR_IDS} sig og oplåsningen stopper."
+      emit_check secure-boot ok "Secure Boot is enabled" \
+        "PCR ${PCR_IDS} measures the Secure Boot state." \
+        "Do not turn it off afterwards: PCR ${PCR_IDS} would change and the unlocking would stop."
     else
-      emit_check secure-boot warn "Secure Boot er slået fra" \
-        "Binding mod PCR ${PCR_IDS} virker stadig, men beskytter mindre, og slår du Secure Boot til bagefter holder oplåsningen op med at virke." \
-        "Slå Secure Boot til i BIOS/UEFI FØR du kører modulet. Gør du det bagefter, skal bindingen laves om."
+      emit_check secure-boot warn "Secure Boot is turned off" \
+        "Binding against PCR ${PCR_IDS} still works, but protects less, and if you enable Secure Boot afterwards the unlocking stops working." \
+        "Turn Secure Boot on in BIOS/UEFI BEFORE running the module. Doing it afterwards means the binding has to be redone."
     fi
   else
     emit_check secure-boot unknown "Secure Boot-tilstand ukendt" \
-      "mokutil er ikke installeret." \
-      "Installér mokutil, eller aflæs tilstanden i BIOS/UEFI."
+      "mokutil is not installed." \
+      "Install mokutil, or read the state in BIOS/UEFI."
   fi
 
   # 5. LUKS-partition
@@ -521,21 +521,21 @@ run_checks() {
       dev="$DEVICE_ARG"
       emit_check luks-device ok "LUKS-enhed valgt" "$dev (angivet eksplicit)" ""
     else
-      emit_check luks-device fail "Angivet enhed findes ikke" \
-        "$DEVICE_ARG er ikke en blokenhed." \
-        "Ret DTU_LUKS_DEVICE, eller lad den være tom så enheden findes automatisk."
+      emit_check luks-device fail "The named device does not exist" \
+        "$DEVICE_ARG is not a block device." \
+        "Correct DTU_LUKS_DEVICE, or leave it empty so the device is found automatically."
     fi
   elif [[ ${#candidates[@]} -eq 1 ]]; then
     dev="${candidates[0]}"
     emit_check luks-device ok "LUKS-partition fundet" "$dev" ""
   elif [[ ${#candidates[@]} -eq 0 ]]; then
-    emit_check luks-device fail "Ingen LUKS-partition fundet" \
-      "Ingen af kilderne så en krypteret container ($(luks_sources_note))." \
-      "Beder maskinen om en adgangskode ved boot, ER den krypteret, og så er det kontrollen der er blind: kør 'lsblk -f' og 'cat /etc/crypttab' i en terminal og sæt DTU_LUKS_DEVICE til den rigtige enhed. Ellers kræver TPM2-oplåsning en LUKS-krypteret disk, og kryptering skal vælges ved installationen."
+    emit_check luks-device fail "No LUKS partition found" \
+      "None of the sources saw an encrypted container ($(luks_sources_note))." \
+      "If the machine asks for a passphrase at boot then it IS encrypted, and it is this check that is blind: run 'lsblk -f' and 'cat /etc/crypttab' in a terminal and point DTU_LUKS_DEVICE at the right device. Otherwise TPM2 unlocking needs a LUKS-encrypted disk, and encryption has to be chosen during installation."
   else
     emit_check luks-device warn "Flere LUKS-partitioner fundet" \
       "${candidates[*]}" \
-      "Sæt DTU_LUKS_DEVICE til den rigtige, ellers kan modulet ikke vælge uden en terminal."
+      "Point DTU_LUKS_DEVICE at the right one, otherwise the module cannot choose without a terminal."
   fi
 
   # 6. Pakker
@@ -544,46 +544,46 @@ run_checks() {
     dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed" || missing+=("$pkg")
   done
   if [[ ${#missing[@]} -eq 0 ]]; then
-    emit_check packages ok "Nødvendige pakker installeret" "clevis, cryptsetup, tpm2-tools" ""
+    emit_check packages ok "The required packages are installed" "clevis, cryptsetup, tpm2-tools" ""
   else
-    emit_check packages info "Pakker mangler endnu" \
-      "Mangler: ${missing[*]}" \
-      "Modulet installerer dem selv. Kræver netværk."
+    emit_check packages info "Packages are still missing" \
+      "Missing: ${missing[*]}" \
+      "The module installs them itself. It needs network access."
   fi
 
   # 7. Eksisterende binding — kræver root
   if ! have_root; then
-    emit_check already-bound unknown "Eksisterende binding ikke kontrolleret" \
-      "Kræver administratorrettigheder." ""
-    emit_check initramfs unknown "initramfs ikke kontrolleret" \
-      "Kræver administratorrettigheder." ""
+    emit_check already-bound unknown "Existing binding not checked" \
+      "Needs administrator rights." ""
+    emit_check initramfs unknown "initramfs not checked" \
+      "Needs administrator rights." ""
     return 0
   fi
 
   if [[ -n "$dev" ]]; then
     if clevis luks list -d "$dev" 2>/dev/null | grep -q tpm2; then
-      emit_check already-bound warn "Disken er allerede bundet til TPM2" \
+      emit_check already-bound warn "The disk is already bound to TPM2" \
         "$(clevis luks list -d "$dev" 2>/dev/null | tr '\n' ' ')" \
-        "Kør kun modulet igen hvis bindingen skal laves om — fx efter en BIOS-opdatering."
+        "Only run the module again if the binding has to be redone, for instance after a BIOS update."
     else
-      emit_check already-bound ok "Ingen eksisterende TPM2-binding" "$dev er ikke bundet endnu." ""
+      emit_check already-bound ok "No existing TPM2 binding" "$dev is not bound yet." ""
     fi
   else
-    emit_check already-bound unknown "Eksisterende binding ikke kontrolleret" \
-      "Ingen entydig LUKS-enhed at kontrollere." ""
+    emit_check already-bound unknown "Existing binding not checked" \
+      "No single LUKS device to check." ""
   fi
 
   # 8. clevis i initramfs
   local initrd
   initrd="/boot/initrd.img-$(uname -r)"
   if [[ ! -f "$initrd" ]]; then
-    emit_check initramfs unknown "initramfs ikke fundet" "$initrd findes ikke." ""
+    emit_check initramfs unknown "initramfs not found" "$initrd does not exist." ""
   elif lsinitramfs "$initrd" 2>/dev/null | grep -q clevis; then
     emit_check initramfs ok "clevis er i initramfs" "$(basename "$initrd")" ""
   else
-    emit_check initramfs info "clevis er ikke i initramfs endnu" \
-      "Forventet før modulet har kørt." \
-      "Modulet kører update-initramfs selv."
+    emit_check initramfs info "clevis is not in the initramfs yet" \
+      "Expected before the module has run." \
+      "The module runs update-initramfs itself."
   fi
 }
 
@@ -618,9 +618,9 @@ main() {
   # En grøn besked oven på en binding der ikke kan låse op, er værre end
   # ingen besked: så tror den der satte maskinen op at den er færdig.
   if verify_can_unseal "$device"; then
-    ok "Done. Genstart og bekræft at der ikke kommer en adgangskode-prompt."
+    ok "Done. Reboot and confirm that no passphrase prompt appears."
   else
-    die "TPM2 auto-unlock er IKKE aktivt. Ret ovenstående og kør modulet igen."
+    die "TPM2 auto-unlock is NOT active. Fix the above and run the module again."
   fi
 }
 
@@ -630,5 +630,5 @@ main "$@"
 # disken til TPM'en, er ogsaa den der skal sikre at nogen opdager naar
 # bindingen holder op med at virke.
 if [[ -x "${SCRIPT_DIR}/../setup-tpm2-watch.sh" ]]; then
-    "${SCRIPT_DIR}/../setup-tpm2-watch.sh" || warn "Kunne ikke installere overvaagningen af bindingen."
+    "${SCRIPT_DIR}/../setup-tpm2-watch.sh" || warn "Could not install the monitoring of the binding."
 fi

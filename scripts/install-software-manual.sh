@@ -271,7 +271,7 @@ DIRS=("Desktop" "Documents" "Pictures")
 mkdir -p "$(dirname "$LOG")"
 
 if ! mountpoint -q "$MOUNT_POINT"; then
-  echo "$(date '+%F %T') Drev ikke tilgængeligt, springer over." >> "$LOG"
+  echo "$(date '+%F %T') Drive not available, skipping." >> "$LOG"
   exit 0
 fi
 
@@ -286,7 +286,7 @@ for DIR in "${DIRS[@]}"; do
     >> "$LOG" 2>&1
 done
 
-echo "$(date '+%F %T') Sync gennemført for $USER." >> "$LOG"
+echo "$(date '+%F %T') Sync finished for $USER." >> "$LOG"
 SYNCEOF
 chmod 0755 "$SYNC_SCRIPT"
 

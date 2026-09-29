@@ -29,11 +29,11 @@ def _install_excepthook() -> None:
             return
         box = QMessageBox()
         box.setIcon(QMessageBox.Icon.Critical)
-        box.setWindowTitle("Uventet fejl")
+        box.setWindowTitle("Unexpected error")
         box.setText(
-            "Der opstod en uventet fejl i programmet.\n\n"
-            "Vinduet er stadig åbent. Kopiér detaljerne nedenfor med, hvis "
-            "du melder fejlen."
+            "An unexpected error occurred in the program.\n\n"
+            "The window is still open. Include the details below if you "
+            "report the error."
         )
         box.setInformativeText(f"{exc_type.__name__}: {exc_value}")
         box.setDetailedText(text)

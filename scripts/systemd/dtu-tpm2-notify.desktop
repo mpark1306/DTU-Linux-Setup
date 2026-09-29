@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=DTU: TPM2-binding
-Comment=Fortæller brugeren hvis disken ikke længere låser sig selv op
+Comment=Tells the user if the disk no longer unlocks itself
 Exec=/usr/local/bin/dtu-tpm2-notify.sh
 Terminal=false
 NoDisplay=true

@@ -37,7 +37,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../common.sh"
 need_root
 
-banner "TPM2 – bind om efter firmwareændring"
+banner "TPM2 – re-bind after a firmware change"
 
 PCR_IDS="${PCR_IDS:-7}"
 PCR_BANK="${PCR_BANK:-sha256}"
@@ -100,12 +100,12 @@ ask_passphrase() {
     local dev="$1" try passphrase
     for try in 1 2 3; do
         echo
-        echo "    Indtast LUKS-adgangskoden for ${dev}."
-        echo "    Det er den kode du fik udleveret, og den samme du lige har"
-        echo "    tastet ved opstart. Den vises ikke mens du skriver."
-        read -rsp "    Adgangskode: " passphrase
+        echo "    Enter the LUKS passphrase for ${dev}."
+        echo "    It is the code you were given, the same one you typed at"
+        echo "    boot just now. It is not shown while you type."
+        read -rsp "    Passphrase: " passphrase
         echo
-        [[ -z "$passphrase" ]] && { warn "Tom adgangskode."; continue; }
+        [[ -z "$passphrase" ]] && { warn "Empty passphrase."; continue; }
 
         PASSPHRASE_FILE="$(mktemp)"
         chmod 600 "$PASSPHRASE_FILE"
@@ -113,20 +113,20 @@ ask_passphrase() {
         unset passphrase
 
         if cryptsetup luksOpen --test-passphrase --key-file "$PASSPHRASE_FILE" "$dev" 2>/dev/null; then
-            ok "Adgangskoden er accepteret."
+            ok "The passphrase was accepted."
             return 0
         fi
-        warn "Forkert adgangskode (forsøg ${try} af 3)."
+        warn "Wrong passphrase (attempt ${try} of 3)."
         cleanup
     done
     return 1
 }
 
 # ─── 1. Precondition ────────────────────────────────────────────────────────
-echo "[1/4] Kontrollerer forudsætninger..."
+echo "[1/4] Checking the requirements..."
 for verktoej in clevis cryptsetup; do
     command -v "$verktoej" >/dev/null 2>&1 \
-        || die "'$verktoej' mangler. Kør TPM2 Auto-Unlock-modulet først."
+        || die "'$verktoej' is missing. Run the TPM2 Auto-Unlock module first."
 done
 
 # Status fanges eksplicit. "elif [[ $? -eq 2 ]]" ville virke, men afhaenger af
@@ -135,54 +135,54 @@ done
 SB_STATE=0
 secure_boot_on || SB_STATE=$?
 if (( SB_STATE == 0 )); then
-    echo "    Secure Boot: slået til"
+    echo "    Secure Boot: enabled"
 elif (( SB_STATE == 2 )); then
-    warn "mokutil mangler, kan ikke afgøre Secure Boot-tilstanden. Fortsætter."
+    warn "mokutil is missing, so the Secure Boot state cannot be read. Continuing."
 else
-    die "Secure Boot er slået fra.
+    die "Secure Boot is turned off.
 
-       PCR ${PCR_IDS} måler netop Secure Boot-tilstanden, så en binding lavet nu
-       ville låse disken op på en maskine uden Secure Boot. Det er dårligere
-       end at skulle taste koden.
+       PCR ${PCR_IDS} measures exactly the Secure Boot state, so a binding made
+       now would unlock the disk on a machine with Secure Boot disabled. That
+       is worse than having to type the passphrase.
 
-       Slå Secure Boot til i firmwaren, og kør så scriptet igen."
+       Turn Secure Boot on in the firmware, then run this again."
 fi
 
 mapfile -t LUKS_DEVS < <(find_luks_devices)
-(( ${#LUKS_DEVS[@]} > 0 )) || die "Fandt ingen LUKS-enheder."
-echo "    LUKS-enheder: ${LUKS_DEVS[*]}"
+(( ${#LUKS_DEVS[@]} > 0 )) || die "No LUKS devices found."
+echo "    LUKS devices: ${LUKS_DEVS[*]}"
 
 # ─── 2. Which bindings are actually dead ────────────────────────────────────
-echo "[2/4] Afprøver de eksisterende bindinger..."
+echo "[2/4] Testing the existing bindings..."
 BROKEN=()
 for dev in "${LUKS_DEVS[@]}"; do
     slot="$(tpm2_slot "$dev")"
     if [[ -z "$slot" ]]; then
-        echo "    ${dev}: ingen TPM2-binding. Brug TPM2 Auto-Unlock-modulet."
+        echo "    ${dev}: no TPM2 binding. Use the TPM2 Auto-Unlock module."
         continue
     fi
     if binding_works "$dev"; then
-        echo "    ${dev}: bindingen virker, intet at gøre."
+        echo "    ${dev}: the binding works, nothing to do."
     else
-        echo "    ${dev}: bindingen låser ikke op længere (slot ${slot})."
+        echo "    ${dev}: the binding no longer unlocks (slot ${slot})."
         BROKEN+=("$dev")
     fi
 done
 
 if (( ${#BROKEN[@]} == 0 )); then
     rm -f "$STATE_FILE"
-    ok "Alle bindinger virker. Maskinen låser selv op ved næste opstart."
+    ok "Every binding works. The machine will unlock itself at the next boot."
     exit 0
 fi
 
 # ─── 3. Re-bind ─────────────────────────────────────────────────────────────
-echo "[3/4] Binder om mod de nuværende PCR-værdier..."
+echo "[3/4] Re-binding against the current PCR values..."
 REBOUND=0
 for dev in "${BROKEN[@]}"; do
     echo
     echo "  --- ${dev} ---"
     if ! ask_passphrase "$dev"; then
-        warn "Springer ${dev} over: adgangskoden blev ikke accepteret."
+        warn "Skipping ${dev}: the passphrase was not accepted."
         continue
     fi
 
@@ -191,30 +191,30 @@ for dev in "${BROKEN[@]}"; do
     # LUKS2 har kun 32 af dem.
     old_slot="$(tpm2_slot "$dev")"
     if [[ -n "$old_slot" ]]; then
-        echo "    Fjerner den døde binding i slot ${old_slot}..."
+        echo "    Removing the dead binding in slot ${old_slot}..."
         clevis luks unbind -d "$dev" -s "$old_slot" -f \
-            || warn "Kunne ikke fjerne slot ${old_slot}; fortsætter."
+            || warn "Could not remove slot ${old_slot}; continuing."
     fi
 
-    echo "    Forsegler mod PCR ${PCR_IDS} (bank ${PCR_BANK})..."
+    echo "    Sealing against PCR ${PCR_IDS} (bank ${PCR_BANK})..."
     if clevis luks bind -k "$PASSPHRASE_FILE" -d "$dev" tpm2 \
          "{\"pcr_bank\":\"${PCR_BANK}\",\"pcr_ids\":\"${PCR_IDS}\"}"; then
         REBOUND=$((REBOUND + 1))
     else
-        warn "Ombindingen af ${dev} fejlede."
+        warn "Re-binding ${dev} failed."
     fi
     cleanup
 done
 
 # ─── 4. Prove it works, do not assume ───────────────────────────────────────
 echo
-echo "[4/4] Afprøver de nye bindinger..."
+echo "[4/4] Testing the new bindings..."
 STILL_BROKEN=0
 for dev in "${BROKEN[@]}"; do
     if binding_works "$dev"; then
-        ok "${dev}: låser op fra TPM'en igen."
+        ok "${dev}: unlocks from the TPM again."
     else
-        warn "${dev}: låser stadig ikke op."
+        warn "${dev}: still does not unlock."
         STILL_BROKEN=$((STILL_BROKEN + 1))
     fi
 done
@@ -226,19 +226,20 @@ done
 if (( STILL_BROKEN == 0 && REBOUND > 0 )); then
     rm -f "$STATE_FILE"
     echo
-    ok "Færdig. ${REBOUND} binding(er) fornyet."
-    echo "    Maskinen spørger ikke om koden ved næste opstart."
-    echo "    Gem koden alligevel: den er den eneste vej ind hvis TPM'en"
-    echo "    ryddes eller firmwaren udskiftes."
+    ok "Done. ${REBOUND} binding(s) renewed."
+    echo "    The machine will not ask for the passphrase at the next boot."
+    echo "    Keep the passphrase anyway: it is the only way in if the TPM"
+    echo "    is cleared or the firmware is replaced."
 else
     echo
-    die "Ombindingen lykkedes ikke. Disken kan stadig låses op med adgangskoden.
-       Log fra sidste forsøg ligger i journalen:  journalctl -t dtu-tpm2"
+    die "The re-binding did not succeed. The disk can still be unlocked with
+       the passphrase. The log from the last attempt is in the journal:
+       journalctl -t dtu-tpm2"
 fi
 
 # Overvaagningen installeres her, ikke som et separat modul. Den der binder
 # disken til TPM'en, er ogsaa den der skal sikre at nogen opdager naar
 # bindingen holder op med at virke.
 if [[ -x "${SCRIPT_DIR}/../setup-tpm2-watch.sh" ]]; then
-    "${SCRIPT_DIR}/../setup-tpm2-watch.sh" || warn "Kunne ikke installere overvaagningen af bindingen."
+    "${SCRIPT_DIR}/../setup-tpm2-watch.sh" || warn "Could not install the monitoring of the binding."
 fi

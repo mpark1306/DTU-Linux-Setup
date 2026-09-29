@@ -22,7 +22,7 @@ set -euo pipefail
 # almindelig bruger fejlede det først halvvejs nede, med en
 # permission-fejl per linje og en halv opsætning tilbage.
 if [[ $EUID -ne 0 ]]; then
-    echo "FEJL: dette script skal køres som root." >&2
+    echo "ERROR: this script must be run as root." >&2
     echo "      sudo $0 $*" >&2
     exit 1
 fi
@@ -31,12 +31,12 @@ TOTAL=11
 BLUE='\033[1;34m'; GREEN='\033[1;32m'; RED='\033[1;31m'; NC='\033[0m'
 step() { echo -e "\n${BLUE}[TRIN $1/${TOTAL}]${NC} $2"; }
 ok()   { echo -e "  ${GREEN}[OK]${NC} $1"; }
-fail() { echo -e "  ${RED}[FEJL]${NC} $1"; exit 1; }
+fail() { echo -e "  ${RED}[ERROR]${NC} $1"; exit 1; }
 
 ###############################################################################
-step 1 "Tjekker forudsætninger og distribution"
+step 1 "Checking the requirements and the distribution"
 ###############################################################################
-[ "$(id -u)" -eq 0 ] || fail "Scriptet skal køres som root (sudo)."
+[ "$(id -u)" -eq 0 ] || fail "The script must be run as root (sudo)."
 
 . /etc/os-release
 case "${ID:-}" in
@@ -44,31 +44,31 @@ case "${ID:-}" in
   *)
     case "${ID_LIKE:-}" in
       *debian*|*ubuntu*) ;;
-      *) fail "Kun Debian/Ubuntu understøttes. Fandt: ${ID:-?}" ;;
+      *) fail "Only Debian and Ubuntu are supported. Found: ${ID:-?}" ;;
     esac
     ;;
 esac
 ok "Distribution: ${PRETTY_NAME:-$ID}"
 
-command -v systemctl >/dev/null || fail "systemd er påkrævet."
-ok "systemd fundet"
+command -v systemctl >/dev/null || fail "systemd is required."
+ok "systemd found"
 
 ###############################################################################
-step 2 "Installerer afhængigheder"
+step 2 "Installing dependencies"
 ###############################################################################
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq || warn "apt-get update meldte fejl; fortsætter."
+apt-get update -qq || warn "apt-get update reported an error; continuing."
 apt-get install -y -qq fwupd util-linux >/dev/null || \
-  warn "Kunne ikke installere fwupd/util-linux — firmwaredelen springes over."
+  warn "Could not install fwupd/util-linux; the firmware part is skipped."
 
 # En dialog-binær bruges til at varsle om genstart. Kubuntu har kdialog;
 # det her er kun en sikkerhed, og den må ikke vælte opsætningen på en
 # maskine uden net.
 if ! command -v kdialog >/dev/null && ! command -v zenity >/dev/null; then
   apt-get install -y -qq zenity >/dev/null || \
-    warn "Hverken kdialog eller zenity findes — genstartsvarsler vises ikke."
+    warn "Neither kdialog nor zenity is present, so restart notices are not shown."
 fi
-ok "Afhængigheder installeret/verificeret"
+ok "Dependencies installed and verified"
 
 ###############################################################################
 step 3 "Opretter mapper"
@@ -136,7 +136,7 @@ run() {
     log "STATUS: OK (exit $rc)"
     return 0
   else
-    log "STATUS: FEJL (exit $rc)"
+    log "STATUS: FAILED (exit $rc)"
     ERRORS=$((ERRORS+1))
     return 1
   fi
@@ -166,12 +166,12 @@ for i in $(seq 1 10); do
       break
     fi
   fi
-  log "Ingen forbindelse (forsøg $i/10), venter 30 sek..."
+  log "No connection (attempt $i/10), waiting 30 s..."
   sleep 30
 done
 
 if [ "$NET_OK" -ne 1 ]; then
-  log "Ingen internetforbindelse. Afslutter (retry via timer/dispatcher)."
+  log "No internet connection. Stopping; the timer or dispatcher will retry."
   exit 0
 fi
 
@@ -190,7 +190,7 @@ if command -v fwupdmgr >/dev/null; then
   run "0 2" "fwupd refresh" fwupdmgr refresh --force
   run "0 2" "fwupd update" fwupdmgr update -y --no-reboot-check
 else
-  section "Firmware"; log "fwupdmgr ikke installeret - springes over"
+  section "Firmware"; log "fwupdmgr is not installed, skipping"
 fi
 
 if command -v flatpak >/dev/null; then
@@ -204,31 +204,31 @@ if command -v flatpak >/dev/null; then
     run "0" "Flatpak user update ($u)" runuser -u "$u" -- flatpak update -y --user --noninteractive
   done
 else
-  section "Flatpak"; log "flatpak ikke installeret - springes over"
+  section "Flatpak"; log "flatpak is not installed, skipping"
 fi
 
 if command -v snap >/dev/null; then
   run "0" "Snap refresh" snap refresh
 else
-  section "Snap"; log "snap ikke installeret - springes over"
+  section "Snap"; log "snap is not installed, skipping"
 fi
 
 REBOOT_NEEDED=0
 if [ -f /run/reboot-required ]; then
   REBOOT_NEEDED=1
-  [ -f /run/reboot-required.pkgs ] && { section "Pakker der kræver reboot"; cat /run/reboot-required.pkgs >> "$REPORT"; }
+  [ -f /run/reboot-required.pkgs ] && { section "Packages that need a reboot"; cat /run/reboot-required.pkgs >> "$REPORT"; }
 fi
 
 section "OPSUMMERING"
-log "Antal fejl: $ERRORS"
-log "Reboot påkrævet: $([ "$REBOOT_NEEDED" -eq 1 ] && echo JA || echo NEJ)"
+log "Errors: $ERRORS"
+log "Reboot required: $([ "$REBOOT_NEEDED" -eq 1 ] && echo YES || echo NO)"
 
 if [ "$ERRORS" -eq 0 ]; then
   touch "$STATE_DIR/last-success"
   chmod 600 "$STATE_DIR/last-success"
-  log "Kørsel gennemført uden fejl."
+  log "Run completed without errors."
 else
-  log "Kørsel gennemført med fejl."
+  log "Run completed with errors."
 fi
 
 find "$LOG_DIR" -name 'report-*.txt' -mtime +90 -delete 2>/dev/null
@@ -278,7 +278,7 @@ plog() {
 NEEDED=0
 if [ -f /run/reboot-required ]; then NEEDED=1; fi
 if [ "$NEEDED" -eq 0 ]; then
-  plog "Reboot ikke længere nødvendig."
+  plog "A reboot is no longer needed."
   rm -f "$DEFER_FILE"
   exit 0
 fi
@@ -304,7 +304,7 @@ done < <(loginctl list-sessions --no-legend 2>/dev/null)
 
 # Hvis ingen aktiv GUI-bruger: reboot med det samme
 if [ -z "$RUSER" ]; then
-  plog "Ingen aktiv GUI-bruger; genstarter nu."
+  plog "No active GUI user; rebooting now."
   systemctl reboot
   exit 0
 fi
@@ -318,12 +318,12 @@ as_user() {
 }
 
 REMAINING=$((MAX_DEFER - COUNT))
-TITLE="DTU Systemopdatering"
+TITLE="DTU system update"
 
 defer_one_hour() {
   echo $((COUNT + 1)) > "$DEFER_FILE"
   chmod 600 "$DEFER_FILE"
-  plog "Udskudt af $RUSER ($((COUNT+1))/$MAX_DEFER). Ny prompt om 1 time."
+  plog "Deferred by $RUSER ($((COUNT+1))/$MAX_DEFER). Asking again in 1 hour."
   systemd-run --on-active=3600 --quiet /usr/local/sbin/dtu-reboot-prompt.sh
   as_user notify-send -u normal "$TITLE" "Genstart udskudt 1 time." 2>/dev/null || true
   exit 0
@@ -332,31 +332,31 @@ defer_one_hour() {
 reboot_now() {
   plog "Bruger $RUSER valgte genstart nu."
   rm -f "$DEFER_FILE"
-  shutdown -r +1 "Systemopdatering: maskinen genstarter om 1 minut."
+  shutdown -r +1 "System update: the machine restarts in 1 minute."
   exit 0
 }
 
 if [ "$REMAINING" -gt 0 ]; then
-  MSG="Systemopdateringer er installeret, og genstart er påkrævet.
+  MSG="System updates have been installed, and a restart is required.
 
-Genstart nu?
+Restart now?
 
-Du kan udskyde $REMAINING gang(e) endnu (1 time pr. gang).
-Uden svar udskydes automatisk om 5 minutter."
+You can defer $REMAINING more time(s), 1 hour each.
+With no answer it is deferred automatically in 5 minutes."
   if command -v kdialog >/dev/null; then
     as_user timeout "$DIALOG_TIMEOUT" kdialog \
       --title "$TITLE" \
       --warningyesno "$MSG" \
-      --yes-label "Genstart nu" \
-      --no-label "Udskyd 1 time"
+      --yes-label "Restart now" \
+      --no-label "Defer 1 hour"
     rc=$?
   else
     as_user zenity \
       --question \
       --title="$TITLE" \
       --text="$MSG" \
-      --ok-label="Genstart nu" \
-      --cancel-label="Udskyd 1 time" \
+      --ok-label="Restart now" \
+      --cancel-label="Defer 1 hour" \
       --timeout="$DIALOG_TIMEOUT" \
       --width=420
     rc=$?
@@ -367,13 +367,13 @@ Uden svar udskydes automatisk om 5 minutter."
     *) defer_one_hour ;;
   esac
 else
-  plog "Maks udskydelser nået. Tvungen genstart om ${FORCED_REBOOT_DELAY_MIN} min."
-  shutdown -r +"$FORCED_REBOOT_DELAY_MIN" "Systemopdatering: maskinen genstarter om ${FORCED_REBOOT_DELAY_MIN} minutter. Gem dit arbejde."
+  plog "Maximum deferrals reached. Forced restart in ${FORCED_REBOOT_DELAY_MIN} min."
+  shutdown -r +"$FORCED_REBOOT_DELAY_MIN" "System update: the machine restarts in ${FORCED_REBOOT_DELAY_MIN} minutes. Save your work."
 
-  MSG="Systemopdateringer kræver genstart, og alle udskydelser er brugt.
+  MSG="System updates need a restart, and every deferral has been used.
 
-Maskinen genstarter automatisk om ${FORCED_REBOOT_DELAY_MIN} minutter.
-Gem dit arbejde nu."
+The machine restarts automatically in ${FORCED_REBOOT_DELAY_MIN} minutes.
+Save your work now."
   if command -v kdialog >/dev/null; then
     as_user timeout 290 kdialog --title "$TITLE" --sorry "$MSG" 2>/dev/null || true
   else
@@ -406,10 +406,10 @@ ProtectSystem=full
 NSTEST
 systemctl daemon-reload
 if systemctl start dtu-ns-test.service 2>/dev/null; then
-  ok "Mount namespaces understøttet - bruger fuld hardening"
+  ok "Mount namespaces are supported; using full hardening"
 else
-  echo -e "  ${RED}[!]${NC} Mount namespaces ikke understøttet (Cubic-image / begrænset kernel)"
-  echo "  Falder tilbage til hardening uden mount namespaces."
+  echo -e "  ${RED}[!]${NC} Mount namespaces are not supported (Cubic image or restricted kernel)"
+  echo "  Falling back to hardening without mount namespaces."
   HARDENING="fallback"
 fi
 rm -f /tmp/dtu-ns-test.service
@@ -517,7 +517,7 @@ NM_EOF
   chown root:root /etc/NetworkManager/dispatcher.d/90-dtu-auto-update
   ok "Dispatcher hook installeret"
 else
-  echo "  [ADVARSEL] /etc/NetworkManager/dispatcher.d findes ikke - springer hook over."
+  echo "  [WARNING] /etc/NetworkManager/dispatcher.d does not exist; skipping the hook."
 fi
 
 ###############################################################################
@@ -528,28 +528,28 @@ systemctl enable --now dtu-auto-update.timer
 ok "Timer aktiveret"
 
 ###############################################################################
-step 10 "Kører første opdatering via servicen"
+step 10 "Running the first update through the service"
 ###############################################################################
-echo "  Starter dtu-auto-update.service (dette kan tage lang tid)..."
+echo "  Starting dtu-auto-update.service (this can take a while)..."
 systemctl start dtu-auto-update.service 2>&1 || true
 SVC_RC=$(systemctl show -p ExecMainStatus --value dtu-auto-update.service 2>/dev/null || echo "?")
 LATEST_REPORT="$(ls -t /var/log/dtu-auto-update/report-*.txt 2>/dev/null | head -1)"
 
 if [ -z "$LATEST_REPORT" ]; then
-  echo -e "  ${RED}[ADVARSEL]${NC} Ingen rapport genereret - servicen kan have fejlet helt."
+  echo -e "  ${RED}[WARNING]${NC} No report was generated; the service may have failed outright."
   echo "  Tjek: sudo journalctl -u dtu-auto-update.service --no-pager -n 50"
 else
-  REPORT_ERRORS=$(grep -c 'STATUS: FEJL' "$LATEST_REPORT" 2>/dev/null || echo 0)
+  REPORT_ERRORS=$(grep -c 'STATUS: FAILED' "$LATEST_REPORT" 2>/dev/null || echo 0)
   ok "Servicen afsluttet (exit $SVC_RC). Rapport: $LATEST_REPORT"
   if [ "$REPORT_ERRORS" -gt 0 ]; then
-    echo -e "  ${RED}[!]${NC} $REPORT_ERRORS fejl fundet i rapporten - forsøger auto-fix i næste trin."
+    echo -e "  ${RED}[!]${NC} $REPORT_ERRORS error(s) found in the report; trying to fix them in the next step."
   else
-    ok "Ingen fejl i rapporten."
+    ok "No errors in the report."
   fi
 fi
 
 ###############################################################################
-step 11 "Verificerer system og fikser eventuelle problemer"
+step 11 "Verifying the system and fixing any problems"
 ###############################################################################
 NEEDS_RERUN=0
 
@@ -557,41 +557,41 @@ NEEDS_RERUN=0
 if dpkg --audit 2>&1 | grep -q .; then
   echo -e "  ${RED}[!]${NC} dpkg har afbrudte pakker - fikser..."
   dpkg --configure -a 2>&1 | tail -5
-  ok "dpkg --configure -a kørt"
+  ok "dpkg --configure -a has run"
   NEEDS_RERUN=1
 else
-  ok "dpkg: ingen afbrudte pakker"
+  ok "dpkg: no interrupted packages"
 fi
 
 # --- Fix 2: ødelagte afhængigheder ---
 if ! apt-get check 2>&1 | tail -1 | grep -q "^0 "; then
-  echo -e "  ${RED}[!]${NC} Ødelagte afhængigheder fundet - fikser..."
+  echo -e "  ${RED}[!]${NC} Broken dependencies found; fixing..."
   apt-get -o DPkg::Lock::Timeout=300 -y -f install 2>&1 | tail -5
-  ok "apt-get -f install kørt"
+  ok "apt-get -f install has run"
   NEEDS_RERUN=1
 else
-  ok "apt: ingen ødelagte afhængigheder"
+  ok "apt: no broken dependencies"
 fi
 
 # --- Fix 3: afventende opdateringer ---
 apt-get -o DPkg::Lock::Timeout=300 update -qq 2>/dev/null
 PENDING=$(apt list --upgradable 2>/dev/null | grep -c 'upgradable' || echo 0)
 if [ "$PENDING" -gt 0 ]; then
-  echo -e "  ${RED}[!]${NC} $PENDING pakker afventer stadig opdatering - kører dist-upgrade direkte..."
+  echo -e "  ${RED}[!]${NC} $PENDING packages are still waiting to be updated; running dist-upgrade directly..."
   APT_FIX_OPTS=(-o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
   apt-get "${APT_FIX_OPTS[@]}" -y dist-upgrade 2>&1 | tail -20
   apt-get "${APT_FIX_OPTS[@]}" -y autoremove --purge 2>/dev/null
   # Tjek igen
   STILL_PENDING=$(apt list --upgradable 2>/dev/null | grep -c 'upgradable' || echo 0)
   if [ "$STILL_PENDING" -gt 0 ]; then
-    echo -e "  ${RED}[ADVARSEL]${NC} $STILL_PENDING pakker kunne stadig ikke opdateres."
-    echo "  Mulige årsager: held-back pakker, PPA-konflikter, eller phased updates."
+    echo -e "  ${RED}[ADVARSEL]${NC} $STILL_PENDING packages still could not be updated."
+    echo "  Possible causes: held-back packages, PPA conflicts, or phased updates."
     echo "  Tjek manuelt: apt list --upgradable"
   else
-    ok "Alle afventende pakker er nu installeret."
+    ok "Every pending package is now installed."
   fi
 else
-  ok "Ingen afventende systempakker."
+  ok "No pending system packages."
 fi
 
 
@@ -601,9 +601,9 @@ if command -v flatpak >/dev/null; then
   if [ "$FLAT_PENDING" -gt 0 ]; then
     echo -e "  ${RED}[!]${NC} $FLAT_PENDING flatpak-opdateringer afventer - installerer..."
     flatpak update -y --system --noninteractive 2>&1 | tail -10
-    ok "Flatpak system-opdateringer kørt."
+    ok "Flatpak system updates have run."
   else
-    ok "Ingen afventende flatpak-opdateringer."
+    ok "No pending flatpak updates."
   fi
 fi
 
@@ -613,9 +613,9 @@ if command -v snap >/dev/null; then
   if [ "$SNAP_PENDING" -gt 0 ]; then
     echo -e "  ${RED}[!]${NC} $SNAP_PENDING snap-opdateringer afventer - installerer..."
     snap refresh 2>&1 | tail -10
-    ok "Snap refresh kørt."
+    ok "Snap refresh has run."
   else
-    ok "Ingen afventende snap-opdateringer."
+    ok "No pending snap updates."
   fi
 fi
 
@@ -623,29 +623,29 @@ fi
 if command -v fwupdmgr >/dev/null; then
   FW_PENDING=$(fwupdmgr get-updates 2>/dev/null | grep -c 'Update Version' || echo 0)
   if [ "$FW_PENDING" -gt 0 ]; then
-    echo -e "  ${RED}[!]${NC} $FW_PENDING firmware-opdateringer tilgængelige - installerer..."
+    echo -e "  ${RED}[!]${NC} $FW_PENDING firmware updates available; installing..."
     fwupdmgr update -y --no-reboot-check 2>&1 | tail -10
-    ok "Firmware-opdateringer kørt."
+    ok "Firmware updates have run."
   else
-    ok "Ingen afventende firmware-opdateringer."
+    ok "No pending firmware updates."
   fi
 fi
 
 # --- Re-kør servicen hvis dpkg/apt blev fikset ---
 if [ "$NEEDS_RERUN" -eq 1 ]; then
   echo
-  echo "  Kører servicen én gang mere efter reparation..."
+  echo "  Running the service once more after the repair..."
   systemctl start dtu-auto-update.service 2>&1 || true
-  ok "Ekstra kørsel gennemført."
+  ok "The extra run completed."
 fi
 
 echo
 echo -e "${GREEN}=============================================================${NC}"
-echo -e "${GREEN} Opsætning og første opdatering fuldført (v3)${NC}"
+echo -e "${GREEN} Setup and first update complete (v3)${NC}"
 echo -e "${GREEN}=============================================================${NC}"
 echo
 echo "Rapporter:           sudo ls -lt /var/log/dtu-auto-update/ | head"
-echo "Næste planlagte:     $(systemctl list-timers dtu-auto-update.timer --no-pager | sed -n 2p)"
+echo "Next scheduled:     $(systemctl list-timers dtu-auto-update.timer --no-pager | sed -n 2p)"
 echo "Manuel trigger:      sudo systemctl start dtu-auto-update.service"
-echo "Følg live:           sudo journalctl -fu dtu-auto-update.service"
+echo "Follow live:           sudo journalctl -fu dtu-auto-update.service"
 echo

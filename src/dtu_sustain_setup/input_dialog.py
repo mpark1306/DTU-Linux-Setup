@@ -237,12 +237,12 @@ KNOWN_SECTIONS = ("flatpak", "snap", "pwa", "cisco")
 # presses Save.
 SECTION_NOTES = {
     "snap": [
-        "# Tom som standard. office365webdesktop er afløst af [pwa],",
-        "# men sektionen virker: skriv en snap her som \"navn --flag\".",
+        "# Empty by default. office365webdesktop has been replaced by [pwa],",
+        "# but the section works: write a snap here as \"name --flag\".",
     ],
     "pwa": [
-        "# Microsoft 365 web-apps som .desktop-genveje, installeret for",
-        "# alle brugere med scripts/install-ms-pwa.sh.",
+        "# Microsoft 365 web apps as .desktop shortcuts, installed for",
+        "# all users by scripts/install-ms-pwa.sh.",
     ],
 }
 

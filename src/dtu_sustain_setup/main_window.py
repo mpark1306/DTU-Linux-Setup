@@ -705,10 +705,10 @@ class MainWindow(QMainWindow):
         choice = dlg.choice
         retry_target = mod or self._current_module
         if choice == "retry" and retry_target is not None:
-            self._append_log(f"\n↻ Prøver {retry_target.title} igen\n")
+            self._append_log(f"\n↻ Retrying {retry_target.title}\n")
             self._batch.push_front(retry_target)
         elif choice == "abort":
-            self._append_log("\n⛔ Resten af kørslen afbrudt\n")
+            self._append_log("\n⛔ The rest of the run was stopped\n")
             self._batch.cancel()
             self._set_running(False)
             self.statusBar().showMessage("Run All aborted after a failure.")

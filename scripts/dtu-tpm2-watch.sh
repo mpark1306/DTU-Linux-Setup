@@ -38,7 +38,7 @@ TAG=dtu-tpm2
 log() { logger -t "$TAG" -- "$*"; }
 
 command -v clevis >/dev/null 2>&1 || {
-    log "clevis er ikke installeret; TPM2 er ikke i brug på denne maskine."
+    log "clevis is not installed; TPM2 is not in use on this machine."
     exit 0
 }
 
@@ -78,25 +78,25 @@ done < <(find_luks_devices)
 
 if (( BOUND == 0 )); then
     rm -f "$STATE_FILE"
-    log "Ingen TPM2-bindinger på denne maskine."
+    log "No TPM2 bindings on this machine."
     exit 0
 fi
 
 if (( ${#BROKEN[@]} == 0 )); then
     rm -f "$STATE_FILE"
-    log "TPM2-bindingen virker (${BOUND} enhed(er))."
+    log "The TPM2 binding works (${BOUND} device(s))."
     exit 0
 fi
 
 # Tilstandsfilen er det sessionen læser. Den er verdenslæsbar med vilje:
 # den indeholder ingen hemmelighed, kun at der skal gøres noget.
 {
-    echo "# Skrevet af dtu-tpm2-watch.sh $(date -Is)"
+    echo "# Written by dtu-tpm2-watch.sh $(date -Is)"
     echo "DEVICES=\"${BROKEN[*]}\""
 } > "${STATE_FILE}.tmp"
 chmod 0644 "${STATE_FILE}.tmp"
 mv -f "${STATE_FILE}.tmp" "$STATE_FILE"
 
-log "TPM2-bindingen låser ikke længere op for: ${BROKEN[*]}"
-log "Typisk årsag: firmwareopdatering har ændret PCR 7 (Secure Boot-tilstanden)."
-log "Rettes med TPM2-modulet 'Bind om' i DTU Linux Setup."
+log "The TPM2 binding no longer unlocks: ${BROKEN[*]}"
+log "Usual cause: a firmware update changed PCR 7, the Secure Boot state."
+log "Fix it with the 'TPM2 Re-bind' module in DTU Linux Setup."

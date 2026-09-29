@@ -464,7 +464,13 @@ class TestDrivesNotification(unittest.TestCase):
         self.assertIn("--action=", self.notify)
 
     def test_the_notification_names_the_manual_route_too(self):
-        self.assertIn("Genopfrisk netværksdrev", self.notify)
+        """And it names it exactly as the menu shows it. Read from the
+        .desktop file rather than hardcoded, so renaming the menu entry
+        cannot leave the notification pointing at a name nobody can find."""
+        entry = read(SCRIPTS / "dtu-drives-refresh.desktop")
+        name = re.search(r"^Name=(.+)$", entry, re.MULTILINE)
+        self.assertIsNotNone(name, "the .desktop entry has no Name=")
+        self.assertIn(name.group(1).strip(), self.notify)
 
     def test_the_notifier_gives_up_rather_than_waiting_forever(self):
         """--action implies --wait. Without a timeout every network change
@@ -564,6 +570,408 @@ class TestRootDiscipline(unittest.TestCase):
         self.assertEqual(offenders, [],
                          "writes to /etc without checking for root: "
                          + ", ".join(offenders))
+
+
+FIRST_LOGIN = SCRIPTS / "dtu-first-login.sh"
+ADMIN_BLOCK_START = "# ── Den lokale administratorkonto"
+ADMIN_BLOCK_END = "# ── Department labels"
+
+
+def admin_password_block() -> str:
+    """The password-change section of dtu-first-login.sh, on its own.
+
+    The script cannot be run end to end from a test: it exits immediately
+    unless the invoking user is a domain user, which no test runner is. So
+    the section is sliced out and sourced instead. If the markers move, the
+    slice fails loudly rather than testing nothing.
+    """
+    body = read(FIRST_LOGIN)
+    start = body.find(ADMIN_BLOCK_START)
+    end = body.find(ADMIN_BLOCK_END)
+    if start < 0 or end < 0 or end <= start:
+        raise AssertionError(
+            "cannot find the admin-password section in dtu-first-login.sh; "
+            "the section markers were renamed or reordered")
+    return body[start:end]
+
+
+KEYBOARD_BLOCK_START = "# ── Keyboard layout"
+KEYBOARD_BLOCK_END = "# ── Den lokale administratorkonto"
+
+
+def keyboard_block() -> str:
+    body = read(FIRST_LOGIN)
+    start = body.find(KEYBOARD_BLOCK_START)
+    end = body.find(KEYBOARD_BLOCK_END)
+    if start < 0 or end < 0 or end <= start:
+        raise AssertionError(
+            "cannot find the keyboard-layout section in dtu-first-login.sh")
+    return body[start:end]
+
+
+class TestKeyboardLayout(unittest.TestCase):
+    """The layout has to reach the login screen, not just the session.
+
+    If it only reaches the session, the user types the password they cannot
+    see on the old layout, and nothing on screen explains the rejection.
+    """
+
+    HARNESS = r"""
+set -euo pipefail
+DIALOG=kdialog
+DEPT_LABEL="DTU Sustain"
+show_message() { printf 'MSG %s\n' "${2//$'\n'/ }" >> "$WORK/dialogs"; }
+show_error()   { printf 'ERR %s\n' "${2//$'\n'/ }" >> "$WORK/dialogs"; }
+kdialog() {
+    printf 'ASKED\n' >> "$WORK/dialogs"
+    if [[ "${SVAR:-}" == "<CANCEL>" ]]; then return 1; fi
+    printf '%s\n' "${SVAR:-Danish}"
+}
+source "$WORK/block.sh"
+"$@"
+"""
+
+    def run_kb(self, *argv, answer="Danish", localectl_works=False,
+               current="dk"):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            (work / "block.sh").write_text(keyboard_block(), encoding="utf-8")
+            (work / "harness.sh").write_text(self.HARNESS, encoding="utf-8")
+            (work / "dialogs").write_text("", encoding="utf-8")
+            (work / "etc" / "default").mkdir(parents=True)
+
+            bin_dir = work / "bin"
+            bin_dir.mkdir()
+            (bin_dir / "localectl").write_text(
+                '#!/usr/bin/env bash\n'
+                'if [[ "${1:-}" == "status" ]]; then\n'
+                '    printf "   X11 Layout: %s\\n" "${FAKE_LAYOUT:-dk}"; exit 0\n'
+                'fi\n'
+                'if [[ "${LOCALECTL_WORKS:-0}" == "1" ]]; then\n'
+                '    printf "%s\\n" "$*" >> "$WORK/localectl"; exit 0\n'
+                'fi\n'
+                'exit 1\n')
+            # The privileged fallback writes to /etc. Under test those paths
+            # are redirected so the file *content* stays under test rather
+            # than being replaced by a no-op stub.
+            (bin_dir / "pkexec").write_text(
+                '#!/usr/bin/env bash\nsed "s#/etc/#$WORK/etc/#g" | bash -s\n')
+            (bin_dir / "setxkbmap").write_text(
+                '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$WORK/setxkbmap"\n')
+            for f in bin_dir.iterdir():
+                f.chmod(0o755)
+
+            env = {
+                "PATH": f"{bin_dir}:/usr/bin:/bin",
+                "WORK": str(work),
+                "SVAR": answer,
+                "FAKE_LAYOUT": current,
+                "LOCALECTL_WORKS": "1" if localectl_works else "0",
+            }
+            proc = subprocess.run(["bash", str(work / "harness.sh"), *argv],
+                                  capture_output=True, text=True, env=env)
+
+            def maybe(*parts):
+                f = work.joinpath(*parts)
+                return f.read_text(encoding="utf-8") if f.exists() else None
+
+            return {
+                "rc": proc.returncode,
+                "stdout": proc.stdout.strip(),
+                "stderr": proc.stderr,
+                "dialogs": (work / "dialogs").read_text(encoding="utf-8"),
+                "localectl": maybe("localectl"),
+                "setxkbmap": maybe("setxkbmap"),
+                "default_keyboard": maybe("etc", "default", "keyboard"),
+                "xorg": maybe("etc", "X11", "xorg.conf.d", "00-keyboard.conf"),
+            }
+
+    def test_names_and_codes_cannot_drift_apart(self):
+        self.assertEqual(self.run_kb("keyboard_name_for_code", "gb")["stdout"],
+                         "English (UK)")
+        self.assertEqual(self.run_kb("keyboard_code_for_name", "English (US)")["stdout"],
+                         "us")
+
+    def test_only_the_first_of_several_layouts_is_read(self):
+        """A machine can carry "dk,us". The dialog preselects the active one."""
+        r = self.run_kb("current_keyboard_layout", current="dk,us")
+        self.assertEqual(r["stdout"], "dk")
+
+    def test_it_goes_through_localectl_when_that_is_allowed(self):
+        """The PolicyKit module grants domain users locale1.set-keyboard, so
+        on a set-up machine this must not raise a second prompt."""
+        r = self.run_kb("choose_keyboard_layout", answer="German",
+                        localectl_works=True)
+        self.assertIn("set-x11-keymap de", r["localectl"] or "")
+        self.assertIsNone(r["default_keyboard"],
+                          "took the privileged path when it did not have to")
+
+    def test_the_privileged_fallback_writes_what_localed_would(self):
+        """On a machine where the polkit rules are not in yet, which is the
+        machine a first login happens on."""
+        r = self.run_kb("choose_keyboard_layout", answer="English (UK)")
+        self.assertIn('XKBLAYOUT="gb"', r["default_keyboard"] or "")
+        self.assertIn('Option "XkbLayout" "gb"', r["xorg"] or "",
+                      "the login screen reads the xorg file, so it must be written")
+
+    def test_the_running_session_is_switched_too(self):
+        """The next thing the user types is their domain password."""
+        r = self.run_kb("choose_keyboard_layout", answer="German",
+                        localectl_works=True)
+        self.assertEqual((r["setxkbmap"] or "").strip(), "de")
+
+    def test_cancelling_keeps_the_current_layout_and_continues(self):
+        r = self.run_kb("choose_keyboard_layout", answer="<CANCEL>")
+        self.assertEqual(r["rc"], 0, "cancel must not stop the whole setup")
+        self.assertIsNone(r["setxkbmap"])
+        self.assertIsNone(r["default_keyboard"])
+
+    def test_picking_the_current_layout_changes_nothing(self):
+        r = self.run_kb("choose_keyboard_layout", answer="Danish", current="dk")
+        self.assertEqual(r["rc"], 0)
+        self.assertIsNone(r["setxkbmap"])
+        self.assertNotIn("MSG", r["dialogs"], "said something happened when nothing did")
+
+    def test_it_is_asked_before_the_password(self):
+        """Typing a domain password on the wrong layout fails with no
+        explanation, so the order in the script matters."""
+        body = strip_comments(read(FIRST_LOGIN))
+        self.assertLess(body.index("choose_keyboard_layout\n"),
+                        body.index("DTU_PASSWORD=$(get_password"))
+
+
+class TestLocalAdminPassword(unittest.TestCase):
+    """The image ships one local admin password to the whole fleet. This
+    step is what replaces it, so every way out of it is a machine that
+    keeps the shared password. They are all tested here.
+
+    These run the shell, not a regex over it. Three `set -e` bugs in a
+    sibling script reached a user's machine after passing `bash -n`.
+    """
+
+    HARNESS = r"""
+set -euo pipefail
+DEPARTMENT="${DEPARTMENT:-sustain}"
+DEPT_LABEL="DTU Sustain"
+ADMIN_PW_MARKER="$WORK/marker"
+DTU_USERNAME="mpark"
+DTU_PASSWORD="Domaenekode-42!"
+USER="mpark"
+
+show_message() { printf 'MSG\n' >> "$WORK/dialogs"; }
+show_error()   { printf 'ERR %s\n' "${2//$'\n'/ }" >> "$WORK/dialogs"; }
+get_password() {
+    local svar
+    if [[ ! -s "$WORK/answers" ]]; then printf 'ASK\n' >> "$WORK/dialogs"; return 1; fi
+    svar="$(head -n1 "$WORK/answers")"
+    sed -i '1d' "$WORK/answers"
+    printf 'ASK\n' >> "$WORK/dialogs"
+    case "$svar" in
+        "<CANCEL>") return 1 ;;
+        "<EMPTY>")  : ;;
+        *) printf '%s\n' "$svar" ;;
+    esac
+}
+
+source "$WORK/block.sh"
+
+# The account name differs across the fleet, so the real lookup is tested
+# separately against the real /etc/passwd. Here it is fixed, so the rest of
+# the flow is what is under test.
+if [[ "${REAL_LOOKUP:-0}" == "1" ]]; then
+    # Only the lookup, against the real /etc/passwd.
+    fundet=""
+    find_local_admin > "$WORK/found" || : > "$WORK/found"
+    exit 0
+fi
+find_local_admin() { printf 'admin-test\n'; }
+
+change_local_admin_password
+echo "RC=$?"
+"""
+
+    def run_step(self, answers, department="sustain", marker=False, env=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            (work / "block.sh").write_text(admin_password_block(), encoding="utf-8")
+            (work / "answers").write_text(
+                "".join(a + "\n" for a in answers), encoding="utf-8")
+            (work / "dialogs").write_text("", encoding="utf-8")
+            if marker:
+                (work / "marker").write_text("allerede skiftet\n", encoding="utf-8")
+
+            bin_dir = work / "bin"
+            bin_dir.mkdir()
+            # pkexec is the privilege step. Under test it must run the same
+            # `bash -s` with the same stdin, minus the privilege.
+            (bin_dir / "pkexec").write_text("#!/usr/bin/env bash\nexec \"$@\"\n")
+            # chpasswd records exactly what it was handed. That byte string
+            # is the whole point: it is the new password.
+            (bin_dir / "chpasswd").write_text(
+                '#!/usr/bin/env bash\ncat > "$WORK/chpasswd"\n')
+            # /var/lib/dtu-setup cannot be created without root, so the path
+            # is redirected rather than the command neutered: the ordering
+            # of "make the directory, then change the password" stays under
+            # test.
+            (bin_dir / "install").write_text(
+                '#!/usr/bin/env bash\n'
+                'args=(); for a in "$@"; do args+=("${a//\\/var\\/lib\\/dtu-setup/$WORK/varlib}"); done\n'
+                'exec /usr/bin/install "${args[@]}"\n')
+            for f in bin_dir.iterdir():
+                f.chmod(0o755)
+
+            harness = work / "harness.sh"
+            harness.write_text(self.HARNESS, encoding="utf-8")
+
+            environ = {
+                "PATH": f"{bin_dir}:/usr/bin:/bin",
+                "WORK": str(work),
+                "HOME": str(work),
+                "DEPARTMENT": department,
+            }
+            environ.update(env or {})
+            proc = subprocess.run(["bash", str(harness)], capture_output=True,
+                                  text=True, env=environ)
+            # Everything is read here, inside the context manager. Returning
+            # the path instead would hand back a directory that no longer
+            # exists, and every assertion about a file in it would pass by
+            # finding nothing.
+            def maybe(name):
+                f = work / name
+                return f.read_text(encoding="utf-8") if f.exists() else None
+
+            return {
+                "rc": proc.returncode,
+                "stdout": proc.stdout,
+                "stderr": proc.stderr,
+                "dialogs": (work / "dialogs").read_text(encoding="utf-8"),
+                "sent": maybe("chpasswd"),
+                "found": (maybe("found") or "").strip(),
+                "marker": (work / "marker").exists(),
+                "files": sorted(p.name for p in work.iterdir()),
+            }
+
+    # ── the happy path ──────────────────────────────────────────────────────
+    def test_a_good_password_is_set_and_recorded(self):
+        r = self.run_step(["Fjeldgeden7!", "Fjeldgeden7!"])
+        self.assertEqual(r["rc"], 0, r["stderr"])
+        self.assertEqual(r["sent"], "admin-test:Fjeldgeden7!\n")
+        self.assertTrue(r["marker"], "nothing recorded that the password was changed")
+
+    def test_the_password_reaches_chpasswd_byte_for_byte(self):
+        """It travels through a heredoc into a root shell. Anything that
+        quotes it wrong either mangles the password, which locks the account
+        out quietly, or executes part of it as root."""
+        nasty = 'A9!$(touch $WORK/pwned)`touch $WORK/pwned2`;\\ "x"'
+        r = self.run_step([nasty, nasty])
+        self.assertEqual(r["sent"], "admin-test:" + nasty + "\n")
+        self.assertNotIn("pwned", r["files"], "command substitution ran as root")
+        self.assertNotIn("pwned2", r["files"], "backticks ran as root")
+
+    def test_non_ascii_survives(self):
+        r = self.run_step(["Rødgrød~med~Fløde7", "Rødgrød~med~Fløde7"])
+        self.assertEqual(r["sent"], "admin-test:Rødgrød~med~Fløde7\n")
+
+    # ── every way of refusing ───────────────────────────────────────────────
+    def test_too_short_is_refused(self):
+        r = self.run_step(["Kort1!"] * 6)
+        self.assertIsNone(r["sent"])
+        self.assertIn("at least 12 characters", r["dialogs"])
+
+    def test_too_few_character_classes_is_refused(self):
+        r = self.run_step(["kunsmaabogstaverher"] * 6)
+        self.assertIsNone(r["sent"])
+        self.assertIn("at least 3", r["dialogs"])
+
+    def test_the_account_name_cannot_be_the_password(self):
+        r = self.run_step(["Xadmin-testY99!"] * 6)
+        self.assertIsNone(r["sent"])
+        self.assertIn("account name", r["dialogs"])
+
+    def test_the_domain_password_cannot_be_reused(self):
+        """Two accounts with one password is one account."""
+        r = self.run_step(["Domaenekode-42!"] * 6)
+        self.assertIsNone(r["sent"])
+        self.assertIn("WIN domain password", r["dialogs"])
+
+    def test_a_trailing_space_is_refused(self):
+        r = self.run_step(["Fjeldgeden7! "] * 6)
+        self.assertIsNone(r["sent"])
+
+    def test_the_two_entries_must_match(self):
+        r = self.run_step(["Fjeldgeden7!", "Fjeldgeden8!",
+                           "Fjeldgeden7!", "Fjeldgeden7!"])
+        self.assertEqual(r["sent"], "admin-test:Fjeldgeden7!\n",
+                         "a mismatch must cost a retry, not the whole step")
+        self.assertIn("not the same", r["dialogs"])
+
+    def test_three_bad_attempts_give_up_without_changing_anything(self):
+        r = self.run_step(["kort"] * 8)
+        self.assertEqual(r["rc"], 0, "giving up must not kill the setup script")
+        self.assertIsNone(r["sent"])
+        self.assertFalse(r["marker"])
+
+    def test_cancelling_leaves_the_password_alone_and_returns_cleanly(self):
+        """Cancel must not take the rest of the first-login setup down with
+        it, and must not record the password as changed."""
+        r = self.run_step(["<CANCEL>"])
+        self.assertEqual(r["rc"], 0, r["stderr"])
+        self.assertIsNone(r["sent"])
+        self.assertFalse(r["marker"])
+
+    def test_an_empty_entry_is_treated_as_a_cancel(self):
+        r = self.run_step(["<EMPTY>"])
+        self.assertEqual(r["rc"], 0, r["stderr"])
+        self.assertIsNone(r["sent"])
+
+    # ── when it must not run at all ─────────────────────────────────────────
+    def test_it_is_skipped_outside_the_sustain_profile(self):
+        r = self.run_step(["Fjeldgeden7!", "Fjeldgeden7!"], department="ait")
+        self.assertEqual(r["dialogs"], "", "AIT machines were asked anyway")
+        self.assertIsNone(r["sent"])
+
+    def test_an_already_changed_password_is_not_asked_about_again(self):
+        r = self.run_step(["Fjeldgeden7!", "Fjeldgeden7!"], marker=True)
+        self.assertEqual(r["dialogs"], "")
+        self.assertIsNone(r["sent"])
+
+    # ── finding the account ─────────────────────────────────────────────────
+    def test_the_lookup_never_returns_a_system_account(self):
+        """Run the real lookup against this machine's real /etc/passwd.
+        It may legitimately find nothing. What it must never do is hand back
+        a daemon account, because the next thing that happens is that its
+        password is changed."""
+        r = self.run_step([], env={"REAL_LOOKUP": "1"})
+        self.assertEqual(r["rc"], 0, r["stderr"])
+        name = r["found"]
+        if not name:
+            self.skipTest("no local admin account on this machine")
+
+        entry = None
+        for line in Path("/etc/passwd").read_text(encoding="utf-8").splitlines():
+            parts = line.split(":")
+            if len(parts) >= 7 and parts[0] == name:
+                entry = parts
+        self.assertIsNotNone(entry, f"{name!r} is not in /etc/passwd")
+        self.assertGreaterEqual(int(entry[2]), 1000, f"{name} is a system account")
+        self.assertLess(int(entry[2]), 60000, f"{name} is not a local account")
+        self.assertNotRegex(entry[6], r"(nologin|/false|/sync)$",
+                            f"{name} has no usable shell")
+
+    def test_the_marker_is_system_wide_not_per_user(self):
+        """One local account, one password. A marker in $HOME would let the
+        second user on a machine silently overwrite the first user's."""
+        body = strip_comments(read(FIRST_LOGIN))
+        self.assertRegex(body, r'ADMIN_PW_MARKER="/var/lib/')
+        self.assertNotRegex(body, r'ADMIN_PW_MARKER="\$HOME')
+
+    def test_the_step_runs_before_the_done_marker(self):
+        """After the marker is written the dialog never returns, so a step
+        placed below it would never run."""
+        body = strip_comments(read(FIRST_LOGIN))
+        call = body.rindex("change_local_admin_password")
+        marker = body.index('> "$MARKER"')
+        self.assertLess(call, marker)
 
 
 if __name__ == "__main__":

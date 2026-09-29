@@ -160,6 +160,58 @@ sudo apt install ./dtu-sustain-setup_*_all.deb
 11. First-Login Setup ← Welcome-dialog til nye brugere
 ```
 
+### Ved brugerens første login: tastaturlayout
+
+Velkomstdialogen spørger som det første om tastaturlayout, med maskinens
+nuværende layout valgt på forhånd.
+
+Det ligger før brugernavn og kodeord med vilje. Taster brugeren sin domænekode
+gennem et forkert layout, afviser serveren den, og intet på skærmen forklarer
+hvorfor: kodeordsfeltet viser prikker uanset hvad.
+
+Valget sættes to steder:
+
+- systemvidt med `localectl set-x11-keymap`, som skriver
+  `/etc/default/keyboard` og `/etc/X11/xorg.conf.d/00-keyboard.conf`. Det
+  sidste er det X-serveren læser, og SDDM kører på X, så **loginskærmen får
+  samme layout**. Sattes det kun i KDE's egne indstillinger, ville sessionen
+  være rigtig og loginskærmen forblive på det gamle layout, og det er den
+  halvdel der tæller når man taster et kodeord man ikke kan se.
+- på den kørende session med `setxkbmap`, så det næste felt brugeren taster i
+  allerede bruger det nye layout.
+
+Domænebrugere har `org.freedesktop.locale1.set-keyboard` gennem
+PolicyKit-modulet, så på en færdig maskine sker det uden ekstra
+rettighedsprompt. Er reglerne ikke på plads endnu, falder scriptet tilbage til
+`pkexec` og skriver de samme to filer selv.
+
+Annullerer brugeren, beholder maskinen sit nuværende layout.
+
+### Ved brugerens første login: den lokale administratorkode
+
+På Sustain-profilen slutter velkomstdialogen med at bede brugeren om at vælge
+en ny kode til maskinens lokale administratorkonto (`admin-<brugernavn>` eller
+hvad den nu hedder på den maskine).
+
+Grunden er enkel: billedet udrulles med den samme lokale kode overalt, så én
+kode der slipper ud, er en kode til hele flåden.
+
+Krav til koden:
+
+- mindst 12 tegn
+- mindst 3 af de fire: små bogstaver, store bogstaver, tal, tegn
+- ingen mellemrum først eller sidst
+- hverken kontonavnet, brugernavnet eller WIN-domænekoden
+
+Koden skrives ingen steder og kan ikke slås op bagefter. At den er skiftet,
+står i `/var/lib/dtu-setup/admin-password-changed`, sammen med datoen og
+kontonavnet. Springer brugeren trinnet over, kommer spørgsmålet igen ved næste
+login.
+
+**Det betyder for supporten:** den lokale administratorkode er herefter
+forskellig fra maskine til maskine, og kun brugeren kender den. Skal I kunne
+hæve rettigheder på en maskine, skal det gå gennem domænet.
+
 ### Valgfrit modul: TPM2 Auto-Unlock
 
 `TPM2 Auto-Unlock` koeres ikke automatisk i `Run All`.

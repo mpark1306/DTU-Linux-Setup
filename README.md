@@ -90,7 +90,7 @@ Ved første start (eller via dropdown'en i toppen af GUI'en) vælges den institu
 | 11 | **RDP (xrdp)** | Remote Desktop (KDE Plasma via xrdp) | Admin | — |
 | 12 | **Login Screen** | Show the domain user by default (SDDM UID range + name field) | Admin | — |
 | 13 | **TPM2 Auto-Unlock** | LUKS disk auto-unlock (TPM2, no passphrase at boot) | Admin | — |
-| 14 | **TPM2 – Bind om** | Efter en firmwareopdatering (disken spørger om koden igen) | Admin | — |
+| 14 | **TPM2 Re-bind** | After a firmware update (the disk asks for the code again) | Admin | — |
 | 15 | **First-Login Setup** | Deploy welcome dialog for new domain users | Admin | — |
 | 16 | **Reset Test User** *(deaktiveret)* | Remove domain user state & home dir for re-testing | Admin | Brugernavn |
 | 17 | **Repair Home Folders** | Fix broken Desktop/Documents/Pictures from earlier installs + dedupe fstab | User | Brugernavn |
@@ -400,6 +400,10 @@ Enroller LUKS-krypterede diske i maskinens TPM2-chip (`tpm2-enroll.sh`) så disk
 ### 👤 First-Login Setup
 
 Deployer `dtu-first-login.sh` + autostart-entry så nye domænebrugere får en velkomst-dialog ved første login (vejledning til drev, printere m.m.).
+
+Dialogen beder først om **tastaturlayout**. Det sker før brugernavn og kodeord, fordi en domænekode tastet på et forkert layout bliver afvist uden at noget på skærmen forklarer hvorfor: feltet viser prikker uanset hvad. Valget skrives systemvidt med `localectl set-x11-keymap`, så det også gælder loginskærmen, og sættes samtidig på den kørende session med `setxkbmap`.
+
+På Sustain-profilen beder dialogen til sidst brugeren om at vælge en ny kode til maskinens lokale administratorkonto. Billedet udrulles med den samme lokale kode overalt, så én kode der slipper ud, er en kode til hele flåden. Kravene er mindst 12 tegn, mindst 3 af de fire tegntyper, og hverken brugernavnet eller domænekoden. Koden skrives ingen steder og kan ikke slås op bagefter. Er den skiftet, står det i `/var/lib/dtu-setup/admin-password-changed`; springes trinnet over, kommer spørgsmålet igen ved næste login.
 
 ### 🧪 Reset Test User (skjult)
 

@@ -153,7 +153,7 @@ DIRS=("Desktop" "Documents" "Pictures")
 mkdir -p "$(dirname "$LOG")"
 
 if ! mountpoint -q "$MOUNT_POINT"; then
-  echo "$(date '+%F %T') Drev ikke tilgængeligt ($MOUNT_POINT), springer over." >> "$LOG"
+  echo "$(date '+%F %T') Drive not available ($MOUNT_POINT), skipping." >> "$LOG"
   exit 0
 fi
 
@@ -168,7 +168,7 @@ for DIR in "${DIRS[@]}"; do
   rsync -a --update "$SRC" "$DST" >> "$LOG" 2>&1
 done
 
-echo "$(date '+%F %T') Sync gennemført for $USER." >> "$LOG"
+echo "$(date '+%F %T') Sync finished for $USER." >> "$LOG"
 EOF
 chmod 0755 "$SYNC_SCRIPT"
 DEPLOYED_FILES+=("$SYNC_SCRIPT")

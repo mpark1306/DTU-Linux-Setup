@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 ###############################################################################
-# DTU Sustain – printeropsætning, frittstående
+# DTU Sustain – printer setup, frittstående
 #
 # Samme resultat som Printers-modulet i DTU Linux Setup, men uden noget af
 # det: ingen common.sh, ingen site_require, ingen GUI. Beregnet til at blive
@@ -123,9 +123,9 @@ while [[ $# -gt 0 ]]; do
         --plot-server=*) ARG_PLOT_SERVER="${1#*=}"; PLOT_EXPLICITLY_OFF=1; shift ;;
         --no-plotter)   ARG_PLOT_SERVER=""; PLOT_EXPLICITLY_OFF=1; shift ;;
         --password|--password=*)
-            fail "Der er ikke noget --password-flag."
-            echo "   Alt på kommandolinjen kan læses med 'ps' af enhver bruger"
-            echo "   på maskinen. Brug DTU_PASSWORD=… eller lad scriptet spørge."
+            fail "There is no --password flag."
+            echo "   Everything on the command line can be read with 'ps' by any user"
+            echo "   on the machine. Use DTU_PASSWORD=… or let the script ask."
             exit 1 ;;
         --remove-all-printers) REMOVE_ALL=1; shift ;;
         # Var et flag før standarden blev vendt. Accepteres stadig, så en
@@ -139,12 +139,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ $EUID -ne 0 ]]; then
-    fail "Dette script skal køres som root."
+    fail "This script must be run as root."
     echo "   sudo $0"
     exit 1
 fi
 
-banner "DTU Sustain – printeropsætning"
+banner "DTU Sustain – printer setup"
 
 # ── Serveradresser ───────────────────────────────────────────────────────────
 
@@ -154,7 +154,7 @@ banner "DTU Sustain – printeropsætning"
 # Kør med --show-values hvis du fejlsøger alene og vil se dem.
 mask() {
     local v="$1"
-    [[ -z "$v" ]] && { printf '(ikke sat)'; return; }
+    [[ -z "$v" ]] && { printf '(not set)'; return; }
     if [[ "${SHOW_VALUES:-0}" -eq 1 ]]; then printf '%s' "$v"
     else printf '(sat, %d tegn)' "${#v}"; fi
 }
@@ -224,16 +224,16 @@ P="${DTU_PASSWORD:-}"
 DOMAIN="${ARG_DOMAIN:-${DTU_AD_NETBIOS:-WIN}}"
 
 if [[ -z "$U" || -z "$P" ]]; then
-    echo "Køen printer som en navngiven bruger — det er sådan FollowMe ved"
-    echo "hvem jobbet tilhører, og hvem der kan frigive det ved maskinen."
-    echo "Sidder du ved en andens computer, er det DERES login der skal ind."
+    echo "The queue prints as a named user. That is how FollowMe knows"
+    echo "who the job belongs to, and who can release it at the machine."
+    echo "If you are at someone else's computer, it is THEIR login that goes in."
     echo ""
 fi
 
 if [[ -z "$U" ]]; then
     read -rp "  WIN-brugernavn, kun kortnavnet (fx mpark): " U
 fi
-[[ -n "$U" ]] || { fail "Brugernavn er påkrævet."; exit 1; }
+[[ -n "$U" ]] || { fail "A username is required."; exit 1; }
 
 # Folk skriver domænet med. Det er en rimelig ting at gøre, og alle tre
 # former er "rigtige" andre steder — men credentials-filen skal have
@@ -243,21 +243,21 @@ U_RAW="$U"
 U="${U##*\\}"            # WIN\mpark  →  mpark
 U="${U%%@*}"             # mpark@dtu.dk → mpark
 if [[ "$U" != "$U_RAW" ]]; then
-    echo "      (bruger '$U' — domænet sættes på automatisk)"
+    echo "      (using '$U'; the domain is added automatically)"
 fi
 
 if [[ -z "$P" ]]; then
     if [[ ! -t 0 ]]; then
-        fail "Intet kodeord, og der er ingen terminal at spørge på."
-        echo "   Sæt DTU_PASSWORD, eller kør scriptet fra en terminal."
+        fail "No password, and there is no terminal to ask in."
+        echo "   Set DTU_PASSWORD, or run the script from a terminal."
         exit 1
     fi
-    read -rsp "  Kodeord for ${DOMAIN}\\${U} (vises ikke): " P
+    read -rsp "  Password for ${DOMAIN}\\${U} (not shown): " P
     echo ""
 fi
-[[ -n "$P" ]] || { fail "Kodeord er påkrævet."; exit 1; }
+[[ -n "$P" ]] || { fail "A password is required."; exit 1; }
 
-echo "  Køen spooler som:  ${DOMAIN}\\${U}"
+echo "  The queue spools as:  ${DOMAIN}\\${U}"
 echo ""
 
 # ── Serveradresser ───────────────────────────────────────────────────────────
@@ -272,18 +272,18 @@ elif find_var SITE_PRINT_SERVER; then
     PRINT_SERVER="$FOUND_VALUE"
     echo "  FollowMe-server: $(mask "$PRINT_SERVER")  fra ${FOUND_IN}"
 else
-    echo "FollowMe-printserverens værtsnavn."
+    echo "The host name of the FollowMe print server."
     echo ""
-    echo "  Det er den Windows-printserver Sustains kopimaskiner hænger på —"
-    echo "  et navn i stil med <navn>.win.dtu.dk. Det er IKKE kopimaskinens"
-    echo "  eget navn og ikke en IP-adresse."
+    echo "  It is the Windows print server that Sustain's copiers sit behind,"
+    echo "  a name like <name>.win.dtu.dk. It is NOT the copier's"
+    echo "  own name, and not an IP address."
     echo ""
-    echo "  Står den i /etc/dtu-setup/site.conf på en maskine der virker,"
-    echo "  finder scriptet den selv:"
+    echo "  If it is in /etc/dtu-setup/site.conf on a machine that works,"
+    echo "  the script finds it by itself:"
     echo "      grep SITE_PRINT_SERVER /etc/dtu-setup/*.conf /etc/dtu-setup/*.env"
     echo ""
-    read -rp "  Værtsnavn: " PRINT_SERVER
-    [[ -n "$PRINT_SERVER" ]] || { fail "Uden printserver kan FollowMe-køen ikke oprettes."; exit 1; }
+    read -rp "  Host name: " PRINT_SERVER
+    [[ -n "$PRINT_SERVER" ]] || { fail "Without a print server the FollowMe queue cannot be created."; exit 1; }
 fi
 
 if [[ "$PLOT_EXPLICITLY_OFF" -eq 1 ]]; then
@@ -297,10 +297,10 @@ elif find_var SITE_SUSTAIN_PLOT_SERVER; then
 else
     echo ""
     echo "Storformatplotteren i BYG (valgfri)."
-    echo "  Enhedens eget værtsnavn — den har ingen printserver foran sig."
-    echo "  Tryk Enter for at springe den over; FollowMe oprettes alligevel."
+    echo "  The device's own host name. It has no print server in front of it."
+    echo "  Press Enter to skip it; FollowMe is created either way."
     echo ""
-    read -rp "  Værtsnavn, eller Enter: " PLOT_SERVER
+    read -rp "  Host name, or Enter: " PLOT_SERVER
 fi
 echo ""
 
@@ -318,8 +318,8 @@ find_ppd() {   # find_ppd FILNAVN
 }
 
 if ! PPD_FILE="$(find_ppd KOC751iUX.ppd)"; then
-    fail "KOC751iUX.ppd blev ikke fundet ved siden af scriptet."
-    echo "   Den skal ligge i samme mappe som dette script."
+    fail "KOC751iUX.ppd was not found next to the script."
+    echo "   It has to be in the same folder as this script."
     exit 1
 fi
 PLOT_PPD_FILE="$(find_ppd hp-designjet-Z9dr-44in-ps.ppd || true)"
@@ -383,19 +383,19 @@ if [[ ${#NEEDED[@]} -eq 0 ]]; then
 else
     for _ in $(seq 1 30); do
         fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
-        echo "      venter på en anden apt-kørsel..."
+        echo "      waiting for another apt run..."
         sleep 5
     done
-    apt-get update -qq || warn "apt-get update meldte fejl; fortsætter med det der er cachet."
+    apt-get update -qq || warn "apt-get update reported an error; continuing with what is cached."
     if ! apt-get install -y "${NEEDED[@]}"; then
         # Manglende cups er fatalt. Resten kan undværes til en genkørsel.
         if ! command -v lpadmin >/dev/null 2>&1; then
-            fail "Kunne ikke installere CUPS, og det er ikke installeret i forvejen."
-            echo "   Uden netværk kan scriptet ikke komme videre. Prøv igen når"
+            fail "Could not install CUPS, and it is not installed already."
+            echo "   Without a network the script cannot continue. Try again when"
             echo "   maskinen har forbindelse."
             exit 1
         fi
-        warn "Kunne ikke installere: ${NEEDED[*]} — fortsætter med det der er."
+        warn "Could not install: ${NEEDED[*]}; continuing with what is there."
     fi
 fi
 
@@ -410,11 +410,11 @@ for _ in $(seq 1 10); do
     sleep 1
 done
 if ! lpstat -r >/dev/null 2>&1; then
-    problem "CUPS svarer ikke. Se: systemctl status cups"
-    echo "   Uden en kørende dæmon kan køerne ikke oprettes."
+    problem "CUPS is not responding. See: systemctl status cups"
+    echo "   Without a running daemon the queues cannot be created."
     exit 1
 fi
-echo "      kører"
+echo "      running"
 
 # cups-browsed opdager netværksprintere selv og genopretter køer bag ryggen
 # på os. At stoppe den er ikke nok — den starter igen ved næste boot eller
@@ -422,13 +422,13 @@ echo "      kører"
 if systemctl list-unit-files cups-browsed.service >/dev/null 2>&1; then
     systemctl disable --now cups-browsed >/dev/null 2>&1
     systemctl mask cups-browsed >/dev/null 2>&1
-    echo "      cups-browsed slået fra og maskeret"
+    echo "      cups-browsed disabled and masked"
 fi
 
-echo "[3/8] Fjerner eksisterende køer..."
+echo "[3/8] Removing the existing queues..."
 mapfile -t EXISTING < <(lpstat -p 2>/dev/null | awk '/^printer /{print $2}')
 if [[ ${#EXISTING[@]} -eq 0 ]]; then
-    echo "      ingen køer i forvejen"
+    echo "      no queues to begin with"
 else
     # Kun de køer scriptet selv ejer. En Brother på skrivebordet eller en
     # USB-printer i et lokale er ikke vores at fjerne.
@@ -454,10 +454,10 @@ else
         if [[ "$REMOVE_ALL" -eq 1 ]] || ours "$q"; then KILL+=("$q"); else KEPT+=("$q"); fi
     done
     if [[ ${#KEPT[@]} -gt 0 ]]; then
-        echo "      beholder ${#KEPT[@]} kø(er) der ikke er vores: ${KEPT[*]}"
+        echo "      keeping ${#KEPT[@]} queue(s) that are not ours: ${KEPT[*]}"
     fi
     if [[ ${#KILL[@]} -eq 0 ]]; then
-        echo "      ingen DTU-køer at fjerne"
+        echo "      no DTU queues to remove"
     else
         for q in "${KILL[@]}"; do
             cupsreject "$q" >/dev/null 2>&1
@@ -466,7 +466,7 @@ else
             if lpadmin -x "$q" >/dev/null 2>&1; then
                 echo "      fjernet: $q"
             else
-                problem "Kunne ikke fjerne køen '$q'."
+                problem "Could not remove the queue '$q'."
             fi
         done
     fi
@@ -484,16 +484,16 @@ username=${DOMAIN}\\${U}
 password=${P}
 CREDS
 )
-chown root:lp "${CREDS_FILE}" 2>/dev/null || problem "Kunne ikke sætte ejerskab på ${CREDS_FILE}."
+chown root:lp "${CREDS_FILE}" 2>/dev/null || problem "Could not set the ownership of ${CREDS_FILE}."
 chmod 640 "${CREDS_FILE}"
 [[ "$(stat -c '%U:%G %a' "$CREDS_FILE" 2>/dev/null)" == "root:lp 640" ]] \
-    || problem "${CREDS_FILE} har ikke root:lp 640."
+    || problem "${CREDS_FILE} is not root:lp 640."
 echo "      skrevet (root:lp 640)"
 
 echo "[5/8] smbspool-auth-backend..."
 BACKEND_PATH=/usr/lib/cups/backend/smbspool-auth
 if [[ ! -x /usr/bin/smbspool ]]; then
-    problem "/usr/bin/smbspool mangler — FollowMe-køen kan ikke spoole."
+    problem "/usr/bin/smbspool is missing, so the FollowMe queue cannot spool."
     echo "   Installér samba-common-bin / smbclient."
 fi
 # Skriv til en midlertidig fil og flyt på plads. Afbrydes scriptet midt i,
@@ -518,11 +518,11 @@ mv -f "${BACKEND_PATH}.new" "${BACKEND_PATH}"
 rm -f /usr/lib/cups/backend/smb-auth 2>/dev/null
 # CUPS nægter at køre en backend der er skrivbar for andre end root.
 if [[ "$(stat -c '%U %a' "$BACKEND_PATH")" != "root 755" ]]; then
-    problem "Backend'en har forkerte rettigheder — CUPS vil ikke køre den."
+    problem "The backend has the wrong permissions, so CUPS will not run it."
 fi
 echo "      installeret"
 
-echo "[6/8] Kan serverne nås..."
+echo "[6/8] Can the servers be reached..."
 # Uden det her bliver en uopnåelig server til en kø der ser fin ud i lpstat
 # og taber hvert job i stilhed.
 # Portforespørgslen laves med Python, ikke med bash: en shell der åbner en rå
@@ -536,22 +536,22 @@ except OSError: sys.exit(1)
 ' "$1" "$2" 2>/dev/null
 }
 if reachable "$PRINT_SERVER" 445; then
-    echo "      FollowMe-server svarer på 445 (SMB)"
+    echo "      the FollowMe server answers on 445 (SMB)"
 else
-    warn "FollowMe-serveren svarer ikke på port 445."
-    echo "      Køen oprettes alligevel, men jobs vil ikke gå igennem før"
-    echo "      maskinen kan nå den — typisk VPN eller kabel."
+    warn "The FollowMe server does not answer on port 445."
+    echo "      The queue is created anyway, but jobs will not go through until"
+    echo "      the machine can reach it, usually over VPN or a cable."
 fi
 if [[ -n "$PLOT_SERVER" ]]; then
     if reachable "$PLOT_SERVER" 9100; then
-        echo "      plotteren svarer på 9100 (JetDirect)"
+        echo "      the plotter answers on 9100 (JetDirect)"
     else
-        warn "Plotteren svarer ikke på port 9100."
-        echo "      Den skal kunne nås direkte — den ligger ikke bag FollowMe."
+        warn "The plotter does not answer on port 9100."
+        echo "      It has to be reachable directly; it is not behind FollowMe."
     fi
 fi
 
-echo "[7/8] Opretter køer..."
+echo "[7/8] Creating the queues..."
 if lpadmin -p FollowMe-MFP-PCL -E \
       -v "smbspool-auth://${PRINT_SERVER}/FollowMe-MFP-PCL" \
       -P "$PPD_FILE" \
@@ -560,7 +560,7 @@ if lpadmin -p FollowMe-MFP-PCL -E \
     echo "      FollowMe-MFP-PCL oprettet"
     MFP_CREATED=1
 else
-    problem "Kunne ikke oprette FollowMe-MFP-PCL: $(tr -d '\n' < /tmp/lpadmin.err)"
+    problem "Could not create FollowMe-MFP-PCL: $(tr -d '\n' < /tmp/lpadmin.err)"
 fi
 
 # Plotteren er ikke en FollowMe-kø. Den har ingen SMB-tjeneste, men lytter på
@@ -570,9 +570,9 @@ fi
 # TextPureBlack, GlossyMode …) og findes ikke i HP'ens PPD; lpadmin ville
 # afvise dem.
 if [[ -z "$PLOT_SERVER" ]]; then
-    echo "      plotteren sprunget over (ingen adresse)"
+    echo "      plotter skipped (no address)"
 elif [[ -z "$PLOT_PPD_FILE" ]]; then
-    problem "hp-designjet-Z9dr-44in-ps.ppd blev ikke fundet — plotteren sprunget over."
+    problem "hp-designjet-Z9dr-44in-ps.ppd was not found; plotter skipped."
 elif lpadmin -p BYG-PHP03-PCL -E \
         -v "socket://${PLOT_SERVER}:9100" \
         -P "$PLOT_PPD_FILE" \
@@ -583,7 +583,7 @@ elif lpadmin -p BYG-PHP03-PCL -E \
     echo "      BYG-PHP03-PCL oprettet"
     PLOT_CREATED=1
 else
-    problem "Kunne ikke oprette BYG-PHP03-PCL: $(tr -d '\n' < /tmp/lpadmin.err)"
+    problem "Could not create BYG-PHP03-PCL: $(tr -d '\n' < /tmp/lpadmin.err)"
 fi
 rm -f /tmp/lpadmin.err
 
@@ -598,7 +598,7 @@ echo "[8/8] Verificerer..."
 verify_queue() {   # verify_queue NAVN FORVENTET_URI_PRÆFIKS
     local q="$1" want="$2" state uri
     if ! lpstat -p "$q" >/dev/null 2>&1; then
-        problem "Køen '$q' findes ikke efter opsætning."
+        problem "The queue '$q' does not exist after setup."
         return 1
     fi
     uri="$(lpstat -v "$q" 2>/dev/null | sed 's/.*: //')"
@@ -610,15 +610,15 @@ verify_queue() {   # verify_queue NAVN FORVENTET_URI_PRÆFIKS
     if [[ "$state" == *disabled* ]]; then
         cupsenable "$q" >/dev/null 2>&1
         if lpstat -p "$q" 2>/dev/null | head -1 | grep -q disabled; then
-            problem "'$q' er disabled og kunne ikke slås til."
+            problem "'$q' is disabled and could not be enabled."
             return 1
         fi
-        warn "'$q' var disabled — slået til igen."
+        warn "'$q' was disabled; enabled again."
     fi
     if lpstat -a "$q" 2>/dev/null | grep -q "not accepting"; then
         cupsaccept "$q" >/dev/null 2>&1
         if lpstat -a "$q" 2>/dev/null | grep -q "not accepting"; then
-            problem "'$q' afviser jobs og kunne ikke rettes."
+            problem "'$q' is rejecting jobs and could not be fixed."
             return 1
         fi
         warn "'$q' afviste jobs — rettet."
@@ -636,15 +636,15 @@ banner "Resultat"
 lpstat -p 2>/dev/null
 echo ""
 if [[ ${#PROBLEMS[@]} -eq 0 ]]; then
-    ok "Alt er på plads. Scriptet kan køres igen når som helst."
+    ok "Everything is in place. The script can be run again at any time."
     echo ""
     echo "  Testside:  lp -d FollowMe-MFP-PCL /usr/share/cups/data/testprint"
-    echo "  Jobkø:     lpstat -o"
+    echo "  Job queue: lpstat -o"
     exit 0
 fi
 fail "${#PROBLEMS[@]} problem(er) tilbage:"
 for pr in "${PROBLEMS[@]}"; do echo "    • $pr"; done
 echo ""
 echo "  Logfil:    sudo tail -50 /var/log/cups/error_log"
-echo "  Kør igen:  sudo $0"
+echo "  Run again: sudo $0"
 exit 1

@@ -69,7 +69,7 @@ echo "  M365 PWAs:    ${PWA_APPS[*]:-none}"
 if $CISCO_ENABLED && (( ${#CISCO_MODULES[@]} == 0 )); then
     CISCO_MODULES=(vpn)
 fi
-echo "  Cisco:        ${CISCO_ENABLED} (moduler: ${CISCO_MODULES[*]:-ingen})"
+echo "  Cisco:        ${CISCO_ENABLED} (modules: ${CISCO_MODULES[*]:-none})"
 
 # Calculate total steps
 TOTAL_STEPS=2  # Flatpak setup + Flatpak install
@@ -366,10 +366,10 @@ if $CISCO_ENABLED; then
                 CISCO_LOG_CAPPED=0
                 if (( LOG_SIZE > CISCO_MAX_LOG )); then
                     CISCO_LOG_CAPPED=1
-                    warn "${MODULE} skrev over $((CISCO_MAX_LOG / 1024 / 1024)) MB log og blev stoppet."
-                    echo "        Den spurgte formentlig om noget den ikke fik brugbart svar paa."
+                    warn "${MODULE} wrote more than $((CISCO_MAX_LOG / 1024 / 1024)) MB of log and was stopped."
+                    echo "        It most likely asked something it never got a usable answer to."
                     : > "$MODULE_LOG"
-                    echo "        (loggen er ryddet; den ville ellers fylde disken)" >> "$MODULE_LOG"
+                    echo "        (the log was cleared; it would otherwise fill the disk)" >> "$MODULE_LOG"
                 fi
 
                 # Kun halen laeses. Hele filen i en variabel var den anden

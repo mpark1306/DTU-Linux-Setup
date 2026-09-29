@@ -24,17 +24,17 @@ if [[ -r "$SEEN_FILE" ]] && [[ "$(cat "$SEEN_FILE" 2>/dev/null)" == "$STATE_STAM
     exit 0
 fi
 
-TITEL="Diskens automatiske oplåsning"
-TEKST="Din maskine bad om diskkoden ved opstart.
+TITLE="The disk's automatic unlock"
+TEXT="Your machine asked for the disk passphrase at boot.
 
-Der er ikke noget galt med disken eller med din kode. Maskinens firmware er
-blevet opdateret, og den lås der plejer at åbne disken automatisk, blev sat
-op mod den gamle firmware.
+There is nothing wrong with the disk or with your passphrase. The machine's
+firmware has been updated, and the lock that normally opens the disk
+automatically was set up against the old firmware.
 
-Den skal sættes op igen én gang. Så spørger maskinen ikke mere.
+It needs to be set up once more. After that the machine stops asking.
 
-Åbn DTU Linux Setup og tryk på 'TPM2 – Bind om'. Du skal bruge din diskkode
-én gang undervejs."
+Open DTU Linux Setup and press 'TPM2 Re-bind'. You will need your disk
+passphrase once along the way."
 
 # Vent til skrivebordet er der. Autostart kører tidligt, og en besked der
 # kommer før panelet er tegnet, forsvinder uset.
@@ -42,12 +42,12 @@ sleep 20
 
 vist=0
 if command -v kdialog >/dev/null 2>&1; then
-    kdialog --title "$TITEL" --msgbox "$TEKST" && vist=1
+    kdialog --title "$TITLE" --msgbox "$TEXT" && vist=1
 elif command -v zenity >/dev/null 2>&1; then
-    zenity --info --title="$TITEL" --text="$TEKST" --width=480 && vist=1
+    zenity --info --title="$TITLE" --text="$TEXT" --width=480 && vist=1
 elif command -v notify-send >/dev/null 2>&1; then
-    notify-send -u critical -t 0 "$TITEL" \
-        "Maskinen spurgte om diskkoden, fordi firmwaren er opdateret. Åbn DTU Linux Setup og tryk 'TPM2 – Bind om'." \
+    notify-send -u critical -t 0 "$TITLE" \
+        "The machine asked for the disk passphrase because the firmware was updated. Open DTU Linux Setup and press 'TPM2 Re-bind'." \
         && vist=1
 fi
 

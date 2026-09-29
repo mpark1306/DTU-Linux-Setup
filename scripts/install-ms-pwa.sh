@@ -55,7 +55,7 @@ while [[ $# -gt 0 ]]; do
     --no-theme-icons) USE_THEME=0 ;;
     --no-deps)        DEPS=0 ;;
     --print-wmclass)  PRINT_WM=1 ;;
-    --icon-dir)       LOCAL_ICONS="${2:?--icon-dir kræver en sti}"; shift ;;
+    --icon-dir)       LOCAL_ICONS="${2:?--icon-dir needs a path}"; shift ;;
     --list)
       printf '%-12s %s\n' "ID" "NAVN"
       for a in "${APPS[@]}"; do IFS='|' read -r id name _ <<<"$a"; printf '%-12s %s\n' "$id" "$name"; done
@@ -68,12 +68,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ $SYSTEM -eq 1 ]]; then
-  [[ $EUID -eq 0 ]] || { echo "--system kræver root." >&2; exit 1; }
+  [[ $EUID -eq 0 ]] || { echo "--system needs root." >&2; exit 1; }
   APP_DIR="/usr/share/applications"; ICON_DIR="/usr/share/icons/ms-pwa"
 else
   if [[ $EUID -eq 0 && $CHECK_ONLY -eq 0 && $PRINT_WM -eq 0 ]]; then
-    echo "Kørt som root uden --system: filerne ville lande i ${HOME}/.local og" >&2
-    echo "aldrig blive set af din bruger. Kør enten uden sudo, eller med --system." >&2
+    echo "Run as root without --system: the files would land in ${HOME}/.local and" >&2
+    echo "never be seen by your user. Run it without sudo, or with --system." >&2
     exit 1
   fi
   APP_DIR="$HOME/.local/share/applications"; ICON_DIR="$HOME/.local/share/icons/ms-pwa"
@@ -109,7 +109,7 @@ ensure_deps() {
 
   if [[ $EUID -ne 0 ]]; then
     command -v sudo >/dev/null 2>&1 && sudo_cmd="sudo" || {
-      echo "Mangler root og sudo - kan ikke installere pakker. Brug --no-deps."
+      echo "No root and no sudo, so packages cannot be installed. Use --no-deps."
       return 0
     }
   fi
@@ -133,7 +133,7 @@ ensure_deps() {
         $sudo_cmd zypper --non-interactive install --no-recommends "${missing[@]}" ;;
     esac
   else
-    echo "Alle systempakker er til stede."
+    echo "All system packages are present."
   fi
 
   # Flathub + Ungoogled Chromium
@@ -325,14 +325,14 @@ resolve_icon() {
 if [[ $REMOVE -eq 0 && $CHECK_ONLY -eq 0 ]]; then
   [[ $DEPS -eq 1 ]] && ensure_deps
   BROWSER="$(find_browser)" || {
-    echo "Ungoogled Chromium blev ikke fundet." >&2
+    echo "Ungoogled Chromium was not found." >&2
     echo "Installér: flatpak install flathub io.github.ungoogled_software.ungoogled_chromium" >&2
     exit 1
   }
   echo "Browser: $BROWSER"
-  [[ -n "$IM" ]] || echo "Bemærk: ImageMagick mangler — ikoner konverteres ikke til 256x256 PNG."
+  [[ -n "$IM" ]] || echo "Note: ImageMagick is missing, so icons are not converted to 256x256 PNG."
   if [[ $USE_THEME -eq 1 ]] && ! find_theme_icon "ms-word" >/dev/null; then
-    echo "Advarsel: intet ikontema med Office-ikoner fundet - ikoner hentes fra nettet."
+    echo "Warning: no icon theme with Office icons found; icons are fetched from the web."
   fi
 fi
 [[ $REMOVE -eq 1 ]] || mkdir -p "$ICON_DIR"
@@ -379,7 +379,7 @@ Type=Application
 Version=1.0
 Name=${name}
 GenericName=Microsoft 365
-Comment=${name} som web-app i Ungoogled Chromium
+Comment=${name} as a web app in Ungoogled Chromium
 Exec=${BROWSER} --app=${url}
 Icon=${ICON_PATH}
 Terminal=false
@@ -393,14 +393,14 @@ EOF
   count=$((count + 1))
 done
 
-[[ $count -gt 0 ]] || { echo "Ingen apps matchede. Kør --list for at se ID'er." >&2; exit 1; }
+[[ $count -gt 0 ]] || { echo "No apps matched. Run --list to see the IDs." >&2; exit 1; }
 
 if [[ $CHECK_ONLY -eq 1 ]]; then
-  rm -rf "$ICON_DIR"; echo "---"; echo "Fundet: $real   Fallback: $fake"; exit 0
+  rm -rf "$ICON_DIR"; echo "---"; echo "Found: $real   Fallback: $fake"; exit 0
 fi
 if [[ $REMOVE -eq 0 ]]; then
   command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$APP_DIR" 2>/dev/null || true
-  echo "Færdig ($count stk.) — $real rigtige ikoner, $fake genererede."
+  echo "Done ($count apps): $real real icons, $fake generated."
 else
-  echo "Færdig ($count stk.)."
+  echo "Done ($count apps)."
 fi

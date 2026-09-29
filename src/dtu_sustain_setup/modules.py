@@ -150,8 +150,8 @@ MODULES: list[ModuleDef] = [
     ),
     ModuleDef(
         id="tpm2-rebind",
-        title="TPM2 – Bind om",
-        description="Efter en firmwareopdatering\n(disken spørger om koden igen)",
+        title="TPM2 Re-bind",
+        description="After a firmware update\n(the disk asks for the code again)",
         script_name="tpm2-rebind.sh",
         needs_root=True,
         input_type="none",

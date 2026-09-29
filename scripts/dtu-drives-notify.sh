@@ -40,11 +40,11 @@ CHOICE="$(timeout 300 sudo -u "$TARGET_USER" \
         --app-name="DTU Linux Setup" \
         --icon=network-workgroup \
         --urgency=normal \
-        --action="refresh=Genopfrisk drev" \
-        "Netværket er skiftet" \
-        "Dine netværksdrev peger på et mål der ikke kan nås herfra.
+        --action="refresh=Refresh drives" \
+        "The network has changed" \
+        "Your network drives point at a target that cannot be reached from here.
 
-Tryk for at forbinde dem igen, eller åbn “Genopfrisk netværksdrev” i menuen." \
+Click to reconnect them, or open “Refresh Network Drives” from the menu." \
     2>/dev/null)"
 
 [[ "$CHOICE" == "refresh" ]] || exit 0
@@ -61,10 +61,10 @@ if flock -w 30 /var/lock/dtu-drives-reselect.lock \
         "${SCRIPT_DIR}/dtu-drives-reselect.sh" >> /var/log/dtu-drives-reselect.log 2>&1; then
     sudo -u "$TARGET_USER" DBUS_SESSION_BUS_ADDRESS="$BUS" \
         notify-send --app-name="DTU Linux Setup" --icon=dialog-ok \
-        "Netværksdrev genopfrisket" "Drevene er forbundet igen." 2>/dev/null
+        "Network drives refreshed" "The drives are connected again." 2>/dev/null
 else
     sudo -u "$TARGET_USER" DBUS_SESSION_BUS_ADDRESS="$BUS" \
         notify-send --app-name="DTU Linux Setup" --icon=dialog-error --urgency=critical \
-        "Kunne ikke genopfriske drevene" \
-        "Ingen af filserverne svarer på dette netværk. Prøv igen når du er på kabel, DTUSecure eller VPN." 2>/dev/null
+        "Could not refresh the drives" \
+        "None of the file servers answer on this network. Try again on a cable, on DTUSecure, or on VPN." 2>/dev/null
 fi

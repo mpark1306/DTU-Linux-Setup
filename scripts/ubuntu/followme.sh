@@ -41,13 +41,13 @@ if [[ "$DEPARTMENT" == "ait" ]]; then
     fi
   done
   if [[ -z "$ICON_SRC" ]]; then
-    warn "dtuprint.png ikke fundet – installerer uden ikon."
+    warn "dtuprint.png not found; installing without an icon."
   else
     install -D -m 0644 "$ICON_SRC" "$ICON_DST"
     echo "    icon: $ICON_DST"
   fi
 
-  echo "[2/4] Sikrer at en understøttet browser er installeret..."
+  echo "[2/4] Making sure a supported browser is installed..."
   if ! command -v chromium-browser >/dev/null 2>&1 \
      && ! command -v chromium >/dev/null 2>&1 \
      && ! command -v google-chrome >/dev/null 2>&1 \
@@ -56,7 +56,7 @@ if [[ "$DEPARTMENT" == "ait" ]]; then
     apt_wait
     apt-get install -y chromium-browser 2>/dev/null \
       || snap install chromium 2>/dev/null \
-      || warn "Kunne ikke installere chromium – Firefox bruges som fallback."
+      || warn "Could not install chromium; falling back to Firefox."
   fi
 
   echo "[3/4] Skriver wrapper-script ${WRAPPER}..."
@@ -96,7 +96,7 @@ WRAPEOF
 Type=Application
 Name=DTU WebPrint
 GenericName=Print Portal
-Comment=Send dokumenter til DTU's webprint-portal
+Comment=Send documents to DTU's web print portal
 Exec=${WRAPPER}
 Icon=${ICON_NAME}
 Terminal=false
@@ -244,9 +244,9 @@ lpadmin -p FollowMe-MFP-PCL -E \
 # lpadmin ville afvise dem. Den gamle Plot-PS-kø arvede dem alligevel,
 # hvilket den slap af sted med fordi FollowMe-serveren renderede jobbet.
 if [[ -z "${SITE_SUSTAIN_PLOT_SERVER:-}" ]]; then
-  warn "SITE_SUSTAIN_PLOT_SERVER er ikke sat — springer BYG-PHP03-PCL over."
+  warn "SITE_SUSTAIN_PLOT_SERVER is not set; skipping BYG-PHP03-PCL."
 elif [[ ! -f "$PLOT_PPD_FILE" ]]; then
-  fail "hp-designjet-Z9dr-44in-ps.ppd blev ikke fundet — kan ikke oprette BYG-PHP03-PCL."
+  fail "hp-designjet-Z9dr-44in-ps.ppd was not found; cannot create BYG-PHP03-PCL."
 else
   lpadmin -p BYG-PHP03-PCL -E \
     -v "socket://${SITE_SUSTAIN_PLOT_SERVER}:9100" \
@@ -255,7 +255,7 @@ else
     -L "BYG" \
     -o PageSize=A4 \
     -o job-sheets=none,none
-  ok "BYG-PHP03-PCL tilføjet (${SITE_SUSTAIN_PLOT_SERVER}:9100)."
+  ok "BYG-PHP03-PCL added (${SITE_SUSTAIN_PLOT_SERVER}:9100)."
 fi
 
 systemctl restart cups

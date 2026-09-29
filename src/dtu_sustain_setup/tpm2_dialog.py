@@ -96,7 +96,7 @@ class Tpm2ReadinessDialog(QDialog):
         self._proceed = False
 
         pal = palette()
-        self.setWindowTitle("TPM2 Auto-Unlock – forudsætninger")
+        self.setWindowTitle("TPM2 Auto-Unlock – requirements")
         self.setMinimumSize(680, 520)
         self.setStyleSheet(f"background: {pal.window_bg};")
 
@@ -104,7 +104,7 @@ class Tpm2ReadinessDialog(QDialog):
         layout.setSpacing(12)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        heading = QLabel("Kan denne maskine bruge TPM2 auto-unlock?")
+        heading = QLabel("Can this machine use TPM2 auto-unlock?")
         heading.setStyleSheet(
             f"color: {pal.accent_text}; font-size: 16px; font-weight: 700;"
         )
@@ -130,10 +130,10 @@ class Tpm2ReadinessDialog(QDialog):
         # ── Buttons ────────────────────────────────────────────────────────
         bar = QHBoxLayout()
 
-        self._elevate_btn = QPushButton("Kontrollér resten med rettigheder")
+        self._elevate_btn = QPushButton("Check the rest as administrator")
         self._elevate_btn.setToolTip(
-            "Nogle punkter kan kun aflæses som administrator: om disken allerede\n"
-            "er bundet til TPM'en, og om clevis er i initramfs."
+            "Some checks can only be read as administrator: whether the disk is\n"
+            "already bound to the TPM, and whether clevis is in the initramfs."
         )
         self._elevate_btn.setStyleSheet(
             "QPushButton { padding: 8px 14px; border-radius: 6px; font-size: 12px; "
@@ -149,7 +149,7 @@ class Tpm2ReadinessDialog(QDialog):
 
         bar.addStretch()
 
-        self._proceed_btn = QPushButton("Fortsæt")
+        self._proceed_btn = QPushButton("Continue")
         self._proceed_btn.setStyleSheet(
             f"QPushButton {{ background: {pal.accent}; color: {pal.accent_fg}; "
             "font-weight: 700; padding: 8px 18px; border-radius: 6px; font-size: 12px; }"
@@ -179,7 +179,7 @@ class Tpm2ReadinessDialog(QDialog):
         self._buffer = ""
         self._clear_list()
         self._subtitle.setText(
-            "Kontrollerer med administratorrettigheder…" if privileged
+            "Checking with administrator rights…" if privileged
             else "Kontrollerer…"
         )
         self._elevate_btn.setEnabled(False)
@@ -193,7 +193,7 @@ class Tpm2ReadinessDialog(QDialog):
         if privileged:
             pkexec = shutil.which("pkexec")
             if not pkexec:
-                self._subtitle.setText("pkexec blev ikke fundet — kan ikke hæve rettigheder.")
+                self._subtitle.setText("pkexec was not found, so rights cannot be raised.")
                 return
             program, argv = pkexec, ["bash", *args]
             self._ran_privileged = True
@@ -226,10 +226,10 @@ class Tpm2ReadinessDialog(QDialog):
             # action is not authorised. Anything else with no output means the
             # script did not get far enough to report.
             if exit_code in (126, 127):
-                self._subtitle.setText("Rettighedsprompten blev afvist. Punkterne nedenfor er uændrede.")
+                self._subtitle.setText("The authorisation prompt was denied. The checks below are unchanged.")
             else:
                 self._subtitle.setText(
-                    f"Kontrollen gav ingen resultater (exit {exit_code}). "
+                    f"The check returned no results (exit {exit_code}). "
                     "Er scriptet installeret korrekt?"
                 )
             return
@@ -259,18 +259,18 @@ class Tpm2ReadinessDialog(QDialog):
 
         if blockers:
             self._subtitle.setText(
-                f"{len(blockers)} forudsætning(er) er ikke opfyldt. "
-                "TPM2 auto-unlock kan ikke sættes op før de er løst."
+                f"{len(blockers)} requirement(s) are not met. "
+                "TPM2 auto-unlock cannot be set up until they are."
             )
             self._proceed_btn.setEnabled(False)
         elif warnings:
             self._subtitle.setText(
-                f"Ingen blokerende problemer, men {len(warnings)} punkt(er) "
-                "bør du læse først."
+                f"Nothing blocking, but {len(warnings)} point(s) "
+                "are worth reading first."
             )
             self._proceed_btn.setEnabled(True)
         else:
-            self._subtitle.setText("Alt ser ud til at være på plads.")
+            self._subtitle.setText("Everything looks to be in place.")
             self._proceed_btn.setEnabled(True)
 
         # Only offer elevation while something is still genuinely unknown.

@@ -81,14 +81,14 @@ if [[ "$DEPARTMENT" == "ait" ]]; then
   if cifs_host_up "$AIT_SERVER" 445 3; then
     for mp in "${ait_mounts[@]}"; do
       cifs_automount_active "$mp" || {
-        log "${AIT_SERVER} kan nås igen — armer automount for ${mp}."
+        log "${AIT_SERVER} can be reached again; arming automount for ${mp}."
         cifs_start_automount "$mp"
       }
     done
   else
     for mp in "${ait_mounts[@]}"; do
       if cifs_automount_active "$mp"; then
-        log "${AIT_SERVER} kan ikke nås — afvæbner automount for ${mp} så stien ikke blokerer."
+        log "${AIT_SERVER} cannot be reached; disarming automount for ${mp} so the path does not block."
         cifs_stop_automount "$mp"
       fi
     done
@@ -129,11 +129,11 @@ fi
 if [[ -n "$M_SERVER" ]] && grep -qE "[[:space:]]${M_MOUNTPOINT}[[:space:]]" /etc/fstab 2>/dev/null; then
   if cifs_host_up "$M_SERVER" 445 3; then
     if ! cifs_automount_active "$M_MOUNTPOINT"; then
-      log "${M_SERVER} kan nås igen — armer automount for ${M_MOUNTPOINT}."
+      log "${M_SERVER} can be reached again; arming automount for ${M_MOUNTPOINT}."
       cifs_start_automount "$M_MOUNTPOINT"
     fi
   elif cifs_automount_active "$M_MOUNTPOINT"; then
-    log "${M_SERVER} kan ikke nås — afvæbner automount for ${M_MOUNTPOINT} så stien ikke blokerer."
+    log "${M_SERVER} cannot be reached; disarming automount for ${M_MOUNTPOINT}."
     cifs_stop_automount "$M_MOUNTPOINT"
   fi
 fi
@@ -166,7 +166,7 @@ P_MOUNTPOINT="/mnt/Personal"
 if ! sustain_pick_target "$USERNAME"; then
   for mp in "$MOUNTPOINT" "$P_MOUNTPOINT"; do
     if cifs_automount_active "$mp"; then
-      log "Hverken Qumulo eller DFS-roden kan nås — afvæbner automount for ${mp}."
+      log "Neither Qumulo nor the DFS root can be reached; disarming automount for ${mp}."
       cifs_stop_automount "$mp"
     fi
   done

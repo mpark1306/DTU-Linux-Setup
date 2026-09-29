@@ -1,3 +1,88 @@
+## v1.8.0 — 29. september 2026
+
+### Nyt
+
+- **Programmet taler engelsk.** Alt brugeren møder er lagt om: GUI'en,
+  fejldialogen med dens 55 diagnoser og forslag, velkomstdialogen ved første
+  login, TPM2-dialogen og -beskederne, notifikationerne om netværksdrev,
+  genstartsvarslerne fra auto-update, og den konsoloutput modulerne skriver i
+  logruden. Baggrunden er praktisk: flere af dem der skal bruge maskinerne,
+  læser ikke dansk.
+
+  Fejldialogens 55 regulære udtryk er uændrede, og det er efterprøvet
+  maskinelt frem for påstået: mønstrene blev trukket ud med `ast` før og efter
+  oversættelsen og sammenlignet. Kun titler og forslagstekster er rørt.
+
+  **Kommentarer i koden og dokumentationen er stadig på dansk.** De er til os,
+  ikke til brugerne, og en oversættelse af dem ville fordoble ændringen uden
+  at løse det problem der blev meldt.
+
+  To .desktop-poster havde i forvejen både `Name=` og `Name[da]=`. Det er den
+  rigtige måde, og de er derfor urørte: skrivebordet vælger selv efter
+  maskinens sprog.
+
+- **Brugeren vælger tastaturlayout ved første login, og valget gælder også
+  loginskærmen.** 16 layouts, med maskinens nuværende valgt på forhånd.
+
+  Trinnet ligger **før** brugernavn og kodeord. Taster man sin domænekode
+  gennem et forkert layout, afviser serveren den, og intet på skærmen
+  forklarer hvorfor: feltet viser prikker uanset hvad. Lagde vi spørgsmålet
+  efter, ville vi have bygget netop den fælde.
+
+  Layoutet sættes systemvidt med `localectl set-x11-keymap`, som skriver
+  `/etc/default/keyboard` og `/etc/X11/xorg.conf.d/00-keyboard.conf`. Den
+  sidste er den X-serveren læser, og SDDM kører på X, så loginskærmen får
+  samme layout. Havde vi sat det i KDE's egne indstillinger i stedet, ville
+  sessionen være rigtig og loginskærmen blive stående på det gamle, og det er
+  den halvdel der tæller når man taster et kodeord man ikke kan se.
+
+  Domænebrugere har allerede `org.freedesktop.locale1.set-keyboard` gennem
+  PolicyKit-modulet, så på en færdig maskine sker det uden en eneste
+  rettighedsprompt. Er reglerne ikke på plads endnu, hvilket netop er
+  tilstanden på en maskine der har sit første login, falder scriptet tilbage
+  til `pkexec` og skriver de samme to filer selv. Sessionen skiftes med
+  `setxkbmap`, så det næste felt brugeren taster i, allerede er rigtigt.
+
+  Annullerer brugeren, beholder maskinen sit layout, og resten af opsætningen
+  kører videre.
+
+- **Den lokale administratorkode skiftes ved første login, på Sustain-profilen.**
+  Billedet udrulles med den samme lokale kode på hver eneste maskine. Den kode
+  er kendt af alle der har sat en maskine op, og den står uændret på maskiner
+  der har været i drift i årevis. Ét sted kan den skiftes til noget maskinen
+  selv ejer: ved første login, hvor der sidder et menneske foran skærmen.
+
+  Trinnet ligger til sidst i `dtu-first-login.sh`, efter drev, printere og
+  WiFi. Brugeren har på det tidspunkt set hvad maskinen er, og har lige tastet
+  sin domænekode. Blev der spurgt som det allerførste, ville koden blive valgt
+  i blinde og glemt inden frokost.
+
+  Krav til koden: mindst 12 tegn, mindst 3 af de fire tegntyper, ingen
+  mellemrum i hver ende, og hverken kontonavnet, brugernavnet eller
+  WIN-domænekoden. Det sidste er ikke pedanteri: to konti med samme kode er
+  én konto.
+
+  Kontonavnet gættes ikke. `admin-mpark`, `admin-alton` og `administrator` er
+  alle set i flåden, så kontoen findes ud fra hvad den er: en lokal konto med
+  rigtig skal, UID i brugerintervallet, og ret til at hæve rettigheder. Er der
+  flere kandidater og ingen af dem står i `sudo` eller `admin`, springes
+  trinnet over i stedet for at skifte kode på den forkerte konto.
+
+  Koden når hverken disk eller proceslinje. Den sendes gennem samme
+  `pkexec bash -s`-rør som resten af scriptet bruger, og `chpasswd` læser den
+  på sin standardinddata.
+
+  Afbryder brugeren, sker der ingenting, og spørgsmålet kommer igen ved næste
+  login. Markøren ligger i `/var/lib/dtu-setup/admin-password-changed` og ikke
+  i hjemmemappen: der er én lokal konto på maskinen, ikke én per bruger. Lå
+  den i `$HOME`, ville bruger nummer to på en delt maskine blive bedt om at
+  sætte en ny kode oven i bruger nummer ets, uden at nogen af dem vidste det.
+
+  **Bemærk for support:** efter dette er den lokale administratorkode
+  forskellig fra maskine til maskine, og den kendes kun af brugeren. Skal IT
+  kunne hæve rettigheder på en maskine, skal det gå gennem domænet, ikke
+  gennem den delte lokale kode.
+
 ## v1.7.1 — 15. september 2026
 
 ### Nyt

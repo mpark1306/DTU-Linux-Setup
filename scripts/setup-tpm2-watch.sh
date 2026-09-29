@@ -17,7 +17,7 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-[[ $EUID -eq 0 ]] || { echo "Kør med sudo." >&2; exit 1; }
+[[ $EUID -eq 0 ]] || { echo "Run this with sudo." >&2; exit 1; }
 
 BIN_DIR=/usr/local/bin
 UNIT_DIR=/etc/systemd/system
@@ -41,6 +41,6 @@ systemctl enable dtu-tpm2-watch.service >/dev/null 2>&1 || true
 # genstart. Den retter ingenting; den kigger.
 systemctl start dtu-tpm2-watch.service >/dev/null 2>&1 || true
 
-echo "    Overvågning af TPM2-bindingen er installeret."
-echo "      kontrol ved opstart : dtu-tpm2-watch.service"
-echo "      besked ved login    : ${AUTOSTART_DIR}/dtu-tpm2-notify.desktop"
+echo "    Monitoring of the TPM2 binding is installed."
+echo "      check at boot    : dtu-tpm2-watch.service"
+echo "      notice at login  : ${AUTOSTART_DIR}/dtu-tpm2-notify.desktop"
