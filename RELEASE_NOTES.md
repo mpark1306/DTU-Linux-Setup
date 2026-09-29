@@ -1,5 +1,44 @@
 ## Uudgivet
 
+### Sikkerhed
+
+Begge fund er fra sikkerhedsgennemgangen 22. september 2026 og er efterproevet
+ved direkte laesning af koden.
+
+- **`polkit.sh` fortsatte efter en `visudo`-fejl.** Kontrollen var skrevet som
+  `visudo -cf ... || { fail ...; rm -f ...; }`. `rm -f` returnerer 0, saa hele
+  `||`-gruppen returnerede 0, `set -e` udloeste ikke, og scriptet koerte videre.
+
+  Konsekvensen var den vaerst taenkelige: ved en syntaksfejl blev den
+  **kodeordsbeskyttede** sudo-fil slettet, mens den **prompt-frie** polkit-regel
+  blev skrevet bagefter. Gruppen mistede den sikre vej til root og beholdt den
+  usikre. Nu stopper scriptet, og ingen polkit-regler skrives.
+
+- **`49-domain-admins.rules` gav AD-admingruppen `YES` paa alle polkit-actions.**
+  Uden `subject.local && subject.active`, saa det gjaldt ogsaa over RDP og SSH.
+  Da `dk.dtu.sustain.setup.policy` annoterer action'en paa `/usr/bin/bash`,
+  daekkede den enhver `pkexec bash ...`: prompt-fri root.
+
+  Reglen er nu snaevret ind til lokale, aktive sessioner og til vaerktoejets
+  egen action, `dk.dtu.sustain.setup.*`. Alt andet falder igennem til polkits
+  normale `auth_admin`, og vejen dertil er `sudo`, som kraever kodeord og
+  allerede er givet i samme script.
+
+  **Admins mister ikke deres daglige rettigheder.** USB, WiFi, pakker og stroem
+  ligger i `48-domain-users.rules`, som nu ogsaa daekker admingruppen. Listen
+  staar dermed ét sted i stedet for to.
+
+  **Bemaerk for support:** en IT-admin der er koblet ind over RDP eller SSH, vil
+  nu blive bedt om sit kodeord for at koere modulerne. Det er tilsigtet. Den
+  lokale konsol spoerger ikke.
+
+- **`exec.path` er bevidst IKKE aendret.** Gennemgangen anbefaler at pege den paa
+  en konkret wrapper frem for `/usr/bin/bash`. Det ville braekke
+  `pkexec bash -s`, som netop findes for at holde wrapperen ude af filsystemet
+  og lukke et TOCTOU-vindue. De to anbefalinger staar i modstrid, og
+  begrundelsen plus den rigtige langsigtede rettelse staar nu i `.policy`-filen
+  ved siden af annoteringen.
+
 ### Rettet
 
 - **`tpm2-rebind.sh` kunne ikke skrive sine egne fejlbeskeder.** Scriptet kaldte
@@ -16,6 +55,17 @@
 - **`linux-headers-$(uname -r)` hentede byggemaskinens kerne i en chroot.**
   Begge kaldsteder forgrener nu paa `in_chroot` og bruger
   `linux-headers-generic` naar de koerer under imagebygningen.
+
+- **`first-login-deploy.sh` skrev en fil ingen laeste.** Trinnet lagde
+  `/etc/skel/.dmrc` for at saette X11 som standard for nye brugere. `~/.dmrc`
+  laeses af GDM og LightDM; imaget koerer SDDM, som holder sin egen tilstand og
+  styres af `login-screen.sh`'s `RememberLastSession=true`. Trinnet er fjernet,
+  og scriptet rydder nu op efter sig selv paa maskiner der allerede har filen,
+  men kun hvis indholdet er praecis de to linjer vi selv skrev.
+
+  26.04 staver sessionsfilen `plasmax11.desktop` med lille x. At rette
+  stavningen ville have faaet doed kode til at se vedligeholdt og
+  26.04-efterproevet ud.
 
 - **`make test` kunne ikke fejle paa trin 3.** Linjen roerte `unittest` gennem
   `tail -5`, saa exitstatus var `tail`s. Det er verificeret at trin 3 nu

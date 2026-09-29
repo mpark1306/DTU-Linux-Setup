@@ -19,13 +19,13 @@ ADMIN_GROUP_LC_NODASH="$(echo "$ADMIN_GROUP_LC" | tr -d -)"
 REALM_LC="${SITE_AD_REALM}"
 REALM_UC="${SITE_AD_DOMAIN}"
 
-echo "[1/6] Configuring admin identities..."
+echo "[1/5] Configuring admin identities..."
 tee /etc/polkit-1/localauthority.conf.d/50-localauthority.conf > /dev/null <<EOF
 [Configuration]
 AdminIdentities=unix-user:0;unix-group:sudo;unix-group:wheel;unix-group:${ADMIN_GROUP};unix-group:${ADMIN_GROUP_LC_NODASH}
 EOF
 
-echo "[2/6] Adding ${ADMIN_GROUP} to sudoers..."
+echo "[2/5] Adding ${ADMIN_GROUP} to sudoers..."
 cat > /etc/sudoers.d/dtu-it-admins <<EOF
 # DTU IT admins – covers SSSD group name variants
 %${ADMIN_GROUP} ALL=(ALL) ALL
@@ -36,17 +36,53 @@ cat > /etc/sudoers.d/dtu-it-admins <<EOF
 %${ADMIN_GROUP_LC_NODASH}@${REALM_LC} ALL=(ALL) ALL
 EOF
 chmod 440 /etc/sudoers.d/dtu-it-admins
-visudo -cf /etc/sudoers.d/dtu-it-admins || { fail "sudoers syntax error"; rm -f /etc/sudoers.d/dtu-it-admins; }
+# 'rm -f' returnerer 0, saa hele ||-gruppen returnerede 0 og 'set -e' udloeste
+# ikke: scriptet fortsatte. Konsekvensen var den vaerst taenkelige. Den
+# KODEORDSBESKYTTEDE sudo-fil blev slettet, mens polkit-reglen nedenfor blev
+# skrevet alligevel, saa gruppen mistede den sikre vej til root og beholdt den
+# usikre. Derfor et eksplicit exit.
+if ! visudo -cf /etc/sudoers.d/dtu-it-admins; then
+    rm -f /etc/sudoers.d/dtu-it-admins
+    die "sudoers syntax error. The file was removed and no polkit rules were written."
+fi
 
-echo "[3/6] Creating PolKit admin rules..."
+echo "[3/5] Creating PolKit admin rules..."
 mkdir -p /etc/polkit-1/rules.d/
 
+# Foer var denne regel et ubetinget "YES" paa ALLE polkit-actions, uden
+# subject.local/active. Det gav prompt-fri root via 'pkexec <hvad som helst>',
+# ogsaa over RDP og SSH, fordi .policy-filen annoterer action'en paa
+# /usr/bin/bash og derfor daekker enhver 'pkexec bash ...'.
+#
+# Nu er den snaevret ind til to ting:
+#   1. Kun lokale, aktive sessioner. Samme betingelse som 48-domain-users har
+#      haft hele tiden. En RDP- eller SSH-session faar et kodeordsprompt.
+#   2. Kun vaerktoejets egen action. Alt andet falder igennem til polkit's
+#      normale auth_admin, og vejen dertil er 'sudo', som kraever kodeord og
+#      allerede er givet i trin 2 ovenfor.
+#
+# De daglige rettigheder (USB, WiFi, pakker, strøm) mister admins ikke:
+# 48-domain-users.rules nedenfor daekker nu ogsaa admingruppen, saa listen
+# staar ét sted i stedet for to.
 tee /etc/polkit-1/rules.d/49-domain-admins.rules > /dev/null <<EOF
+// DTU IT admins - password-free access to this tool's own modules.
+// Everything else goes through sudo, which asks for a password.
+
 polkit.addRule(function(action, subject) {
-    if (subject.isInGroup("${ADMIN_GROUP}") ||
-        subject.isInGroup("${ADMIN_GROUP_LC_NODASH}")) {
+
+    // Only active, local sessions. Not RDP, not SSH.
+    if (!subject.local || !subject.active)
+        return polkit.Result.NOT_HANDLED;
+
+    if (!subject.isInGroup("${ADMIN_GROUP}") &&
+        !subject.isInGroup("${ADMIN_GROUP_LC_NODASH}"))
+        return polkit.Result.NOT_HANDLED;
+
+    // This tool's own modules only.
+    if (action.id.indexOf("dk.dtu.sustain.setup.") === 0)
         return polkit.Result.YES;
-    }
+
+    return polkit.Result.NOT_HANDLED;
 });
 EOF
 
@@ -59,9 +95,12 @@ rm -f /etc/polkit-1/rules.d/49-allow-username-input.rules
 # ── Step 3: Domain user daily-use rights ──────────────────────────────────
 echo "[4/5] Creating domain-user rights (48-domain-users.rules)..."
 rm -f /etc/polkit-1/rules.d/50-domain-users.rules   # clean up old name
-tee /etc/polkit-1/rules.d/48-domain-users.rules > /dev/null <<'EOF'
-// Domain Users – daily-use rights without admin password prompt.
-// IT admins are already handled by 49-domain-admins.rules and get YES for everything.
+tee /etc/polkit-1/rules.d/48-domain-users.rules > /dev/null <<EOF
+// Domain Users and IT admins - daily-use rights without an admin password.
+//
+// The admin group is included here so the list of actions lives in one place.
+// 49-domain-admins.rules only adds this tool's own modules on top; it no
+// longer returns YES for everything.
 
 polkit.addRule(function(action, subject) {
 
@@ -69,8 +108,11 @@ polkit.addRule(function(action, subject) {
     if (!subject.local || !subject.active)
         return polkit.Result.NOT_HANDLED;
 
-    // Only apply to Domain Users (SSSD may resolve the AD group in either casing)
-    if (!subject.isInGroup("Domain Users") && !subject.isInGroup("domain users"))
+    // Domain Users, or the IT admin group. SSSD may resolve either casing.
+    if (!subject.isInGroup("Domain Users") &&
+        !subject.isInGroup("domain users") &&
+        !subject.isInGroup("${ADMIN_GROUP}") &&
+        !subject.isInGroup("${ADMIN_GROUP_LC_NODASH}"))
         return polkit.Result.NOT_HANDLED;
 
     var id = action.id;

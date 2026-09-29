@@ -1155,5 +1155,92 @@ class TestPackagingDependenciesAgree(unittest.TestCase):
                 self.assertIn("pkexec", text)
 
 
+class TestPolkitPrivilegeScope(unittest.TestCase):
+    """The two critical findings from the 22 Sep 2026 security review.
+
+    49-domain-admins.rules used to return YES for every polkit action with no
+    local/active condition. Because the tool's own action is annotated on
+    /usr/bin/bash, that was prompt-free root via `pkexec <anything>`, over RDP
+    and SSH included. And the visudo check could not stop the script, so a
+    syntax error deleted the password-protected sudoers file while the
+    prompt-free polkit rule was written anyway: the group lost the safe route
+    to root and kept the unsafe one.
+    """
+
+    def setUp(self):
+        self.body = strip_comments(read(SCRIPTS / "ubuntu" / "polkit.sh"))
+
+    def _rule(self, number: str) -> str:
+        start = self.body.index(f"/etc/polkit-1/rules.d/{number}")
+        return self.body[start:self.body.index("\nEOF", start)]
+
+    def test_a_visudo_failure_stops_the_script(self):
+        """Otherwise the password-protected file is gone and the prompt-free
+        rule is written regardless."""
+        idx = self.body.index("visudo -cf")
+        after = self.body[idx:idx + 400]
+        self.assertTrue("die " in after or "exit 1" in after,
+                        "the visudo failure path must stop the script")
+        self.assertNotRegex(
+            self.body,
+            r"visudo -cf [^\n]*\|\| \{[^}]*rm -f[^}]*\}\s*\n",
+            "the || { ...; rm -f; } form returns 0 and set -e never fires")
+
+    def test_the_admin_rule_is_not_an_unconditional_yes(self):
+        rule = self._rule("49-domain-admins")
+        self.assertIn("subject.local", rule)
+        self.assertIn("subject.active", rule)
+        self.assertIn("NOT_HANDLED", rule)
+
+    def test_the_admin_rule_only_covers_this_tools_actions(self):
+        """Everything else must fall through to polkit's auth_admin, whose
+        route is sudo, which asks for a password."""
+        rule = self._rule("49-domain-admins")
+        self.assertIn('action.id.indexOf("dk.dtu.sustain.setup.")', rule)
+        # Exactly one YES, and it is the one guarded by that prefix.
+        self.assertEqual(rule.count("polkit.Result.YES"), 1)
+
+    def test_admins_keep_their_daily_use_rights(self):
+        """Narrowing rule 49 must not cost admins USB, WiFi or packages, so
+        rule 48 now covers the admin group too and the action list stays in
+        one place."""
+        rule = self._rule("48-domain-users")
+        self.assertIn("${ADMIN_GROUP}", rule)
+        self.assertIn("Domain Users", rule)
+        self.assertIn("subject.local", rule)
+
+    def test_both_rules_refuse_remote_sessions(self):
+        for number in ("48-domain-users", "49-domain-admins"):
+            with self.subTest(rule=number):
+                rule = self._rule(number)
+                self.assertRegex(rule, r"!subject\.local \|\| !subject\.active")
+
+
+class TestNoDeadDmrcWrite(unittest.TestCase):
+    """first-login-deploy.sh wrote /etc/skel/.dmrc to default new users to
+    X11. It never worked: ~/.dmrc is read by GDM and LightDM, and the image
+    runs SDDM, which keeps its own state and is steered by
+    login-screen.sh's RememberLastSession=true. Patching the 26.04 spelling
+    into it would have made dead code look maintained.
+    """
+
+    def setUp(self):
+        self.body = strip_comments(read(SCRIPTS / "ubuntu" / "first-login-deploy.sh"))
+
+    def test_nothing_writes_dmrc(self):
+        self.assertNotIn("/etc/skel/.dmrc <<", self.body)
+        self.assertNotIn("plasmaX11.desktop", self.body)
+
+    def test_our_own_leftover_is_cleaned_up(self):
+        """Machines provisioned earlier still carry the file."""
+        self.assertIn("rm -f /etc/skel/.dmrc", self.body)
+
+    def test_a_foreign_dmrc_is_left_alone(self):
+        """Only the exact two lines we wrote are ours to delete."""
+        idx = self.body.index("/etc/skel/.dmrc")
+        self.assertIn("Desktop", self.body[idx:idx + 600])
+        self.assertIn("not ours", read(SCRIPTS / "ubuntu" / "first-login-deploy.sh"))
+
+
 if __name__ == "__main__":
     unittest.main()

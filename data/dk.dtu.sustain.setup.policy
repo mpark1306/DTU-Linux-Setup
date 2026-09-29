@@ -19,6 +19,36 @@
       <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
+    <!--
+      Sikkerhedsgennemgangen 22/9 2026 anbefaler at pege denne paa en konkret
+      wrapper i stedet for /usr/bin/bash, fordi action'en ellers daekker enhver
+      'pkexec bash ...' paa maskinen.
+
+      Det er IKKE gjort, og det er et bevidst valg, fordi de to anbefalinger
+      staar i modstrid med hinanden:
+
+      module_runner.py bygger wrapperen og sender den til 'pkexec bash -s' paa
+      stdin, netop for IKKE at skrive den til en fil. En fil i /tmp ville vaere
+      ejet af den uprivilegerede bruger og laest af root foerst EFTER
+      polkit-prompten er besvaret, altsaa et TOCTOU-vindue paa flere sekunder
+      hvor en anden proces som samme bruger kan bytte indholdet og faa sin egen
+      kode koert som root. Det vindue blev lukket med vilje i v1.5.0, og samme
+      fejl er beskrevet i RepairBooths fixes.py.
+
+      Peges exec.path paa en konkret sti, matcher 'bash -s' ikke laengere denne
+      action, og saa falder kaldet tilbage til den generiske
+      org.freedesktop.policykit.exec. Vi kan altsaa faa det ene eller det
+      andet, ikke begge.
+
+      Bredden er i stedet begraenset der hvor den gjorde skade: 49-domain-admins
+      returnerer ikke laengere YES til alt, men kun til dk.dtu.sustain.setup.*
+      og kun i en lokal, aktiv session. Defaults herunder er fortsat auth_admin,
+      saa alle andre end admingruppen bliver spurgt.
+
+      Den rigtige langsigtede rettelse er en dedikeret hjaelper der selv laeser
+      wrapperen paa stdin, saa exec.path kan pege paa DEN frem for paa bash.
+      Det er en designaendring, ikke en annotering.
+    -->
     <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/bash</annotate>
     <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
   </action>

@@ -44,12 +44,12 @@ INSTALL_PATH="${INSTALL_DIR}/dtu-first-login.sh"
 XDG_AUTOSTART="/etc/xdg/autostart"
 SKEL_AUTOSTART="/etc/skel/.config/autostart"
 
-echo "[1/4] Installing first-login script to ${INSTALL_PATH}..."
+echo "[1/3] Installing first-login script to ${INSTALL_PATH}..."
 cp "$FIRST_LOGIN_SRC" "$INSTALL_PATH"
 chmod 0755 "$INSTALL_PATH"
 ok "Script installed."
 
-echo "[2/4] Creating system-wide autostart entry..."
+echo "[2/3] Creating system-wide autostart entry..."
 mkdir -p "$XDG_AUTOSTART"
 cat > "${XDG_AUTOSTART}/dtu-first-login.desktop" <<'DESKTOP'
 [Desktop Entry]
@@ -84,23 +84,24 @@ for home in /home/*; do
 done
 [[ "$removed" -gt 0 ]] && ok "Removed ${removed} stale per-user autostart entr(ies)."
 
-echo "[3/4] Configuring default KDE X11 session for new users..."
-# GDM reads ~/.dmrc to pick the default session for a user who hasn't logged
-# in before. Writing it to /etc/skel ensures every new domain user starts in
-# KDE Plasma on X11 rather than Wayland.
-if [[ -f /usr/share/xsessions/plasmaX11.desktop ]]; then
-    KDE_X11_SESSION="plasmaX11"
-else
-    KDE_X11_SESSION="plasma"  # Ubuntu 24.04 / Plasma 5 naming
+# Tidligere skrev dette script /etc/skel/.dmrc for at saette X11 som standard
+# for nye brugere. Det har aldrig virket: ~/.dmrc laeses af GDM og LightDM, og
+# imaget koerer SDDM, som holder sin egen tilstand i /var/lib/sddm/state.conf.
+# login-screen.sh saetter RememberLastSession=true, og det er den mekanisme der
+# faktisk har effekt.
+#
+# Filen fjernes kun hvis den er vores egen, altsaa praecis de to linjer vi
+# skrev. Har nogen lagt noget andet der, bliver det staaende.
+if [[ -f /etc/skel/.dmrc ]]; then
+    if [[ "$(tr -d '[:space:]' < /etc/skel/.dmrc)" =~ ^\[Desktop\]Session=(plasma|plasmaX11|plasmax11)$ ]]; then
+        rm -f /etc/skel/.dmrc
+        ok "Removed the dead /etc/skel/.dmrc (SDDM never read it)."
+    else
+        warn "/etc/skel/.dmrc exists but is not ours; leaving it alone."
+    fi
 fi
-cat > /etc/skel/.dmrc <<DMRC
-[Desktop]
-Session=${KDE_X11_SESSION}
-DMRC
-chmod 0644 /etc/skel/.dmrc
-ok "Default session set to '${KDE_X11_SESSION}' (X11) for all new users via /etc/skel/.dmrc."
 
-echo "[4/4] Copying scripts to /opt for first-login access..."
+echo "[3/3] Copying scripts to /opt for first-login access..."
 OPT_DIR="/opt/dtu-sustain-setup/scripts/ubuntu"
 mkdir -p "$OPT_DIR"
 
