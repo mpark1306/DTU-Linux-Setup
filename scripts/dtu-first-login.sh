@@ -385,7 +385,7 @@ password_problem() {
         printf 'The password can be at most %s characters long.' "$ADMIN_PW_MAXLEN"
         return 0
     fi
-    if [[ "$pw" != "${pw#[[:space:]]}" || "$pw" != "${pw%[[:space:]]}" ]]; then
+    if [[ "$pw" =~ ^[[:space:]] || "$pw" =~ [[:space:]]$ ]]; then
         printf 'The password cannot begin or end with a space. It is far too easy to mistype afterwards.'
         return 0
     fi
