@@ -110,7 +110,12 @@ jobs:
           VER="${{ steps.version.outputs.make_version }}"
           git archive --format=tar.gz --prefix="dtu-sustain-setup-${VER}/" \
             -o "dtu-sustain-setup-${VER}.tar.gz" HEAD
-          tar -tzf "dtu-sustain-setup-${VER}.tar.gz" | grep -qx "dtu-sustain-setup-${VER}/Makefile"
+          # Listen til en fil, ikke "tar | grep -q": GitHub koerer trinnet med
+          # pipefail, og grep -q stopper ved foerste traef, saa tar faar en
+          # skrivefejl og hele trinnet fejler, netop naar arkivet er i orden.
+          tar -tzf "dtu-sustain-setup-${VER}.tar.gz" > archive-contents.txt
+          grep -qx "dtu-sustain-setup-${VER}/Makefile" archive-contents.txt
+          rm -f archive-contents.txt
 
       - name: Upload release files
         uses: actions/upload-artifact@v4

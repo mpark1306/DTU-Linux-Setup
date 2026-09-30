@@ -1363,5 +1363,57 @@ class TestLoginctlIsQueriedNotParsed(unittest.TestCase):
         self.assertIn("x11|wayland)", body)
 
 
+class TestCiStepsRunUnderGithubsShell(unittest.TestCase):
+    """The release steps are shell, and GitHub runs `shell: bash` as
+    `bash --noprofile --norc -eo pipefail`. The first version of the source
+    archive step passed every local test and failed on GitHub: its
+    `tar | grep -q` check stops reading early, tar gets a write error, and
+    under pipefail that fails the step exactly when the archive is fine.
+
+    So the steps are pulled out of the workflow and run here, with the same
+    flags, against this repository.
+    """
+
+    FLAGS = ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c"]
+
+    def _step(self, name: str) -> str:
+        import yaml  # type: ignore
+        wf = yaml.safe_load(read(REPO / ".github" / "workflows" / "build-deb.yml"))
+        for job in wf["jobs"].values():
+            for step in job.get("steps", []):
+                if step.get("name") == name:
+                    return step["run"]
+        self.fail(f"no step named {name!r}")
+
+    def test_build_source_archive(self):
+        version = re.search(r"^VERSION\s*:=\s*(\S+)", read(REPO / "Makefile"), re.M).group(1)
+        script = self._step("Build source archive").replace(
+            "${{ steps.version.outputs.make_version }}", version)
+        with tempfile.TemporaryDirectory() as d:
+            # Run in a clone so the archive and its listing land outside the
+            # working tree.
+            # --no-local: /tmp is often another filesystem, and --local uses
+            # hard links, which cannot cross one.
+            clone = Path(d) / "clone"
+            subprocess.run(["git", "clone", "-q", "--no-local", str(REPO), str(clone)], check=True)
+            r = subprocess.run(self.FLAGS + [script], cwd=clone, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertTrue((clone / f"dtu-sustain-setup-{version}.tar.gz").exists())
+
+    def test_compute_checksums(self):
+        script = self._step("Compute checksums")
+        with tempfile.TemporaryDirectory() as d:
+            dist = Path(d) / "dist"
+            dist.mkdir()
+            (dist / "dtu-sustain-setup_9.9.9_all.deb").write_bytes(b"deb")
+            (dist / "dtu-sustain-setup-9.9.9.tar.gz").write_bytes(b"src")
+            r = subprocess.run(self.FLAGS + [script], cwd=d, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            sums = (Path(d) / "sha256sums.txt").read_text()
+            # Bare names: the installers look their archive up by exact name.
+            self.assertRegex(sums, r"(?m)^[0-9a-f]{64}  dtu-sustain-setup-9\.9\.9\.tar\.gz$")
+            self.assertNotIn("dist/", sums)
+
+
 if __name__ == "__main__":
     unittest.main()
