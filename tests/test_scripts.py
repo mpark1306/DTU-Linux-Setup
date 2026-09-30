@@ -1242,5 +1242,63 @@ class TestNoDeadDmrcWrite(unittest.TestCase):
         self.assertIn("not ours", read(SCRIPTS / "ubuntu" / "first-login-deploy.sh"))
 
 
+class TestInstallPathsAreVerified(unittest.TestCase):
+    """Security review 22 Sep 2026, finding 3.1: three install paths ran
+    `curl | tar | make install` as root with no integrity check. And the
+    checksum file CI already published only covered the .deb, not the source
+    archive the installers downloaded, so "just fetch sha256sums.txt" was not
+    possible as things stood.
+
+    The behaviour is tested against a fake release in
+    tests/test_install_verify.sh. These guard the structure.
+    """
+
+    INSTALL = REPO / "bin" / "dtu-install.sh"
+    UPDATE = SCRIPTS / "update-latest.sh"
+
+    def _func(self, path: Path, name: str) -> str:
+        m = re.search(rf"^{name}\(\) {{.*?^}}\n", read(path), re.S | re.M)
+        self.assertIsNotNone(m, f"{name} missing from {path.name}")
+        return m.group(0)
+
+    def test_the_two_copies_are_identical(self):
+        """They cannot share a library: dtu-install.sh is piped into bash
+        straight from GitHub. So they carry copies, and a fix to one that
+        does not reach the other is exactly how a hole reopens."""
+        for name in ("fetch_verified_release", "_dtu_download"):
+            with self.subTest(function=name):
+                self.assertEqual(self._func(self.INSTALL, name),
+                                 self._func(self.UPDATE, name))
+
+    def test_nothing_is_piped_from_the_network_into_tar(self):
+        """`curl ... | tar -x` extracts before anything can be checked."""
+        for path in (self.INSTALL, self.UPDATE):
+            with self.subTest(script=path.name):
+                self.assertNotRegex(strip_comments(read(path)),
+                                    r"(curl|wget)[^\n|]*\|\s*tar")
+
+    def test_extraction_happens_only_after_the_comparison(self):
+        body = self._func(self.INSTALL, "fetch_verified_release")
+        self.assertLess(body.index('"$actual" != "$expected"'), body.index("tar -xzf"))
+
+    def test_update_follows_releases_not_the_main_branch(self):
+        """The GUI button says "latest release"; the script fetched main."""
+        body = strip_comments(read(self.UPDATE))
+        self.assertIn("fetch_verified_release", body)
+        self.assertNotIn('BRANCH="${BRANCH:-main}"', body)
+
+    def test_the_dead_deploy_script_is_gone(self):
+        """It defaulted to a 'deploy' branch that no longer exists on GitHub,
+        cloned whatever REPO_URL the environment said, and nothing called it."""
+        self.assertFalse((REPO / "bin" / "dtu-deploy-from-github.sh").exists())
+
+    def test_ci_publishes_the_archive_the_installers_fetch(self):
+        ci = read(REPO / ".github" / "workflows" / "build-deb.yml")
+        self.assertIn("git archive", ci)
+        self.assertIn("dtu-sustain-setup-*.tar.gz", ci)
+        # Bare names: the installers look their archive up by exact name.
+        self.assertIn("(cd dist && sha256sum -- *) > sha256sums.txt", ci)
+
+
 if __name__ == "__main__":
     unittest.main()

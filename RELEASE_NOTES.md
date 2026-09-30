@@ -2,6 +2,40 @@
 
 ### Sikkerhed
 
+- **Installationsvejene kontrollerer nu det de henter.** `bin/dtu-install.sh`
+  og `scripts/update-latest.sh` hentede kode fra GitHub og koerte
+  `make install` som root uden nogen kontrol. Nu henter de udgivelsens
+  kildearkiv og `sha256sums.txt`, og intet pakkes ud foer de passer sammen.
+
+  Vurderingen sagde at CI allerede lavede `sha256sums.txt`, saa rettelsen bare
+  var at hente den. Det holdt ikke: filen daekkede kun `.deb`-pakken, med
+  `dist/`-praefiks, og installationsvejene hentede GitHubs automatisk
+  genererede arkiv, som ingen checksum daekkede. CI bygger derfor nu selv et
+  kildearkiv med `git archive`, og `sha256sums.txt` daekker det med rene
+  filnavne.
+
+  **Hvad det beskytter mod, og hvad ikke.** Det fanger en afkortet eller
+  oedelagt download og en manipuleret kopi fra en cache eller et spejl. Det
+  fanger ikke nogen der kan udskifte baade arkivet og checksumfilen, altsaa en
+  kompromitteret GitHub-konto eller en aflytning med et CA maskinen stoler
+  paa. Til det kan `SHA256=` laase en checksum fast, som er kommet ad en anden
+  vej. Testen daekker den graense eksplicit, saa ingen senere tror at
+  checksummen alene er nok.
+
+  Udgivelser til og med v1.7.1 har intet kildearkiv og kan kun installeres med
+  `DTU_ALLOW_UNVERIFIED=1`. `BRANCH=` er altid ukontrolleret og siger det
+  hoejt. En `SHA256=` sammen med en af dem afvises, fordi en pin der aldrig
+  kontrolleres er vaerre end ingen.
+
+- **GUI'ens opdateringsknap installerer nu den nyeste udgivelse.** Dialogen
+  lovede "the latest release", men `update-latest.sh` hentede hovedet af
+  `main`, som ikke noedvendigvis har bestaaet CI og ikke har nogen checksum.
+
+- **`bin/dtu-deploy-from-github.sh` er fjernet.** Den havde grenen `deploy`
+  som standard, og den gren findes ikke laengere paa GitHub, saa scriptet
+  virkede ikke. Den klonede desuden fra en `REPO_URL` som miljoeet kunne
+  overskrive, og intet kaldte den. `dtu-install.sh BRANCH=` daekker brugen.
+
 Begge fund er fra sikkerhedsgennemgangen 22. september 2026 og er efterproevet
 ved direkte laesning af koden.
 

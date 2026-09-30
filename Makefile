@@ -56,6 +56,9 @@ test:
 	@echo "── Bash: udgave og version (24.04 / 26.04) ──────────────────"
 	bash tests/test_os_helpers.sh
 	@echo ""
+	@echo "── Bash: checksum-kontrol i installationsvejene ─────────────"
+	bash tests/test_install_verify.sh
+	@echo ""
 	@echo "── Shell: scripts (statisk + adfærd) ───────────────────────"
 	PYTHONPATH=src python3 -m unittest tests.test_scripts
 	@echo ""

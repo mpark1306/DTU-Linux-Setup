@@ -100,11 +100,25 @@ jobs:
       - name: Build .deb
         run: make deb
 
-      - name: Upload .deb artifact
+      # The installers (bin/dtu-install.sh, scripts/update-latest.sh) fetch
+      # THIS archive, not GitHub's generated /archive/refs/tags tarball. That
+      # one is built on request and is not ours to hash; this one is exactly
+      # the file sha256sums.txt vouches for.
+      - name: Build source archive
+        shell: bash
+        run: |
+          VER="${{ steps.version.outputs.make_version }}"
+          git archive --format=tar.gz --prefix="dtu-sustain-setup-${VER}/" \
+            -o "dtu-sustain-setup-${VER}.tar.gz" HEAD
+          tar -tzf "dtu-sustain-setup-${VER}.tar.gz" | grep -qx "dtu-sustain-setup-${VER}/Makefile"
+
+      - name: Upload release files
         uses: actions/upload-artifact@v4
         with:
           name: deb-package
-          path: "*.deb"
+          path: |
+            *.deb
+            dtu-sustain-setup-*.tar.gz
           if-no-files-found: error
 
   # ── Job 2: Publish release ───────────────────────────────────────────────
@@ -119,10 +133,14 @@ jobs:
           name: deb-package
           path: dist/
 
+      # Bare file names, no "dist/" prefix: the installers look up their
+      # archive by name, and "sha256sum -c" run next to the downloaded files
+      # has to find them.
       - name: Compute checksums
         run: |
-          sha256sum dist/* > sha256sums.txt
+          (cd dist && sha256sum -- *) > sha256sums.txt
           cat sha256sums.txt
+          test "$(grep -c 'dtu-sustain-setup-.*\.tar\.gz$' sha256sums.txt)" -eq 1
 
       - name: Upload combined artifact
         uses: actions/upload-artifact@v4

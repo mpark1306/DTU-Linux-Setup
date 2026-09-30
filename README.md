@@ -127,6 +127,20 @@ Derefter mangler kun ét skridt: en udfyldt `site.conf`, se
 [Site-konfiguration](#site-konfiguration-etcdtu-setupsiteconf) nedenfor. Uden
 den stopper hvert modul, der har brug for en konkret værdi.
 
+**Kontrol af det hentede.** Scriptet henter udgivelsens kildearkiv og dens
+`sha256sums.txt` og pakker intet ud før de passer sammen. Det fanger en
+afkortet eller ødelagt download og en manipuleret kopi fra en cache. Det fanger
+**ikke** nogen der kan udskifte begge filer, fordi checksummen kommer ad samme
+vej som arkivet. Har du checksummen fra et andet sted, kan du låse den fast:
+
+```bash
+curl -fsSL .../bin/dtu-install.sh | sudo VERSION=vX.Y.Z SHA256=<64 hex-tegn> bash
+```
+
+Udgivelser til og med v1.7.1 har intet kildearkiv at kontrollere. De kan kun
+installeres med `DTU_ALLOW_UNVERIFIED=1`, og `BRANCH=` er altid ukontrolleret.
+Begge dele er til test, aldrig til et image.
+
 ### Hvis du hellere vil gøre det i hånden
 
 Afhængighederne er de samme uanset hvilken vej du vælger:
