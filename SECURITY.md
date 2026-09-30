@@ -37,6 +37,10 @@ security issue so it can be purged from history (`git filter-repo`).
 
 - Passwords are passed from GUI → script via environment variables only,
   never via command-line arguments.
+- The DTUSecure Wi-Fi profile is written as a NetworkManager keyfile with
+  bash builtins under `umask 077`, not with `nmcli ... 802-1x.password`, which
+  would put the password in the process list. The RADIUS server's certificate
+  is only checked when `SITE_WIFI_DOMAIN_SUFFIX_MATCH` is set in `site.conf`.
 - Privileged modules are run as `pkexec bash -s` with the wrapper script fed
   on **stdin**, never written to a file. A wrapper file in `/tmp` would be
   owned by the unprivileged user but executed by root only after the PolicyKit

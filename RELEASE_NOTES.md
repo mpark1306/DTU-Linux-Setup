@@ -27,6 +27,52 @@
   hoejt. En `SHA256=` sammen med en af dem afvises, fordi en pin der aldrig
   kontrolleres er vaerre end ingen.
 
+- **DTUSecure-profilen skiftes til brugerens egen ved foerste login.**
+  Maskinen saettes op af en admin, og WiFi-profilen blev lagt ind med admins
+  egne domaeneoplysninger. Foerste login koerte allerede `wifi.sh` med
+  brugerens oplysninger, men den slettede kun en profil med ét bestemt navn.
+  En profil admin havde lagt ind i Plasmas netvaerksvindue, eller med et
+  andet navn, overlevede, og saa havde maskinen to, hvoraf NetworkManager
+  kunne vaelge admins.
+
+  Nu oprettes den nye profil foerst og kontrolleres, og **derefter** fjernes
+  alle profiler for SSID'et, uanset navn og store og smaa bogstaver. Fejler
+  oprettelsen, beholder maskinen den WiFi den har. Til sidst efterproeves det
+  at der er praecis én tilbage.
+
+  Identiteten er den konto brugeren er logget ind med, ikke det navn der
+  tastes i dialogen, og feltet er forudfyldt med den. Taster brugeren et
+  andet navn, roeres WiFi'en ikke, fordi vi ikke kan vide om kodeordet hoerer
+  til den indloggede konto.
+
+  **Bemaerk:** profilen er fortsat faelles for maskinen, saa den virker ved
+  loginskaermen foer nogen er logget ind. Paa en delt maskine ender den derfor
+  i navnet paa den seneste bruger der har haft sit foerste login.
+
+- **WiFi-kodeordet staar ikke laengere i proceslisten.** `wifi.sh` gav det
+  som argument til `nmcli`, hvor enhver lokal bruger kunne laese det med
+  `ps`, i modstrid med `SECURITY.md`. Profilen skrives nu direkte som
+  NetworkManager-fil med kun bash-builtins og `umask 077`. Escapingen er
+  testet med GLib's egen keyfile-parser, den samme NetworkManager bruger,
+  mod 16 kodeord med backslash, foerende mellemrum, linjeskift, semikolon,
+  anfoerselstegn og ikke-ASCII tegn.
+
+- **Serverens certifikat kan nu kontrolleres.** PEAP/MSCHAPv2 uden
+  certifikatkontrol betyder at et falsk DTUSecure-accesspoint kan opsnappe
+  kodeordshashen. Det stod ikke i vurderingen. `SITE_WIFI_DOMAIN_SUFFIX_MATCH`
+  i `site.conf` slaar kontrollen til; den er tom som standard, fordi DTU's
+  RADIUS-domaene skal komme fra netvaerksteamet og ikke gaettes, og saa
+  advarer modulet hoejt.
+
+- **FollowMe's kodeordsfil er privat fra foerste byte.** Den blev oprettet
+  med roots umask, altsaa 0644, og foerst sat til 640 bagefter. Nu `umask 077`
+  og en efterkontrol af `root:lp 640`, som `sustain-printers.sh` allerede
+  gjorde.
+
+- **Defender henter ikke laengere til faste stier i `/tmp`.** Root
+  installerede en `.deb` og koerte et Python-script fra kendte navne i `/tmp`,
+  hvor en lokal bruger kan oprette en fil foerst. Nu en privat `mktemp -d`.
+
 - **GUI'ens opdateringsknap installerer nu den nyeste udgivelse.** Dialogen
   lovede "the latest release", men `update-latest.sh` hentede hovedet af
   `main`, som ikke noedvendigvis har bestaaet CI og ikke har nogen checksum.

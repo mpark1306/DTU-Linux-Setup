@@ -193,12 +193,21 @@ echo "[3/8] Disabling cups-browsed (if present)..."
 systemctl disable --now cups-browsed 2>/dev/null || true
 
 echo "[4/8] Writing credentials..."
-cat > "${CREDS_FILE}" <<CREDS
+# umask 077 i en subshell, saa filen er 0600 fra foerste byte. Foer blev den
+# oprettet med roots umask, altsaa 0644, og foerst sat til 640 bagefter. I det
+# vindue kunne enhver lokal bruger laese domaenekodeordet i klartekst.
+# Samme moenster som scripts/standalone/sustain-printers.sh.
+( umask 077
+  cat > "${CREDS_FILE}" <<CREDS
 username=WIN\\\\${U}
 password=${P}
 CREDS
+)
 chown root:lp "${CREDS_FILE}"
 chmod 640 "${CREDS_FILE}"
+if [[ "$(stat -c '%U:%G %a' "$CREDS_FILE")" != "root:lp 640" ]]; then
+  die "${CREDS_FILE} is not root:lp 640."
+fi
 
 echo "[5/8] Installing smbspool-auth backend..."
 cat > /usr/lib/cups/backend/smbspool-auth <<'BACKEND'

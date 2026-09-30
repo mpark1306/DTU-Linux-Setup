@@ -79,6 +79,10 @@ SITE_WEBPRINT_URL="https://webprint.dtu.dk"      # WebPrint webapp (AIT)
 SITE_WIFI_SSID="DTUSecure"
 
 SITE_WIFI_IDENTITY_SUFFIX="@win.dtu.dk"          # appended to DTU_USERNAME
+# Domain the RADIUS server's certificate must end in, e.g. "radius.example.dk".
+# Empty = the certificate is NOT checked, and a fake DTUSecure access point can
+# capture the password hash. Ask the network team for the right value.
+SITE_WIFI_DOMAIN_SUFFIX_MATCH=""
 
 # ─── Microsoft Defender for Endpoint ─────────────────────────────────────────
 SITE_DEFENDER_ONBOARDING_URL="https://<defender-host>/download/MicrosoftDefenderATPOnboardingLinuxServer.py"

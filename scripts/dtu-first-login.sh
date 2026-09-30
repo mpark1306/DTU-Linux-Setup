@@ -93,11 +93,11 @@ show_error() {
 }
 
 get_text() {
-    local title="$1" label="$2"
+    local title="$1" label="$2" default="${3:-}"
     if [[ "$DIALOG" == "kdialog" ]]; then
-        kdialog --title "$title" --inputbox "$label" ""
+        kdialog --title "$title" --inputbox "$label" "$default"
     else
-        zenity --entry --title="$title" --text="$label" --width=400
+        zenity --entry --title="$title" --text="$label" --entry-text="$default" --width=400
     fi
 }
 
@@ -571,7 +571,11 @@ Press OK to continue."
 choose_keyboard_layout
 
 # ── Collect credentials ──────────────────────────────────────────────────────
-DTU_USERNAME=$(get_text "${DEPT_LABEL} – Login" "Enter your WIN domain username (for example mpark):")
+# Den konto brugeren er logget ind med. SSSD koerer med
+# use_fully_qualified_names=False, saa $USER er WIN-brugernavnet; et eventuelt
+# @domaene skaeres af for en sikkerheds skyld.
+LOGIN_USER="${USER%%@*}"
+DTU_USERNAME=$(get_text "${DEPT_LABEL} – Login" "Enter your WIN domain username (for example mpark):" "$LOGIN_USER")
 if [[ -z "$DTU_USERNAME" ]]; then
     show_error "Error" "A username is required. The setup will run again at your next login."
     exit 1
@@ -670,13 +674,34 @@ fi
 WIFI_LOG=$(mktemp /tmp/dtu-wifi-XXXXXX.log)
 WIFI_SCRIPT="${SCRIPTS_DIR}/wifi.sh"
 
-if [[ -f "$WIFI_SCRIPT" ]]; then
+# Maskinen blev sat op af en admin, og DTUSecure-profilen blev lagt ind med
+# admins egne domaeneoplysninger. Her erstattes den af en profil i den
+# indloggede brugers navn: wifi.sh opretter den nye, kontrollerer den, og
+# fjerner derefter ALLE gamle profiler for SSID'et, ogsaa én admin lagde ind i
+# Plasmas netvaerksvindue under et andet navn.
+#
+# Identiteten er den konto brugeren er logget ind med, ikke det navn der blev
+# tastet ovenfor. Er de to forskellige, kan vi ikke vide om kodeordet hoerer
+# til den indloggede konto, og saa roeres WiFi'en ikke. At saette én persons
+# navn sammen med en andens kodeord giver bare en WiFi der ikke virker.
+WIFI_SKIPPED=""
+if [[ "${DTU_USERNAME,,}" != "${LOGIN_USER,,}" ]]; then
+    WIFI_SKIPPED=1
+    show_error "Wi-Fi not changed" "You are logged in as '${LOGIN_USER}' but typed the username '${DTU_USERNAME}'.
+
+The Wi-Fi is set up for the account you are logged in with, and we cannot tell whether the password you typed belongs to it. The Wi-Fi was left as it was.
+
+Contact IT support if the machine does not connect to DTUSecure."
+fi
+
+if [[ -z "$WIFI_SKIPPED" && -f "$WIFI_SCRIPT" ]]; then
     # See the note on the Q-Drive block above: piped, not written to /tmp.
     pkexec bash -s <<WRAPEOF &
 #!/usr/bin/env bash
 export HOME=/root
 export DTU_USERNAME=$(printf '%q' "$DTU_USERNAME")
 export DTU_PASSWORD=$(printf '%q' "$DTU_PASSWORD")
+export DTU_WIFI_USER=$(printf '%q' "$LOGIN_USER")
 export DTU_DEPARTMENT=$(printf '%q' "$DEPARTMENT")
 bash $(printf '%q' "$WIFI_SCRIPT") > $(printf '%q' "$WIFI_LOG") 2>&1
 WRAPEOF
@@ -686,11 +711,11 @@ WRAPEOF
     WIFI_RC=$?
 
     if [[ $WIFI_RC -eq 0 ]]; then
-        show_message "DTUSecure Wi-Fi" "DTUSecure Wi-Fi is configured.\n\nThe machine connects to DTUSecure automatically when you are in range and not on a cable."
+        show_message "DTUSecure Wi-Fi" "DTUSecure Wi-Fi is now set up with your own account, ${LOGIN_USER}.\n\nThe machine connects to DTUSecure automatically when you are in range and not on a cable. The account used when the machine was prepared has been removed from it."
     else
         show_error "Wi-Fi error" "Setting up DTUSecure Wi-Fi failed.\n\nLog: $WIFI_LOG\n\nYou can still use the machine. Contact IT support about the Wi-Fi."
     fi
-else
+elif [[ -z "$WIFI_SKIPPED" ]]; then
     echo "Wi-Fi script not found: $WIFI_SCRIPT, skipping." >&2
 fi
 

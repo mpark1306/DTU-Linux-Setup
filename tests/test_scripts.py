@@ -1300,5 +1300,47 @@ class TestInstallPathsAreVerified(unittest.TestCase):
         self.assertIn("(cd dist && sha256sum -- *) > sha256sums.txt", ci)
 
 
+class TestLocalCredentialLeaks(unittest.TestCase):
+    """Security review 22 Sep 2026, finding 4.1: credentials that leaked to
+    other local users. The keyfile side of wifi.sh is tested for real in
+    tests/test_wifi_keyfile.py."""
+
+    def test_followme_creds_are_private_from_the_first_byte(self):
+        body = strip_comments(read(SCRIPTS / "ubuntu" / "followme.sh"))
+        idx = body.index('cat > "${CREDS_FILE}"')
+        self.assertIn("umask 077", body[max(0, idx - 80):idx],
+                      "the file must be created under umask 077, not chmod'ed later")
+        self.assertIn("root:lp 640", body[idx:])
+
+    def test_defender_uses_no_fixed_tmp_paths(self):
+        """root installed a .deb and ran a Python script from fixed names in
+        /tmp, where any local user can create a file first."""
+        body = strip_comments(read(SCRIPTS / "ubuntu" / "defender.sh"))
+        self.assertNotRegex(body, r"/tmp/[A-Za-z]")
+        self.assertIn('WORK="$(mktemp -d)"', body)
+
+
+class TestFirstLoginWifiIsTheUsersOwn(unittest.TestCase):
+    """The machine is prepared by an admin, and DTUSecure was stored with the
+    admin's own domain credentials. At a domain user's first login it must be
+    replaced by a profile in that user's name."""
+
+    def setUp(self):
+        self.body = strip_comments(read(SCRIPTS / "dtu-first-login.sh"))
+
+    def test_wifi_is_set_up_for_the_logged_in_account(self):
+        idx = self.body.index("WIFI_SCRIPT=")
+        self.assertIn("DTU_WIFI_USER=$(printf '%q' \"$LOGIN_USER\")", self.body[idx:])
+
+    def test_a_mismatched_username_leaves_the_wifi_alone(self):
+        """One person's name with another's password gives a Wi-Fi that does
+        not work, and the admin's working profile would be gone."""
+        self.assertIn('if [[ "${DTU_USERNAME,,}" != "${LOGIN_USER,,}" ]]; then', self.body)
+        self.assertIn('if [[ -z "$WIFI_SKIPPED" && -f "$WIFI_SCRIPT" ]]; then', self.body)
+
+    def test_the_username_prompt_is_prefilled(self):
+        self.assertIn('"$LOGIN_USER")', self.body)
+
+
 if __name__ == "__main__":
     unittest.main()

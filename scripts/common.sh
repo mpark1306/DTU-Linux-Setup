@@ -132,6 +132,10 @@ load_site_conf() {
   : "${SITE_WEBPRINT_URL:=https://webprint.dtu.dk}"
   : "${SITE_WIFI_SSID:=DTUSecure}"
   : "${SITE_WIFI_IDENTITY_SUFFIX:=@win.dtu.dk}"
+  # Tom som standard: det rigtige domaene er DTU's RADIUS-server, og den skal
+  # komme fra site.conf, ikke gaettes her. Tom betyder at certifikatet ikke
+  # kontrolleres, og wifi.sh siger det hoejt.
+  : "${SITE_WIFI_DOMAIN_SUFFIX_MATCH:=}"
   : "${SITE_HELPDESK_URL:=https://serviceportal.dtu.dk}"
   : "${SITE_HELPDESK_EMAIL:=ait@dtu.dk}"
 
@@ -187,7 +191,7 @@ load_site_conf() {
   export SITE_SUSTAIN_Q_SHARE_QUMULO SITE_SUSTAIN_P_SUBPATH_QUMULO
   export SITE_MDRIVE_SERVER SITE_MDRIVE_BASE
   export SITE_PRINT_SERVER SITE_SUSTAIN_PLOT_SERVER SITE_WEBPRINT_URL
-  export SITE_WIFI_SSID SITE_WIFI_IDENTITY_SUFFIX
+  export SITE_WIFI_SSID SITE_WIFI_IDENTITY_SUFFIX SITE_WIFI_DOMAIN_SUFFIX_MATCH
   export SITE_DEFENDER_ONBOARDING_URL
   export SITE_HELPDESK_URL SITE_HELPDESK_EMAIL
 }

@@ -28,6 +28,14 @@ if [[ -z "$UBUNTU_VER" ]]; then
 fi
 echo "[i] Detected: Ubuntu ${UBUNTU_VER} (${UBUNTU_CODE})"
 
+# En privat mappe til det der hentes. Foer laa .deb'en og onboarding-scriptet
+# paa faste stier i /tmp, som root derefter installerede og koerte. En lokal
+# bruger kan oprette en fil paa en kendt sti i /tmp foer root naar dertil.
+# mktemp -d giver en mappe som kun root kan skrive i, med et navn ingen kan
+# gaette paa forhaand.
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
 # Cleanup old artifacts
 rm -f /etc/apt/sources.list.d/microsoft-prod.list || true
 rm -f /etc/apt/keyrings/microsoft.gpg || true
@@ -49,7 +57,7 @@ MS_CONFIG_VER=""
 for cand in "$UBUNTU_VER" 26.04 24.04 22.04; do
     if [[ -z "$cand" ]]; then continue; fi
     if curl -fsSL "https://packages.microsoft.com/config/ubuntu/${cand}/packages-microsoft-prod.deb" \
-         -o /tmp/packages-microsoft-prod.deb; then
+         -o "$WORK/packages-microsoft-prod.deb"; then
         MS_CONFIG_VER="$cand"; break
     fi
 done
@@ -60,7 +68,7 @@ if [[ "$MS_CONFIG_VER" != "$UBUNTU_VER" ]]; then
     warn "Microsoft has no repo for Ubuntu ${UBUNTU_VER} yet; using the ${MS_CONFIG_VER} one."
     warn "mdatp will install from the ${MS_CONFIG_VER} suite. Re-run this module once ${UBUNTU_VER} is published."
 fi
-dpkg -i /tmp/packages-microsoft-prod.deb
+dpkg -i "$WORK/packages-microsoft-prod.deb"
 apt-get update -y || warn "apt-get update reported errors (likely a broken third-party repository); continuing."
 
 echo "[3/6] Installing mdatp..."
@@ -83,9 +91,9 @@ systemctl daemon-reexec
 systemctl daemon-reload
 systemctl enable --now mdatp
 
-curl -fsSL -o /tmp/MicrosoftDefenderATPOnboardingLinuxServer.py \
+curl -fsSL -o "$WORK/MicrosoftDefenderATPOnboardingLinuxServer.py" \
   "${SITE_DEFENDER_ONBOARDING_URL}"
-python3 /tmp/MicrosoftDefenderATPOnboardingLinuxServer.py || true
+python3 "$WORK/MicrosoftDefenderATPOnboardingLinuxServer.py" || true
 
 mdatp config passive-mode --value disabled || true
 mdatp config real-time-protection --value enabled || true
