@@ -1,4 +1,4 @@
-## Uudgivet
+## v1.8.0 — 30. september 2026
 
 ### Sikkerhed
 
@@ -211,10 +211,6 @@ ved direkte laesning af koden.
 
 - **CI er pinnet til `ubuntu-24.04`.** `ubuntu-latest` ruller selv videre til
   26.04 og ville aendre hvad der testes paa et tidspunkt ingen har valgt.
-
-## v1.8.0 — 29. september 2026
-
-### Nyt
 
 - **Programmet taler engelsk.** Alt brugeren møder er lagt om: GUI'en,
   fejldialogen med dens 55 diagnoser og forslag, velkomstdialogen ved første
