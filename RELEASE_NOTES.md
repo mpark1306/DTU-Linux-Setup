@@ -121,6 +121,14 @@ ved direkte laesning af koden.
 
 ### Rettet
 
+- **Drev-notifikationen laeste brugernavnet ud af en kolonne.**
+  `deploy-drives-autoswitch.sh` tog kolonne 3 fra `loginctl list-sessions`.
+  Kolonnerne er ikke et stabilt format: 26.04 har faaet LEADER og CLASS, og
+  "manager"-sessioner staar nu paa listen ved siden af de rigtige. Nu laeses
+  kun sessions-ID'et, og resten spoerges der om med `show-session -p`, som
+  `setup-dtu-auto-update_Version4.sh` allerede gjorde. Notifikationen gaar kun
+  til grafiske sessioner, de eneste der kan vise den.
+
 - **`tpm2-rebind.sh` kunne ikke skrive sine egne fejlbeskeder.** Scriptet kaldte
   `die` fire steder uden at nogen definerede den, saa under `set -euo pipefail`
   blev hver fejlvej til `die: command not found` og exit 127. Den vaerste var

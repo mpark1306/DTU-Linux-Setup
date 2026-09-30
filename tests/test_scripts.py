@@ -1342,5 +1342,26 @@ class TestFirstLoginWifiIsTheUsersOwn(unittest.TestCase):
         self.assertIn('"$LOGIN_USER")', self.body)
 
 
+class TestLoginctlIsQueriedNotParsed(unittest.TestCase):
+    """The column layout of `loginctl list-sessions` is not a stable format.
+    26.04 added LEADER and CLASS, and lists "manager" sessions (the user@
+    service) next to real ones. Only the first column, the session ID, is
+    read; everything else comes from `show-session -p`, the documented
+    interface."""
+
+    def test_no_script_reads_a_column_past_the_session_id(self):
+        for path in ALL_SH:
+            body = strip_comments(read(path))
+            for line in body.splitlines():
+                if "loginctl list-sessions" in line and "awk" in line:
+                    with self.subTest(script=path.name, line=line.strip()):
+                        self.assertRegex(line, r"print \\?\$1\b")
+
+    def test_the_drive_notification_goes_to_graphical_sessions_only(self):
+        body = strip_comments(read(SCRIPTS / "deploy-drives-autoswitch.sh"))
+        self.assertIn("-p Type --value", body)
+        self.assertIn("x11|wayland)", body)
+
+
 if __name__ == "__main__":
     unittest.main()

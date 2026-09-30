@@ -91,7 +91,20 @@ esac
 
   # Der er stadig ingen server der svarer. Sig det til dem der er logget ind
   # på en grafisk session — én notifikation per bruger, med en knap.
-  for u in \$(loginctl list-sessions --no-legend 2>/dev/null | awk '{print \$3}' | sort -u); do
+  #
+  # Kun første kolonne læses, sessions-ID'et; alt andet spørges der om med
+  # "show-session -p", som er systemds dokumenterede grænseflade. Kolonnerne
+  # i list-sessions er ikke et stabilt format: på 26.04 er der kommet LEADER
+  # og CLASS til, og "manager"-sessioner (user@-tjenesten) står nu på listen
+  # ved siden af de rigtige. Kun x11- og wayland-sessioner kan vise en
+  # notifikation, så de andre springes over.
+  for u in \$(
+    for sid in \$(loginctl list-sessions --no-legend 2>/dev/null | awk '{print \$1}'); do
+      case "\$(loginctl show-session "\$sid" -p Type --value 2>/dev/null)" in
+        x11|wayland) loginctl show-session "\$sid" -p Name --value 2>/dev/null ;;
+      esac
+    done | sort -u
+  ); do
     [ -n "\$u" ] || continue
     "${NOTIFY_SCRIPT}" "\$u" &
   done
