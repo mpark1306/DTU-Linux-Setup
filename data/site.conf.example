@@ -86,6 +86,9 @@ SITE_WIFI_DOMAIN_SUFFIX_MATCH=""
 
 # ─── Microsoft Defender for Endpoint ─────────────────────────────────────────
 SITE_DEFENDER_ONBOARDING_URL="https://<defender-host>/download/MicrosoftDefenderATPOnboardingLinuxServer.py"
+# sha256 of that file. The script is run as root, so pin it. Empty = not
+# checked, and defender.sh prints the checksum it got so you can fill it in.
+SITE_DEFENDER_ONBOARDING_SHA256=""
 
 # ─── First-login welcome (optional) ──────────────────────────────────────────
 SITE_HELPDESK_URL="https://serviceportal.dtu.dk"

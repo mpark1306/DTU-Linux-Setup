@@ -8,6 +8,7 @@ scripts say, not at what the comments claim.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -1413,6 +1414,80 @@ class TestCiStepsRunUnderGithubsShell(unittest.TestCase):
             # Bare names: the installers look their archive up by exact name.
             self.assertRegex(sums, r"(?m)^[0-9a-f]{64}  dtu-sustain-setup-9\.9\.9\.tar\.gz$")
             self.assertNotIn("dist/", sums)
+
+
+class TestDefenderOnboardingIsPinned(unittest.TestCase):
+    """defender.sh downloads Microsoft's onboarding script from an internal
+    server and runs it as root. Same class of hole as the install paths had,
+    so it is pinned by SITE_DEFENDER_ONBOARDING_SHA256 from site.conf, and a
+    failed onboarding no longer reports success (`|| true` is gone).
+
+    The real block is cut out of defender.sh and run with fake curl and
+    python3 on PATH that record whether they were called.
+    """
+
+    PAYLOAD = "print(1)"
+
+    def _block(self) -> str:
+        text = read(SCRIPTS / "ubuntu" / "defender.sh")
+        start = text.index('ONBOARD="$WORK/')
+        end = text.index("\nfi\n", text.index('if ! python3 "$ONBOARD"')) + 4
+        return text[start:end]
+
+    def _run(self, pin: str, python_rc: int = 0):
+        from hashlib import sha256
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "bin").mkdir()
+            (d / "bin" / "curl").write_text(
+                '#!/bin/bash\nwhile [[ $# -gt 0 ]]; do [[ "$1" == -o ]] && out="$2"; shift; done\n'
+                f'printf %s {self.PAYLOAD!r} > "$out"\n')
+            (d / "bin" / "python3").write_text(
+                f'#!/bin/bash\necho ran >> "{d}/python3.calls"\nexit {python_rc}\n')
+            for f in (d / "bin").iterdir():
+                f.chmod(0o755)
+            script = (f'source "{SCRIPTS / "common.sh"}" >/dev/null 2>&1\n'
+                      f'WORK="{d}"\nSITE_DEFENDER_ONBOARDING_URL=https://x.invalid/o.py\n'
+                      'SITE_DEFENDER_ONBOARDING_SHA256="$PIN"\n' + self._block() +
+                      '\necho REACHED_END\n')
+            # The pin goes in through a variable: tests/check-no-internal-values.sh
+            # rightly refuses a literal SITE_* value in a tracked file.
+            env = {**os.environ, "PATH": f"{d / 'bin'}:{os.environ['PATH']}", "PIN": pin}
+            r = subprocess.run(["bash", "-euo", "pipefail", "-c", script],
+                               env=env, capture_output=True, text=True)
+            ran = (d / "python3.calls").exists()
+        good = sha256(self.PAYLOAD.encode()).hexdigest()
+        return r, ran, good
+
+    def test_a_matching_pin_runs_the_script(self):
+        _, _, good = self._run("")
+        r, ran, _ = self._run(good)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(ran)
+
+    def test_a_wrong_pin_never_runs_the_script(self):
+        r, ran, _ = self._run("0" * 64)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertFalse(ran, "the unverified script ran as root")
+        self.assertIn("does not match", r.stdout + r.stderr)
+
+    def test_no_pin_runs_but_says_so_and_prints_the_checksum(self):
+        r, ran, good = self._run("")
+        self.assertTrue(ran)
+        self.assertIn("WITHOUT a checksum", r.stdout + r.stderr)
+        self.assertIn(good, r.stdout + r.stderr)
+
+    def test_a_failed_onboarding_stops_the_module(self):
+        _, _, good = self._run("")
+        r, ran, _ = self._run(good, python_rc=1)
+        self.assertTrue(ran)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertNotIn("REACHED_END", r.stdout)
+
+    def test_enrollment_is_checked_at_the_end(self):
+        body = strip_comments(read(SCRIPTS / "ubuntu" / "defender.sh"))
+        self.assertIn("mdatp health --field licensed", body)
+        self.assertNotRegex(body, r'python3 "\$ONBOARD"[^\n]*\|\|\s*true')
 
 
 if __name__ == "__main__":

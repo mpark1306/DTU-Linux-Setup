@@ -42,12 +42,12 @@ rm -f /etc/apt/keyrings/microsoft.gpg || true
 rm -f /etc/apt/trusted.gpg.d/microsoft.gpg || true
 rm -f /usr/local/bin/mdatp || true
 
-echo "[1/6] Installing prerequisites..."
+echo "[1/7] Installing prerequisites..."
 apt_wait
 apt-get update -y || warn "apt-get update reported errors (likely a broken third-party repository); continuing."
 apt-get install -y curl ca-certificates gnupg apt-transport-https
 
-echo "[2/6] Installing Microsoft keyring..."
+echo "[2/7] Installing Microsoft keyring..."
 # Microsoft udgiver ikke en config-mappe for en ny Ubuntu-udgivelse med det
 # samme, saa en 26.04-maskine kan moede en 404 i maaneder. .deb'en goer kun to
 # ting: laegger en apt-kilde og en noegle. Findes vores udgivelse ikke endnu,
@@ -71,10 +71,10 @@ fi
 dpkg -i "$WORK/packages-microsoft-prod.deb"
 apt-get update -y || warn "apt-get update reported errors (likely a broken third-party repository); continuing."
 
-echo "[3/6] Installing mdatp..."
+echo "[3/7] Installing mdatp..."
 apt-get install -y mdatp
 
-echo "[4/6] Ensuring daemon paths..."
+echo "[4/7] Ensuring daemon paths..."
 DAEMON="/opt/microsoft/mdatp/sbin/wdavdaemon"
 CLIENT="/opt/microsoft/mdatp/sbin/wdavdaemonclient"
 [[ -x "$DAEMON" ]] || { fail "Missing daemon: $DAEMON"; exit 1; }
@@ -86,14 +86,39 @@ if findmnt -T /opt -o OPTIONS -n | grep -qw noexec; then
   mount -o remount,exec /opt || warn "/opt is noexec"
 fi
 
-echo "[5/6] Enabling service + onboarding..."
+echo "[5/7] Enabling service + onboarding..."
 systemctl daemon-reexec
 systemctl daemon-reload
 systemctl enable --now mdatp
 
-curl -fsSL -o "$WORK/MicrosoftDefenderATPOnboardingLinuxServer.py" \
-  "${SITE_DEFENDER_ONBOARDING_URL}"
-python3 "$WORK/MicrosoftDefenderATPOnboardingLinuxServer.py" || true
+# Onboarding-scriptet hentes fra en intern server og koeres som root. Det er
+# samme slags hul som installationsvejene havde: hvad der ligger paa den
+# adresse, koerer med fulde rettigheder. Checksummen kan ikke komme fra samme
+# server, saa den ligger i site.conf, som foelger med imaget.
+ONBOARD="$WORK/MicrosoftDefenderATPOnboardingLinuxServer.py"
+curl -fsSL -o "$ONBOARD" "${SITE_DEFENDER_ONBOARDING_URL}" \
+  || die "Could not download the onboarding script from ${SITE_DEFENDER_ONBOARDING_URL}."
+GOT_SHA="$(sha256sum "$ONBOARD" | awk '{ print $1 }')"
+if [[ -n "${SITE_DEFENDER_ONBOARDING_SHA256:-}" ]]; then
+  if [[ "$GOT_SHA" != "${SITE_DEFENDER_ONBOARDING_SHA256,,}" ]]; then
+    die "The onboarding script does not match SITE_DEFENDER_ONBOARDING_SHA256. Not running it.
+    expected ${SITE_DEFENDER_ONBOARDING_SHA256,,}
+    got      ${GOT_SHA}
+If the onboarding package was regenerated on purpose, update site.conf."
+  fi
+  ok "onboarding script verified (sha256 ${GOT_SHA})"
+else
+  warn "The onboarding script is run as root WITHOUT a checksum check."
+  warn "Set SITE_DEFENDER_ONBOARDING_SHA256=${GOT_SHA} in /etc/dtu-setup/site.conf"
+  warn "once you have confirmed this is the right file."
+fi
+
+# Ikke "|| true". Fejler onboarding, har maskinen Defender installeret men er
+# ikke tilmeldt organisationen, og saa skal modulet sige det, ikke melde
+# succes. "licensed" er mdatp's eget svar paa om tilmeldingen lykkedes.
+if ! python3 "$ONBOARD"; then
+  die "Defender onboarding failed. mdatp is installed but NOT enrolled in the organisation."
+fi
 
 mdatp config passive-mode --value disabled || true
 mdatp config real-time-protection --value enabled || true
@@ -147,4 +172,8 @@ mdatp definitions update || true
 sleep 5
 mdatp health || true
 mdatp version || true
+if [[ "$(mdatp health --field licensed 2>/dev/null | tr -d '"[:space:]')" != "true" ]]; then
+  die "mdatp reports licensed=false: the machine is not enrolled. Check the onboarding output above."
+fi
+ok "mdatp reports the machine as enrolled (licensed=true)."
 ok "Microsoft Defender installed on Ubuntu ${UBUNTU_VER}"

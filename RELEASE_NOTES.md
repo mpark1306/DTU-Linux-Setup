@@ -1,3 +1,28 @@
+## Uudgivet
+
+### Sikkerhed
+
+- **Defenders onboarding-script kontrolleres foer det koeres som root.** Det
+  hentes fra en intern server og koeres med fulde rettigheder, samme slags
+  hul som installationsvejene havde. `SITE_DEFENDER_ONBOARDING_SHA256` i
+  `site.conf` laaser det fast; `site.conf` foelger med imaget, altsaa en
+  anden kanal end serveren. Passer det ikke, koeres scriptet ikke. Er
+  vaerdien tom, koeres det med en advarsel, og modulet skriver den checksum
+  det fik, saa den kan udfyldes.
+
+- **En mislykket onboarding melder ikke laengere succes.** Kaldet havde
+  `|| true`, saa en maskine med Defender installeret men ikke tilmeldt
+  organisationen saa helt normal ud. Nu stopper modulet, og til sidst
+  kontrolleres `mdatp health --field licensed`, mdatp's eget svar paa om
+  tilmeldingen lykkedes.
+
+### Rettet
+
+- **CI-trinnet der byggede kildearkivet fejlede paa GitHub.** Kontrollen
+  `tar | grep -q` stopper ved foerste traef, tar faar en skrivefejl, og GitHub
+  koerer med `pipefail`. Rettet, og CI-trinnene koeres nu selv i testene med
+  GitHubs flag.
+
 ## v1.8.0 — 30. september 2026
 
 ### Sikkerhed

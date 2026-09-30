@@ -153,6 +153,9 @@ load_site_conf() {
   # værtsnavn og ingen default.
   : "${SITE_SUSTAIN_PLOT_SERVER:=}"
   : "${SITE_DEFENDER_ONBOARDING_URL:=}"
+  # Checksum af onboarding-scriptet. Tom = scriptet koeres ukontrolleret, og
+  # defender.sh siger det hoejt og skriver den checksum det fik.
+  : "${SITE_DEFENDER_ONBOARDING_SHA256:=}"
   # Domænecontrollere for Kerberos, mellemrumsadskilt. Navngives de, slipper
   # klienten for et DNS SRV-opslag ved hver billet — det er dét der gør det
   # første login langsomt på en kold cache. Ingen default: det er konkret
@@ -192,7 +195,7 @@ load_site_conf() {
   export SITE_MDRIVE_SERVER SITE_MDRIVE_BASE
   export SITE_PRINT_SERVER SITE_SUSTAIN_PLOT_SERVER SITE_WEBPRINT_URL
   export SITE_WIFI_SSID SITE_WIFI_IDENTITY_SUFFIX SITE_WIFI_DOMAIN_SUFFIX_MATCH
-  export SITE_DEFENDER_ONBOARDING_URL
+  export SITE_DEFENDER_ONBOARDING_URL SITE_DEFENDER_ONBOARDING_SHA256
   export SITE_HELPDESK_URL SITE_HELPDESK_EMAIL
 }
 
