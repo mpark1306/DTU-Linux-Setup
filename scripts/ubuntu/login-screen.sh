@@ -68,7 +68,7 @@ sddm_conf_value() {
         if [[ -r "$f" ]]; then
             local v
             v="$(awk -F= -v s="[$section]" -v k="$key" '
-                /^[[:space:]]*\[/ { insec = ($0 ~ s); next }
+                /^[[:space:]]*\[/ { h = $0; gsub(/^[[:space:]]+|[[:space:]]+$/, "", h); insec = (h == s); next }
                 insec && $1 ~ "^[[:space:]]*" k "[[:space:]]*$" {
                     sub(/^[[:space:]]+/, "", $2); sub(/[[:space:]]+$/, "", $2); val = $2
                 }
