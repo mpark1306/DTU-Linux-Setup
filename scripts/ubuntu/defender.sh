@@ -40,13 +40,15 @@ trap 'rm -rf "$WORK"' EXIT
 # pakke ejer.
 #
 # IKKE /etc/apt/sources.list.d/microsoft-prod.list. Den er en
-# konfigurationsfil i packages-microsoft-prod, og en slettet
-# konfigurationsfil husker dpkg. Ved samme version lod dpkg den være slettet,
-# så Microsofts pakkekilde forsvandt fra maskinen ved hver genkørsel. Ved en
-# ny version (fx ubuntu26.04 over ubuntu24.04 efter en udgaveopgradering)
-# spurgte dpkg om den skulle lægges tilbage, og uden tastatur fejlede modulet
-# med "end of file on stdin at conffile prompt". Set 2. oktober 2026 på en
-# maskine opgraderet til 26.04. dpkg-kaldet nedenfor håndterer filen i stedet.
+# konfigurationsfil i packages-microsoft-prod. Ved samme version gør det
+# ingen skade, for pakkens egen postinst lægger filen tilbage når den mangler.
+# Men ved en ny version (fx ubuntu26.04 over ubuntu24.04 efter en
+# udgaveopgradering) spørger dpkg om en slettet eller ændret
+# konfigurationsfil, og uden tastatur fejlede modulet med "end of file on
+# stdin at conffile prompt" og efterlod pakken halvinstalleret. Set 2. oktober
+# 2026 på en maskine opgraderet til 26.04. Prompten kommer også uden vores
+# sletning, hvis opgraderingen har rettet i filen, så dpkg-kaldet nedenfor
+# skal kunne klare den uanset hvad.
 rm -f /etc/apt/keyrings/microsoft.gpg || true
 rm -f /etc/apt/trusted.gpg.d/microsoft.gpg || true
 rm -f /usr/local/bin/mdatp || true
@@ -79,8 +81,8 @@ if [[ "$MS_CONFIG_VER" != "$UBUNTU_VER" ]]; then
 fi
 # --force-confnew: tag altid pakkens version af kildefilen, også over en
 #   håndlavet fil med samme navn og ved en ny version. Ingen spørgsmål.
-# --force-confmiss: læg filen tilbage hvis den mangler, også på maskiner hvor
-#   en tidligere version af dette modul har slettet den.
+# --force-confmiss: læg filen tilbage hvis den mangler, i stedet for at
+#   spørge.
 dpkg --force-confnew --force-confmiss -i "$WORK/packages-microsoft-prod.deb"
 if ! ls /etc/apt/sources.list.d/microsoft-prod.* >/dev/null 2>&1; then
     die "Microsoft's package source is missing after installing packages-microsoft-prod."

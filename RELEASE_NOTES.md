@@ -18,21 +18,23 @@
 
 ### Rettet
 
-- **Defender-modulet slettede Microsofts pakkekilde.** Det fjernede
-  `/etc/apt/sources.list.d/microsoft-prod.list` foer det installerede
-  `packages-microsoft-prod`, men filen er en konfigurationsfil i den pakke, og
-  dpkg husker en slettet konfigurationsfil. Ved samme version lod dpkg den
-  vaere slettet, saa en maskine hvor modulet blev koert igen, mistede
-  Microsofts kilde og fik ikke laengere Defender-opdateringer gennem apt. Ved
-  en ny version, fx efter opgradering til 26.04, spurgte dpkg i stedet, og
-  modulet fejlede med "end of file on stdin at conffile prompt".
+- **Defender-modulet fejlede efter opgradering til 26.04.** Det slettede
+  `/etc/apt/sources.list.d/microsoft-prod.list` og installerede derefter
+  `packages-microsoft-prod`. Filen er en konfigurationsfil i den pakke. Ved en
+  ny version af pakken, som efter en opgradering fra 24.04 til 26.04, spurgte
+  dpkg, om den skulle laegges tilbage. Modulet har intet tastatur, saa det
+  fejlede med "end of file on stdin at conffile prompt" og efterlod pakken
+  halvinstalleret. Derefter fejlede alle moduler der bruger apt, indtil der
+  blev ryddet op. Det samme sker, hvis opgraderingen selv har rettet i filen.
 
-  Nu installeres pakken med `--force-confnew --force-confmiss`, som laegger
-  filen tilbage og aldrig spoerger, og modulet stopper hvis kilden mangler
-  bagefter. Begge forloeb og rettelsen er efterproevet med dpkg mod en
-  testpakke. **Bemaerk for support:** maskiner hvor modulet er koert mere end
-  én gang, kan mangle kilden i dag. `ls /etc/apt/sources.list.d/microsoft-prod.*`
-  viser det; at koere det rettede modul igen laegger den tilbage.
+  Nu installeres pakken med `--force-confnew --force-confmiss`, som aldrig
+  spoerger, og modulet stopper, hvis kilden mangler bagefter. Forloebene er
+  efterproevet med Microsofts egen pakke i et testtrae. Paa 24.04 og ved
+  genkoersel paa samme udgave gjorde sletningen ingen skade, fordi pakkens
+  eget installationsscript laegger filen tilbage.
+
+  **Bemaerk for support:** en maskine der har ramt fejlen, rydder op med
+  `sudo DEBIAN_FRONTEND=noninteractive dpkg --force-confnew --force-confmiss --configure -a`.
 
 - **Fejldialogen gav forkert diagnose.** Moenstret for "loebet toer for
   hukommelse" matchede "oom" uden ordgraenser, og fandt det i `us.zoom.Zoom`,

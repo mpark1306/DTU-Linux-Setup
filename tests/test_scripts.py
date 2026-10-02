@@ -1498,11 +1498,13 @@ class TestDefenderKeepsMicrosoftsSource(unittest.TestCase):
     """defender.sh deleted /etc/apt/sources.list.d/microsoft-prod.list, a
     conffile of packages-microsoft-prod, before installing that package.
 
-    dpkg remembers a deleted conffile. At the same version it left it
-    deleted, so Microsoft's package source vanished on every re-run. At a
-    new version (ubuntu26.04 over ubuntu24.04 after a release upgrade) it
-    asked whether to restore it, and with no terminal the module failed with
-    "end of file on stdin at conffile prompt". Seen 2 Oct 2026.
+    At the same version that is harmless: the package's own postinst puts
+    the file back. At a new version (ubuntu26.04 over ubuntu24.04 after a
+    release upgrade) dpkg asks about a deleted or changed conffile, and with
+    no terminal the module failed with "end of file on stdin at conffile
+    prompt", leaving the package half-installed. Seen 2 Oct 2026. The prompt
+    also comes without our delete if the upgrade edited the file, which is
+    why the dpkg flags matter more than removing the rm.
     """
 
     def setUp(self):
