@@ -1,4 +1,4 @@
-## Uudgivet
+## v1.8.1 (2. oktober 2026)
 
 ### Sikkerhed
 
