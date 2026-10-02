@@ -70,6 +70,34 @@ class ErrorPattern:
 
 
 ERROR_PATTERNS: list[ErrorPattern] = [
+    # Først, fordi den er grundårsagen til alt andet i outputtet: en pakke
+    # står halvt installeret, og HVERT efterfølgende apt-kald prøver at gøre
+    # den færdig og fejler på samme sted. Set 2. oktober 2026, hvor tre
+    # moduler i træk fejlede på én Microsoft-pakke fra et fjerde.
+    ErrorPattern(
+        r"(end of file on stdin at conffile prompt|dpkg was interrupted|"
+        r"you must manually run 'sudo dpkg --configure -a')",
+        "A package installation was left unfinished",
+        "An earlier installation stopped halfway, so every module that\n"
+        "uses apt now fails at the same place.\n"
+        "• Finish it, taking the packages' own configuration files:\n"
+        "  sudo DEBIAN_FRONTEND=noninteractive dpkg --force-confnew --force-confmiss --configure -a\n"
+        "• Then run this module again.",
+    ),
+    # Næsten lige så tidligt: flere moduler skjuler apt's output (-qq,
+    # >/dev/null), og så er dette den eneste linje der når frem. Den er altid
+    # grundårsagen når den står der, også når resten af outputtet ligner noget
+    # andet.
+    ErrorPattern(
+        r"Sub-process /usr/bin/dpkg returned an error code",
+        "A package could not be installed (dpkg failed)",
+        "apt asked dpkg to install or configure a package, and dpkg failed.\n"
+        "• Most often an earlier installation stopped halfway. Finish it:\n"
+        "  sudo DEBIAN_FRONTEND=noninteractive dpkg --force-confnew --force-confmiss --configure -a\n"
+        "• Then: sudo apt-get -f install\n"
+        "• Run the module again. If it still fails, run its script in a terminal\n"
+        "  to see dpkg's own message.",
+    ),
     ErrorPattern(
         r"pkexec.*(dismissed|cancelled|not authorized|Authorization failed)",
         "Authentication cancelled or denied",
@@ -408,7 +436,7 @@ ERROR_PATTERNS: list[ErrorPattern] = [
 
     # ─── Filesystem / permissions ────────────────────────────────────
     ErrorPattern(
-        r"(Read-only file system|EROFS)",
+        r"(Read-only file system|\bEROFS\b)",
         "The file system is read-only",
         "The file system is mounted read-only, which usually follows an error at boot.\n"
         "• Remount it read-write: sudo mount -o remount,rw /\n"
@@ -424,7 +452,7 @@ ERROR_PATTERNS: list[ErrorPattern] = [
         "• With SELinux or AppArmor active, check the audit log: sudo ausearch -m avc",
     ),
     ErrorPattern(
-        r"(Input/output error|EIO|Buffer I/O error)",
+        r"(Input/output error|\bEIO\b|Buffer I/O error)",
         "I/O error, possibly a failing disk",
         "The kernel reported an I/O error, which can mean a hardware problem.\n"
         "• Check the SMART status: sudo smartctl -a /dev/sda\n"
@@ -497,7 +525,7 @@ ERROR_PATTERNS: list[ErrorPattern] = [
 
     # ─── Generic process errors ──────────────────────────────────────
     ErrorPattern(
-        r"(Killed|received signal 9|out of memory|OOM)",
+        r"\b(Killed|received signal 9|out of memory|OOM)\b",
         "The process was killed (out of memory, or a signal)",
         "The script was stopped by the kernel or by hand.\n"
         "• Check the memory: free -h\n"
@@ -530,7 +558,7 @@ ERROR_PATTERNS: list[ErrorPattern] = [
 
     # ─── Generic catch-alls (lowest priority – ordered last) ─────────
     ErrorPattern(
-        r"(connection reset by peer|broken pipe|EPIPE)",
+        r"(connection reset by peer|broken pipe|\bEPIPE\b)",
         "The connection dropped mid-transfer",
         "The other end closed the connection unexpectedly.\n"
         "• Try again in a moment.\n"

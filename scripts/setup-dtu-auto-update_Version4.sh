@@ -28,10 +28,14 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 TOTAL=11
-BLUE='\033[1;34m'; GREEN='\033[1;32m'; RED='\033[1;31m'; NC='\033[0m'
+BLUE='\033[1;34m'; GREEN='\033[1;32m'; YELLOW='\033[1;33m'; RED='\033[1;31m'; NC='\033[0m'
 step() { echo -e "\n${BLUE}[TRIN $1/${TOTAL}]${NC} $2"; }
 ok()   { echo -e "  ${GREEN}[OK]${NC} $1"; }
 fail() { echo -e "  ${RED}[ERROR]${NC} $1"; exit 1; }
+# warn blev brugt nedenfor uden at være defineret, så hver advarsel blev til
+# "warn: command not found" og exit 127, og beskeden nåede ingen. Set 2.
+# oktober 2026, da apt fejlede i trin 2.
+warn() { echo -e "  ${YELLOW}[WARN]${NC} $1"; }
 
 ###############################################################################
 step 1 "Checking the requirements and the distribution"

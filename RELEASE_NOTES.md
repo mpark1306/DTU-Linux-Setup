@@ -34,6 +34,23 @@
   én gang, kan mangle kilden i dag. `ls /etc/apt/sources.list.d/microsoft-prod.*`
   viser det; at koere det rettede modul igen laegger den tilbage.
 
+- **Fejldialogen gav forkert diagnose.** Moenstret for "loebet toer for
+  hukommelse" matchede "oom" uden ordgraenser, og fandt det i `us.zoom.Zoom`,
+  som altid staar i Software-modulets output. Enhver fejl i det modul blev
+  derfor meldt som hukommelsesmangel. Det samme gjaldt EIO, EROFS og EPIPE
+  inde i andre ord. Nu kraeves ordgraenser.
+
+  Dialogen kender desuden to nye fejl: en pakke der er efterladt
+  halvinstalleret ("end of file on stdin at conffile prompt", "dpkg was
+  interrupted"), med kommandoen der rydder op, og en generel dpkg-fejl. Den
+  foerste rammer alle moduler der bruger apt, indtil der er ryddet op, saa
+  den skal kunne genkendes uanset hvilket modul der fejler.
+
+- **Auto Update-modulet fejlede med "warn: command not found".** Scriptet
+  kaldte `warn`, som ikke var defineret i det, og under `set -e` stoppede det
+  dér med exit 127. Testen der fanger kald til udefinerede hjaelpere,
+  daekker nu ogsaa scripts der ikke bruger `common.sh`.
+
 - **CI-trinnet der byggede kildearkivet fejlede paa GitHub.** Kontrollen
   `tar | grep -q` stopper ved foerste traef, tar faar en skrivefejl, og GitHub
   koerer med `pipefail`. Rettet, og CI-trinnene koeres nu selv i testene med

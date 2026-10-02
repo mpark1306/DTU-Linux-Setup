@@ -1001,15 +1001,19 @@ class TestHelpersAreActuallyDefined(unittest.TestCase):
 
     def test_every_helper_a_script_calls_is_reachable(self):
         """Closed vocabulary: only the helper names we define ourselves, so
-        there are no false positives from external binaries."""
+        there are no false positives from external binaries.
+
+        Scripts that do NOT source common.sh are checked too. The first
+        version of this test skipped them, and setup-dtu-auto-update_Version4.sh
+        called warn without defining it: found on 2 Oct 2026, when apt failed
+        and the warning became "warn: command not found"."""
         common = self._defined_in(SCRIPTS / "common.sh")
         for path in ALL_SH:
             if path.name == "common.sh":
                 continue
             body = strip_comments(read(path))
-            if not re.search(r"source .*common\.sh", body):
-                continue
-            available = common | self._defined_in(path)
+            sourced = bool(re.search(r"source .*common\.sh", body))
+            available = (common if sourced else set()) | self._defined_in(path)
             for name in sorted(common):
                 # Called in command position, i.e. at the start of a statement.
                 if re.search(rf"(?:^|\||&&|;|\{{)\s*{name}\s", body, re.MULTILINE):
