@@ -59,6 +59,9 @@ test:
 	@echo "── Bash: checksum-kontrol i installationsvejene ─────────────"
 	bash tests/test_install_verify.sh
 	@echo ""
+	@echo "── Bash: opgraderingen 24.04 -> 26.04 ───────────────────────"
+	bash tests/test_upgrade_2604.sh
+	@echo ""
 	@echo "── Shell: scripts (statisk + adfærd) ───────────────────────"
 	PYTHONPATH=src python3 -m unittest tests.test_scripts
 	@echo ""
@@ -89,6 +92,7 @@ install:
 	# Launcher
 	install -d $(DESTDIR)$(PREFIX)/bin
 	install -m 755 bin/dtu-sustain-setup $(DESTDIR)$(PREFIX)/bin/
+	install -m 755 bin/dtu-upgrade-2604.sh $(DESTDIR)$(PREFIX)/bin/
 
 	# Ensure scripts are executable
 	find $(DESTDIR)$(PREFIX)/scripts -name '*.sh' -exec chmod 755 {} +
@@ -96,6 +100,7 @@ install:
 	# Symlink to PATH
 	install -d $(DESTDIR)$(BINDIR)
 	ln -sf $(PREFIX)/bin/dtu-sustain-setup $(DESTDIR)$(BINDIR)/dtu-sustain-setup
+	ln -sf $(PREFIX)/bin/dtu-upgrade-2604.sh $(DESTDIR)$(BINDIR)/dtu-upgrade-2604
 
 	# Desktop file (visible to ALL users including domain users)
 	install -d $(DESTDIR)$(APPDIR)
@@ -121,6 +126,7 @@ uninstall:
 	@echo "Removing DTU Linux Setup..."
 	rm -rf $(DESTDIR)$(PREFIX)
 	rm -f  $(DESTDIR)$(BINDIR)/dtu-sustain-setup
+	rm -f  $(DESTDIR)$(BINDIR)/dtu-upgrade-2604
 	rm -f  $(DESTDIR)$(APPDIR)/dtu-sustain-setup.desktop
 	rm -f  $(DESTDIR)$(ICONDIR)/dtu-sustain-setup.svg
 	rm -f  $(DESTDIR)$(POLICYDIR)/dk.dtu.sustain.setup.policy
@@ -149,6 +155,7 @@ deb:
 	# Launcher
 	install -d $(DEB_ROOT)/opt/dtu-sustain-setup/bin
 	install -m 755 bin/dtu-sustain-setup $(DEB_ROOT)/opt/dtu-sustain-setup/bin/
+	install -m 755 bin/dtu-upgrade-2604.sh $(DEB_ROOT)/opt/dtu-sustain-setup/bin/
 
 	# Ensure scripts are executable
 	find $(DEB_ROOT)/opt/dtu-sustain-setup/scripts -name '*.sh' -exec chmod 755 {} +
@@ -156,6 +163,7 @@ deb:
 	# Symlink to /usr/bin
 	install -d $(DEB_ROOT)/usr/bin
 	ln -sf /opt/dtu-sustain-setup/bin/dtu-sustain-setup $(DEB_ROOT)/usr/bin/dtu-sustain-setup
+	ln -sf /opt/dtu-sustain-setup/bin/dtu-upgrade-2604.sh $(DEB_ROOT)/usr/bin/dtu-upgrade-2604
 
 	# Desktop file
 	install -d $(DEB_ROOT)/usr/share/applications

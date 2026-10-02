@@ -1,3 +1,42 @@
+## Uudgivet
+
+### Nyt
+
+- **`dtu-upgrade-2604`: opgradering fra Kubuntu 24.04 til 26.04 for
+  IT-support.** Ét script, én bekræftelse. Det tjekker maskinen, gemmer hele
+  `/etc` og pakkelisten, opgraderer uden spørgsmål med faste regler og retter
+  bagefter det opgraderingen ødelægger. Selve opgraderingen kører som
+  systemtjeneste, så et skrivebord der fryser eller et lukket vindue ikke
+  stopper den, og samme kommando viser forløbet, genoptager efter en afbrydelse
+  og kontrollerer resultatet efter genstarten. Bygget på fundene fra den manuelle
+  testopgradering 2. oktober:
+
+  - Nægter at starte fra en domænekonto (SSSD er nede midt i opgraderingen),
+    over SSH/RDP, på batteri, med under 15 GB fri, eller uden en lokal
+    admin-konto med kodeord.
+  - Konfigurationsfiler: pakkens nye version (`--force-confnew`, den gamle
+    gemmes som `.dpkg-old`). ucf følger dpkg's valg, så lokalt ændrede
+    ucf-filer som `/etc/default/grub` og `/etc/ssh/sshd_config` lægges
+    tilbage fra sikkerhedskopien bagefter, med den nye som `.ucf-dist`.
+    Fremmede pakker beholdes, og forældede fjernes ikke. Bagefter kører
+    `apt-get autoremove`, som kun rører automatisk installerede pakker.
+  - Et Qt 5-loginskærmstema slås fra før genstarten. Ellers viser 26.04's
+    greeter et nødtema uden navnefelt, og ingen domænebruger kan logge ind.
+  - KDE PIM geninstalleres med Akonadis MySQL-motor, RepairBooth skiftes til
+    +qt6 (kontrolleret mod `sha256sums.txt`), og de DTU-moduler maskinen har,
+    køres igen.
+
+  Efterprøvet med to hele opgraderinger i en VM, der efterlignede en
+  flådemaskine. Den første fandt to fejl (ucf og KDE PIM, se ovenfor), den
+  anden gik igennem med alle kontroller grønne. Domæne, Defender-tilmelding
+  og TPM2 kunne ikke testes i VM'en.
+
+### Rettet
+
+- **Loginskærm-modulet kunne læse en nøgle fra den forkerte sektion i SDDM's
+  konfiguration.** Sektionsnavnet blev brugt som mønster, og `[Theme]` er en
+  tegnklasse der også rammer fx `[Users]`. Nu sammenlignes navnet som tekst.
+
 ## v1.8.1 (2. oktober 2026)
 
 ### Sikkerhed
