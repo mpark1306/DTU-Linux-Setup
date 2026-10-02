@@ -1490,5 +1490,32 @@ class TestDefenderOnboardingIsPinned(unittest.TestCase):
         self.assertNotRegex(body, r'python3 "\$ONBOARD"[^\n]*\|\|\s*true')
 
 
+class TestDefenderKeepsMicrosoftsSource(unittest.TestCase):
+    """defender.sh deleted /etc/apt/sources.list.d/microsoft-prod.list, a
+    conffile of packages-microsoft-prod, before installing that package.
+
+    dpkg remembers a deleted conffile. At the same version it left it
+    deleted, so Microsoft's package source vanished on every re-run. At a
+    new version (ubuntu26.04 over ubuntu24.04 after a release upgrade) it
+    asked whether to restore it, and with no terminal the module failed with
+    "end of file on stdin at conffile prompt". Seen 2 Oct 2026.
+    """
+
+    def setUp(self):
+        self.body = strip_comments(read(SCRIPTS / "ubuntu" / "defender.sh"))
+
+    def test_the_packages_conffile_is_not_deleted(self):
+        self.assertNotRegex(self.body, r"rm [^\n]*sources\.list\.d/microsoft-prod")
+
+    def test_dpkg_cannot_stop_at_a_conffile_prompt(self):
+        line = next(l for l in self.body.splitlines()
+                    if "dpkg" in l and "packages-microsoft-prod.deb" in l)
+        self.assertIn("--force-confnew", line)
+        self.assertIn("--force-confmiss", line)
+
+    def test_a_missing_source_is_caught(self):
+        self.assertIn("ls /etc/apt/sources.list.d/microsoft-prod.*", self.body)
+
+
 if __name__ == "__main__":
     unittest.main()

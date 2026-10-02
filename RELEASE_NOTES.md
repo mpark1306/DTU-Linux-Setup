@@ -18,6 +18,22 @@
 
 ### Rettet
 
+- **Defender-modulet slettede Microsofts pakkekilde.** Det fjernede
+  `/etc/apt/sources.list.d/microsoft-prod.list` foer det installerede
+  `packages-microsoft-prod`, men filen er en konfigurationsfil i den pakke, og
+  dpkg husker en slettet konfigurationsfil. Ved samme version lod dpkg den
+  vaere slettet, saa en maskine hvor modulet blev koert igen, mistede
+  Microsofts kilde og fik ikke laengere Defender-opdateringer gennem apt. Ved
+  en ny version, fx efter opgradering til 26.04, spurgte dpkg i stedet, og
+  modulet fejlede med "end of file on stdin at conffile prompt".
+
+  Nu installeres pakken med `--force-confnew --force-confmiss`, som laegger
+  filen tilbage og aldrig spoerger, og modulet stopper hvis kilden mangler
+  bagefter. Begge forloeb og rettelsen er efterproevet med dpkg mod en
+  testpakke. **Bemaerk for support:** maskiner hvor modulet er koert mere end
+  én gang, kan mangle kilden i dag. `ls /etc/apt/sources.list.d/microsoft-prod.*`
+  viser det; at koere det rettede modul igen laegger den tilbage.
+
 - **CI-trinnet der byggede kildearkivet fejlede paa GitHub.** Kontrollen
   `tar | grep -q` stopper ved foerste traef, tar faar en skrivefejl, og GitHub
   koerer med `pipefail`. Rettet, og CI-trinnene koeres nu selv i testene med
