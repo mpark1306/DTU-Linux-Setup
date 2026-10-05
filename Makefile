@@ -9,7 +9,7 @@ APPDIR      ?= /usr/share/applications
 ICONDIR     ?= /usr/share/icons/hicolor/scalable/apps
 POLICYDIR   ?= /usr/share/polkit-1/actions
 
-VERSION     := 1.8.1
+VERSION     := 1.9.0
 
 .PHONY: help install uninstall deb clean check-version lint test readme-table
 

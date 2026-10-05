@@ -1,4 +1,4 @@
-## Uudgivet
+## v1.9.0 (5. oktober 2026)
 
 ### Nyt
 
