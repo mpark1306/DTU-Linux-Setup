@@ -10,7 +10,7 @@
 #   ./install-ms-pwa.sh --icon-dir DIR     # brug lokale ikoner fra DIR (<id>.png/.svg)
 #   ./install-ms-pwa.sh --no-theme-icons   # spring ikontemaer over, hent altid fra nettet
 #   ./install-ms-pwa.sh --no-deps          # spring pakkeinstallation over
-#   ./install-ms-pwa.sh --print-wmclass    # vis forventet WM_CLASS pr. app
+#   ./install-ms-pwa.sh --print-wmclass    # vis forventet WM_CLASS og Wayland-app_id pr. app
 #   ./install-ms-pwa.sh --list
 #
 # Ikoner findes i denne rækkefølge og kopieres ALTID ind i ikonmappen, så genvejene
@@ -181,6 +181,39 @@ find_browser() {
 # Bemaerk at Chromium laegger dette i vinduets INSTANCE-navn; klassenavnet er
 # ens for alle app-vinduer (Io.github.ungoogled_software.ungoogled_chromium),
 # og det er derfor de stacker, hvis StartupWMClass ikke saettes.
+# ---------------------------------------------------------------------------
+# Wayland
+# Under Wayland findes WM_CLASS ikke. Kører Chromium som rent Wayland-program,
+# kobler Plasma vinduet til en .desktop-fil via vinduets app_id, og kun ved at
+# FILNAVNET er app_id'et; StartupWMClass bruges ikke, og taskmanagerrulesrc's
+# [Mapping] heller ikke. Uden match er "Fastgør til opgavelinjen" gråt, og
+# vinduet får Chromiums ikon. Set på maskiner opgraderet til 26.04, hvor
+# Wayland er standard (6. oktober 2026).
+#
+# Løsningen er at holde Chromium på XWayland, så StartupWMClass virker i både
+# X11- og Wayland-sessionen, og hver app har én .desktop-fil at fastgøre:
+#  1) Flatpak-Chromium får ikke Wayland-socket'en (flatpak override
+#     --nosocket=wayland). Det gælder også når den åbnes som almindelig
+#     browser; ellers samler Chromium alle vinduer i den proces der kører, og
+#     et PWA-vindue arver dens Wayland.
+#  2) Genvejen starter med --ozone-platform=x11, for en Chromium installeret
+#     uden Flatpak. Flaget vinder over chromium-flags.conf.
+# En ekstra .desktop-fil med app_id'et som navn blev afprøvet og forkastet:
+# den gav to fastgørelser for samme app, alt efter hvordan vinduet startede.
+#
+# app_id'et vises af --print-wmclass til fejlsøgning. Målt i KWin mod
+# Flatpak-Chromium paa Kubuntu 26.04: "chrome-", vaert, "_", stien med "/"
+# som "_", "-Default" (profilens mappe):
+#   https://word.cloud.microsoft/          -> chrome-word.cloud.microsoft__-Default
+#   https://outlook.office.com/mail/       -> chrome-outlook.office.com__mail_-Default
+derive_wayland_appid() {
+  local url="$1" rest host path
+  rest="${url#https://}"; rest="${rest#http://}"
+  host="${rest%%/*}"
+  path="/${rest#"$host"}"; path="${path#//}"; [[ "$path" == /* ]] || path="/$path"
+  printf 'chrome-%s_%s-Default' "$host" "${path//\//_}"
+}
+
 derive_wmclass() {
   local url="$1" rest host path
   rest="${url#https://}"; rest="${rest#http://}"; rest="${rest%/}"
@@ -193,7 +226,7 @@ derive_wmclass() {
 if [[ $PRINT_WM -eq 1 ]]; then
   for a in "${APPS[@]}"; do
     IFS='|' read -r id name url _ <<<"$a"
-    printf '%-16s %s\n' "$name" "$(derive_wmclass "$url")"
+    printf '%-16s %-40s %s\n' "$name" "$(derive_wmclass "$url")" "$(derive_wayland_appid "$url")"
   done
   exit 0
 fi
@@ -330,6 +363,16 @@ if [[ $REMOVE -eq 0 && $CHECK_ONLY -eq 0 ]]; then
     exit 1
   }
   echo "Browser: $BROWSER"
+  # Se "Wayland" ovenfor. Gælder kun Flatpak-Chromium; en override overlever
+  # opdateringer af Flatpak'en.
+  if [[ "$BROWSER" == *"$FLATPAK_ID"* ]]; then
+    if [[ $SYSTEM -eq 1 ]]; then scope=--system; else scope=--user; fi
+    if flatpak override "$scope" --nosocket=wayland "$FLATPAK_ID"; then
+      echo "Chromium runs via XWayland, so the web apps can be pinned to the task manager."
+    else
+      echo "Warning: could not keep Chromium off Wayland; pinning may be greyed out on Wayland." >&2
+    fi
+  fi
   [[ -n "$IM" ]] || echo "Note: ImageMagick is missing, so icons are not converted to 256x256 PNG."
   if [[ $USE_THEME -eq 1 ]] && ! find_theme_icon "ms-word" >/dev/null; then
     echo "Warning: no icon theme with Office icons found; icons are fetched from the web."
@@ -380,7 +423,7 @@ Version=1.0
 Name=${name}
 GenericName=Microsoft 365
 Comment=${name} as a web app in Ungoogled Chromium
-Exec=${BROWSER} --app=${url}
+Exec=${BROWSER} --ozone-platform=x11 --app=${url}
 Icon=${ICON_PATH}
 Terminal=false
 StartupNotify=true

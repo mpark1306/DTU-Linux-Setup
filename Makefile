@@ -62,6 +62,9 @@ test:
 	@echo "── Bash: opgraderingen 24.04 -> 26.04 ───────────────────────"
 	bash tests/test_upgrade_2604.sh
 	@echo ""
+	@echo "── Bash: PWA-genveje (fastgørelse under Wayland) ────────────"
+	bash tests/test_pwa_desktop.sh
+	@echo ""
 	@echo "── Shell: scripts (statisk + adfærd) ───────────────────────"
 	PYTHONPATH=src python3 -m unittest tests.test_scripts
 	@echo ""

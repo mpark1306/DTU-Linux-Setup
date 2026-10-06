@@ -1,3 +1,22 @@
+## Uudgivet
+
+### Rettet
+
+- **Microsoft 365-webapps kunne ikke fastgøres til proceslinjen på 26.04.**
+  "Fastgør til opgavelinjen" var gråt, og vinduet fik Chromiums ikon i stedet
+  for programmets. 26.04 kører Wayland, og når Chromium kører som rent
+  Wayland-program, kobler Plasma et vindue til sin genvej via vinduets
+  app_id i stedet for `StartupWMClass`, som genvejene bygger på. Nu holdes
+  Flatpak-Chromium på XWayland (`flatpak override --nosocket=wayland`, også
+  når den åbnes som almindelig browser), og genvejene starter med
+  `--ozone-platform=x11`. Hver app har stadig én genvej, så eksisterende
+  fastgørelser virker uændret. Genskabt og efterprøvet i en 26.04-VM med
+  højreklik i proceslinjen, også med Wayland sat i Chromiums egne flag.
+
+  **For support:** maskiner der allerede har webapps, får rettelsen ved at
+  køre `sudo bash /opt/dtu-sustain-setup/scripts/install-ms-pwa.sh --system`
+  (eller Software-modulet). Chromium skal lukkes helt én gang bagefter.
+
 ## v1.9.0 (5. oktober 2026)
 
 ### Nyt
