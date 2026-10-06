@@ -76,6 +76,63 @@ has "and its shortcut runs through flatpak" "Exec=flatpak run io.github.ungoogle
     "$(cat "$apps/ms-word.desktop" 2>/dev/null)"
 
 echo
+echo "── standalone fix for machines that already have the web apps ───"
+FIX="$REPO_ROOT/scripts/standalone/fix-pwa-pin-wayland.sh"
+F="$TMP/fixroot"; mkdir -p "$F/usr/share/applications" "$F/home/alice/.local/share/applications" "$TMP/fixbin"
+old_exec='Exec=flatpak run io.github.ungoogled_software.ungoogled_chromium --app=https://word.cloud.microsoft/'
+printf '[Desktop Entry]\nName=Word\n%s\nStartupWMClass=word.cloud.microsoft\n' "$old_exec" \
+    > "$F/usr/share/applications/ms-word.desktop"
+printf '[Desktop Entry]\nName=Outlook\nExec=chromium --app=https://outlook.office.com/mail/\n' \
+    > "$F/home/alice/.local/share/applications/ms-outlook.desktop"
+chmod 600 "$F/home/alice/.local/share/applications/ms-outlook.desktop"
+printf '[Desktop Entry]\nName=Not ours\nExec=ms-tool --app=x\n' > "$F/usr/share/applications/other.desktop"
+printf '[Desktop Entry]\nName=Also not ours\nExec=ms-thing\n' > "$F/usr/share/applications/ms-thing.desktop"
+# flatpak: the app is installed, and overrides are kept in a file
+cat > "$TMP/fixbin/flatpak" <<STUB
+#!/bin/sh
+st="$TMP/override.state"
+case "\$1" in
+  info) exit 0 ;;
+  override)
+    case "\$*" in
+      *--show*) cat "\$st" 2>/dev/null ;;
+      *--nosocket=wayland*) echo 'sockets=!wayland;' > "\$st" ;;
+      *--socket=wayland*) echo 'sockets=wayland;' > "\$st" ;;
+    esac ;;
+esac
+exit 0
+STUB
+chmod +x "$TMP/fixbin/flatpak"
+fix() { FIX_ROOT="$F" PATH="$TMP/fixbin:/usr/bin:/bin" bash "$FIX" "$@" 2>&1; }
+
+out="$(fix --check)"; rc=$?
+check "--check on an unfixed machine fails" "1" "$rc"
+has "and names the shortcut that lacks the flag" "ms-word.desktop lacks --ozone-platform=x11" "$out"
+fix >/dev/null
+has "the flatpak loses its Wayland socket" '!wayland' "$(cat "$TMP/override.state" 2>/dev/null)"
+check "the system shortcut gets the flag" \
+    "Exec=flatpak run io.github.ungoogled_software.ungoogled_chromium --ozone-platform=x11 --app=https://word.cloud.microsoft/" \
+    "$(grep '^Exec=' "$F/usr/share/applications/ms-word.desktop")"
+check "a user's own shortcut gets it too" "Exec=chromium --ozone-platform=x11 --app=https://outlook.office.com/mail/" \
+    "$(grep '^Exec=' "$F/home/alice/.local/share/applications/ms-outlook.desktop")"
+check "and keeps its permissions" "600" "$(stat -c %a "$F/home/alice/.local/share/applications/ms-outlook.desktop")"
+has "StartupWMClass is left alone" "StartupWMClass=word.cloud.microsoft" "$(cat "$F/usr/share/applications/ms-word.desktop")"
+check "other shortcuts are not touched" "Exec=ms-tool --app=x" "$(grep '^Exec=' "$F/usr/share/applications/other.desktop")"
+check "an ms-*.desktop without --app is not touched" "Exec=ms-thing" "$(grep '^Exec=' "$F/usr/share/applications/ms-thing.desktop")"
+out="$(fix)"
+check "running it again adds the flag only once" "1" "$(grep -o -- '--ozone-platform=x11' "$F/usr/share/applications/ms-word.desktop" | wc -l)"
+has "and says so" "already done" "$out"
+fix --check >/dev/null; check "--check on a fixed machine passes" "0" "$?"
+fix --undo >/dev/null
+check "--undo restores the shortcut" "$old_exec" "$(grep '^Exec=' "$F/usr/share/applications/ms-word.desktop")"
+has "and gives the flatpak its Wayland socket back" 'sockets=wayland' "$(cat "$TMP/override.state")"
+out="$(PATH="$TMP/fixbin:/usr/bin:/bin" bash "$FIX" 2>&1)"; rc=$?
+if [[ $EUID -ne 0 ]]; then
+    check "without sudo it refuses" "1" "$rc"
+    has "and says why" "Run it with sudo" "$out"
+fi
+
+echo
 echo "─────────────────────────────────────────────────────────────────"
 printf "%d passed, %d failed\n" "$PASS" "$FAIL"
 [[ $FAIL -eq 0 ]]

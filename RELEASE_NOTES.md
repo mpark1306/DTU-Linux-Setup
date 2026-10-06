@@ -13,9 +13,12 @@
   fastgørelser virker uændret. Genskabt og efterprøvet i en 26.04-VM med
   højreklik i proceslinjen, også med Wayland sat i Chromiums egne flag.
 
-  **For support:** maskiner der allerede har webapps, får rettelsen ved at
-  køre `sudo bash /opt/dtu-sustain-setup/scripts/install-ms-pwa.sh --system`
-  (eller Software-modulet). Chromium skal lukkes helt én gang bagefter.
+  **For support:** maskiner der allerede har webapps, rettes med
+  `scripts/standalone/fix-pwa-pin-wayland.sh` (`sudo`, uden DTU Linux Setup;
+  `--check` viser tilstanden, `--undo` fjerner rettelsen). Det sætter
+  overriden og tilføjer flaget i de eksisterende genveje, også brugernes
+  egne, uden at installere webapps forfra. Chromium skal lukkes helt én gang
+  bagefter; scriptet viser hvem der har den åben.
 
 ## v1.9.0 (5. oktober 2026)
 
