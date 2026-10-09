@@ -1160,6 +1160,54 @@ class TestPackagingDependenciesAgree(unittest.TestCase):
                 self.assertIn("pkexec", text)
 
 
+class TestPolkitWithoutPkla(unittest.TestCase):
+    """polkitd-pkla does not exist on Ubuntu 26.04.
+
+    Step 1 wrote AdminIdentities into /etc/polkit-1/localauthority.conf.d,
+    which only polkitd-pkla reads and creates. On a fresh 26.04 machine the
+    module failed there ("tee: No such file or directory"); on one upgraded
+    to 26.04 the file stayed behind, unread. Found in the VM test on
+    2 Oct 2026. Step 1 now runs only with pkla installed.
+    """
+
+    def run_step1(self, pkla_installed: bool, leftover: bool = False):
+        body = read(SCRIPTS / "ubuntu" / "polkit.sh")
+        start = body.index("PKLA_CONF=")
+        end = body.index("\nfi\n", start) + 4
+        with tempfile.TemporaryDirectory() as tmp:
+            conf = os.path.join(tmp, "50-localauthority.conf")
+            if leftover:
+                with open(conf, "w") as f:
+                    f.write("[Configuration]\nAdminIdentities=old\n")
+            if pkla_installed:
+                stub = "dpkg-query() { echo 'ii '; }"
+            else:
+                stub = "dpkg-query() { return 1; }"
+            snippet = body[start:end].replace(
+                "/etc/polkit-1/localauthority.conf.d/50-localauthority.conf", conf)
+            res = subprocess.run(
+                ["bash", "-c", "set -euo pipefail; ADMIN_GROUP=It-Admins; "
+                 "ADMIN_GROUP_LC_NODASH=itadmins; " + stub + "\n" + snippet],
+                capture_output=True, text=True)
+            content = open(conf).read() if os.path.exists(conf) else None
+        return res, content
+
+    def test_with_pkla_the_admin_identities_are_written(self):
+        res, content = self.run_step1(pkla_installed=True)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("unix-group:It-Admins", content)
+
+    def test_without_pkla_the_step_is_skipped_not_failed(self):
+        res, content = self.run_step1(pkla_installed=False)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIsNone(content)
+        self.assertIn("skipped", res.stdout)
+
+    def test_an_unread_leftover_from_24_04_is_removed(self):
+        _res, content = self.run_step1(pkla_installed=False, leftover=True)
+        self.assertIsNone(content)
+
+
 class TestPolkitPrivilegeScope(unittest.TestCase):
     """The two critical findings from the 22 Sep 2026 security review.
 

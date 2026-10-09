@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 ###############################################################################
-# DTU Sustain – Ubuntu 24.04 – Module: PolicyKit / KDE IT-Backdoor
+# DTU Sustain – Ubuntu 24.04 / 26.04 – Module: PolicyKit / KDE IT-Backdoor
 ###############################################################################
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,10 +20,23 @@ REALM_LC="${SITE_AD_REALM}"
 REALM_UC="${SITE_AD_DOMAIN}"
 
 echo "[1/5] Configuring admin identities..."
-tee /etc/polkit-1/localauthority.conf.d/50-localauthority.conf > /dev/null <<EOF
+# AdminIdentities i localauthority.conf.d læses kun af polkitd-pkla. Den findes
+# på 24.04, men ikke på 26.04: der fejlede trinnet ("tee: No such file or
+# directory"), og på en maskine opgraderet til 26.04 lå filen tilbage uden at
+# blive læst. Uden pkla springes trinnet over, og admingruppen har kun det
+# 49-domain-admins.rules giver, plus sudo fra trin 2. Valgt 9. oktober 2026
+# frem for at genskabe den brede admin-ret som en JS-regel.
+PKLA_CONF=/etc/polkit-1/localauthority.conf.d/50-localauthority.conf
+if dpkg-query -W -f='${db:Status-Abbrev}' polkitd-pkla 2>/dev/null | grep -q '^ii'; then
+    tee "$PKLA_CONF" > /dev/null <<EOF
 [Configuration]
 AdminIdentities=unix-user:0;unix-group:sudo;unix-group:wheel;unix-group:${ADMIN_GROUP};unix-group:${ADMIN_GROUP_LC_NODASH}
 EOF
+else
+    rm -f "$PKLA_CONF"
+    echo "    polkitd-pkla is not installed (Ubuntu 26.04 has no such package): skipped."
+    echo "    ${ADMIN_GROUP} gets this tool's modules (step 3) and sudo (step 2)."
+fi
 
 echo "[2/5] Adding ${ADMIN_GROUP} to sudoers..."
 cat > /etc/sudoers.d/dtu-it-admins <<EOF
