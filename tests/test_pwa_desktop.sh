@@ -56,7 +56,17 @@ for id in outlook calendar word excel powerpoint onenote onedrive todo m365; do
     printf '<svg xmlns="http://www.w3.org/2000/svg"/>\n' > "$TMP/icons/$id.svg"
 done
 apps="$TMP/home/.local/share/applications"
-run() { HOME="$TMP/home" PATH="$1:/usr/bin:/bin" bash "$SCRIPT" --no-deps --icon-dir "$TMP/icons" "${@:2}" >/dev/null 2>&1; }
+# The system's programs, minus every Chromium. install-ms-pwa.sh prefers a
+# Chromium on PATH to the flatpak, and GitHub's Ubuntu runners have one: the
+# flatpak cases failed there (v1.9.1) while passing on a machine without it.
+SYSBIN="$TMP/sysbin"; mkdir -p "$SYSBIN"
+for f in /usr/bin/* /bin/*; do
+    case "${f##*/}" in
+        chromium|chromium-browser|ungoogled-chromium|google-chrome*|chrome) continue ;;
+    esac
+    [[ -e "$SYSBIN/${f##*/}" ]] || ln -s "$f" "$SYSBIN/${f##*/}"
+done
+run() { HOME="$TMP/home" PATH="$1:$SYSBIN" bash "$SCRIPT" --no-deps --icon-dir "$TMP/icons" "${@:2}" >/dev/null 2>&1; }
 
 run "$TMP/bin" word
 main="$(cat "$apps/ms-word.desktop" 2>/dev/null)"
