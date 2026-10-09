@@ -1,4 +1,9 @@
-## v1.9.1 (9. oktober 2026)
+## v1.9.2 (9. oktober 2026)
+
+v1.9.1 blev tagget, men aldrig udgivet: en ny test af PWA-genvejene fejlede i
+CI, fordi GitHubs maskiner har Chromium installeret, og scriptet så valgte den
+frem for testens Flatpak. Testen ser nu bort fra systemets Chromium.
+Programmet er det samme som i v1.9.1.
 
 ### Rettet
 
