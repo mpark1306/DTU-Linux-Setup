@@ -1,6 +1,20 @@
-## Uudgivet
+## v1.9.1 (9. oktober 2026)
 
 ### Rettet
+
+- **PolicyKit-modulet fejlede på Ubuntu 26.04.** Trin 1 skrev
+  `AdminIdentities` i `/etc/polkit-1/localauthority.conf.d/`, som kun
+  `polkitd-pkla` læser, og den pakke findes ikke på 26.04. På en ny
+  26.04-maskine stoppede modulet med "No such file or directory"; på en
+  maskine opgraderet til 26.04 lå filen tilbage uden at blive læst. Nu skrives
+  den kun, når `polkitd-pkla` er installeret (24.04 som i dag), og ellers
+  springes trinnet over, og en gammel fil fjernes.
+
+  **For support:** på 26.04 er IT-admingruppen ikke længere polkit-administrator
+  generelt. Gruppen har DTU Linux Setup's moduler uden kodeord (lokalt) og
+  `sudo` med kodeord. Andre polkit-spørgsmål om admin-kode besvares med en
+  lokal admins kode, eller ved at køre handlingen med `sudo`. Valgt frem for
+  at genskabe den brede admin-ret.
 
 - **Microsoft 365-webapps kunne ikke fastgøres til proceslinjen på 26.04.**
   "Fastgør til opgavelinjen" var gråt, og vinduet fik Chromiums ikon i stedet
